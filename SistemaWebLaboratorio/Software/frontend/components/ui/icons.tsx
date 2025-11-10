@@ -131,3 +131,12 @@ export function XCircleIcon({ className = 'w-5 h-5' }: { className?: string }){
     </svg>
   );
 }
+
+export function HistoryIcon({ className = 'w-5 h-5' }: { className?: string }){
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+      <path d="M1.05 12H3M12 1.05V3" />
+    </svg>
+  );
+}
