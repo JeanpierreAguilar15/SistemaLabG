@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from 'react';
+import { ClockIcon } from '../ui/icons';
 
 export type Slot = { slot_id:number; inicio:string; fin:string };
 
@@ -12,8 +13,7 @@ type Props = {
 export function TimeSlotPicker({ slots, selected, onSelect }: Props){
   const [filter, setFilter] = useState<'all'|'morning'|'afternoon'|'evening'>('all');
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, Slot[]>();
+  const filtered = useMemo(() => {
     const fitsFilter = (d: Date) => {
       const hour = d.getHours();
       if (filter === 'morning') return hour < 12;
@@ -21,15 +21,7 @@ export function TimeSlotPicker({ slots, selected, onSelect }: Props){
       if (filter === 'evening') return hour >= 18;
       return true;
     };
-    for (const slot of slots) {
-      const date = new Date(slot.inicio);
-      if (!fitsFilter(date)) continue;
-      const hourKey = `${date.getHours().toString().padStart(2,'0')}:00`;
-      const arr = map.get(hourKey) || [];
-      arr.push(slot);
-      map.set(hourKey, arr);
-    }
-    return Array.from(map.entries()).sort((a,b)=> a[0].localeCompare(b[0]));
+    return slots.filter(slot => fitsFilter(new Date(slot.inicio)));
   }, [slots, filter]);
 
   const countByFilter = useMemo(()=> {
@@ -44,49 +36,72 @@ export function TimeSlotPicker({ slots, selected, onSelect }: Props){
   }, [slots]);
 
   return (
-    <div>
-      <div className="flex flex-wrap gap-2 items-center">
-        <button className={`chip ${filter==='all'?'chip-active':''}`} onClick={()=>setFilter('all')}>
-          Todos <span className="ml-1 body-muted">({countByFilter.all})</span>
+    <div className="time-slots-container">
+      <div className="time-slots-header">
+        <h4 className="time-slots-title">Horarios disponibles</h4>
+        <p className="time-slots-subtitle">Selecciona el horario que mejor se ajuste a tu agenda</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-3">
+        <button
+          className={`chip ${filter==='all'?'chip-active':''}`}
+          onClick={()=>setFilter('all')}
+        >
+          Todos ({countByFilter.all})
         </button>
-        <button className={`chip ${filter==='morning'?'chip-active':''}`} onClick={()=>setFilter('morning')}>
-          Mañana <span className="ml-1 body-muted">({countByFilter.morning})</span>
+        <button
+          className={`chip ${filter==='morning'?'chip-active':''}`}
+          onClick={()=>setFilter('morning')}
+        >
+          Mañana ({countByFilter.morning})
         </button>
-        <button className={`chip ${filter==='afternoon'?'chip-active':''}`} onClick={()=>setFilter('afternoon')}>
-          Tarde <span className="ml-1 body-muted">({countByFilter.afternoon})</span>
+        <button
+          className={`chip ${filter==='afternoon'?'chip-active':''}`}
+          onClick={()=>setFilter('afternoon')}
+        >
+          Tarde ({countByFilter.afternoon})
         </button>
-        <button className={`chip ${filter==='evening'?'chip-active':''}`} onClick={()=>setFilter('evening')}>
-          Noche <span className="ml-1 body-muted">({countByFilter.evening})</span>
+        <button
+          className={`chip ${filter==='evening'?'chip-active':''}`}
+          onClick={()=>setFilter('evening')}
+        >
+          Noche ({countByFilter.evening})
         </button>
       </div>
-      <div className="mt-3 max-h-[50vh] overflow-auto pr-1">
-        {grouped.length === 0 && (
-          <div className="subtitle">No hay horarios para este filtro.</div>
-        )}
-        {grouped.map(([hour, slotsForHour]) => (
-          <div key={hour} className="mb-3">
-            <div className="text-xs body-muted mb-1">{hour}</div>
-            <div className="flex flex-wrap gap-2">
-              {slotsForHour.map(slot => {
-                const start = new Date(slot.inicio);
-                const end = new Date(slot.fin);
-                const label = `${start.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })} - ${end.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}`;
-                const isSelected = selected === slot.slot_id;
-                return (
-                  <button
-                    key={slot.slot_id}
-                    onClick={()=> onSelect(slot.slot_id)}
-                    className={`px-3 py-2 rounded-md border text-sm ${isSelected ? 'border-[var(--brand-secondary)] bg-[var(--brand-secondary)] text-white' : 'border-[var(--border-soft)] bg-white hover:bg-[#f3f4f6]'}`}
-                    aria-pressed={isSelected}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-8 text-[var(--text-muted)]">
+          <ClockIcon className="w-12 h-12 mx-auto mb-2 opacity-40" />
+          <p className="text-sm">No hay horarios disponibles para este filtro</p>
+        </div>
+      ) : (
+        <div className="time-slots-grid">
+          {filtered.map(slot => {
+            const start = new Date(slot.inicio);
+            const end = new Date(slot.fin);
+            const timeLabel = start.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+            const isSelected = selected === slot.slot_id;
+
+            return (
+              <button
+                key={slot.slot_id}
+                onClick={()=> onSelect(slot.slot_id)}
+                className={`time-slot ${isSelected ? 'time-slot--selected' : ''}`}
+                aria-pressed={isSelected}
+              >
+                <ClockIcon className="w-4 h-4 mb-1 opacity-60" />
+                <span className="time-slot__time">{timeLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--border-soft)] text-xs text-[var(--text-muted)] text-center">
+          {filtered.length} {filtered.length === 1 ? 'horario disponible' : 'horarios disponibles'}
+        </div>
+      )}
     </div>
   );
 }

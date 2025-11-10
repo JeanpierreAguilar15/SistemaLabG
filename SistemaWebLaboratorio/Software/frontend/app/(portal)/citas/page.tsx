@@ -180,7 +180,7 @@ function CitasClient(){
   const agendar = async () => {
     if (!accessToken || selectedSlot == null) return;
     try{
-      await api(`/appointments/agendar`, { method:'POST', body: JSON.stringify({ slot_id: selectedSlot, crear_cotizacion: createQuote }) }, accessToken);
+      await api(`/appointments/crear`, { method:'POST', body: JSON.stringify({ slot_id: selectedSlot, crear_cotizacion: createQuote }) }, accessToken);
       showToast('Cita creada', { variant:'success' });
       setMessage('Tu cita fue registrada correctamente.');
       setSelectedSlot(null);
@@ -271,29 +271,35 @@ function CitasClient(){
         <div className="booking-step">
           <span className="booking-step__meta">Paso 1</span>
           <div className="booking-step__title">Elige el servicio y la sede</div>
-          <div className="booking-step__subtitle">Define el motivo de tu visita para ver la disponibilidad exacta.</div>
+          <div className="booking-step__subtitle">Define el motivo de tu visita para ver la disponibilidad exacta</div>
           <div className="booking-fields">
-            <label className="block text-sm font-medium text-[var(--text-main)]">
-              Servicio
-              <select className="mt-1 w-full" value={svc} onChange={(e)=>setSvc(e.target.value)}>
+            <div className="form-group">
+              <label className="form-label required">Servicio</label>
+              <select className="form-select" value={svc} onChange={(e)=>setSvc(e.target.value)}>
                 <option value="" disabled>{servicios.length ? 'Selecciona un servicio' : 'Cargando...'}</option>
                 {servicios.map(item => (
                   <option key={item.codigo} value={item.codigo}>{item.nombre} {item.precio > 0 ? `- $${item.precio.toFixed(2)}` : ''}</option>
                 ))}
               </select>
-            </label>
-            <label className="block text-sm font-medium text-[var(--text-main)]">
-              Sede
-              <select className="mt-1 w-full" value={sede} onChange={(e)=>setSede(e.target.value)}>
+              <span className="form-hint">Selecciona el tipo de examen que necesitas</span>
+            </div>
+            <div className="form-group">
+              <label className="form-label required">Sede</label>
+              <select className="form-select" value={sede} onChange={(e)=>setSede(e.target.value)}>
                 <option value="" disabled>{sedes.length ? 'Selecciona sede' : 'Cargando...'}</option>
                 {sedes.map(item => (
                   <option key={item.codigo_sede} value={item.codigo_sede}>{item.nombre_sede}</option>
                 ))}
               </select>
-            </label>
+              <span className="form-hint">Elige la ubicación más conveniente</span>
+            </div>
           </div>
-          <div className="mt-4 text-xs body-muted">
-            Necesitas validar precios? <button className="text-[var(--brand-secondary)] font-semibold" onClick={()=>location.href='/cotizaciones'}>Ir a cotizaciones</button>
+          <div className="mt-4 text-sm text-[var(--text-muted)] p-3 bg-[#F0F6FF] rounded-lg border border-[#BFDBFE]">
+            <span className="font-medium text-[var(--brand-primary)]">Necesitas validar precios?</span>
+            {' '}
+            <button className="text-[var(--brand-primary)] font-semibold underline hover:no-underline" onClick={()=>location.href='/cotizaciones'}>
+              Ir a cotizaciones
+            </button>
           </div>
         </div>
 
@@ -333,38 +339,71 @@ function CitasClient(){
         <div className="booking-step">
           <span className="booking-step__meta">Paso 3</span>
           <div className="booking-step__title">Confirma y recibe recordatorios</div>
-          <div className="booking-step__subtitle">Revisa el resumen antes de finalizar.</div>
-          <div className="booking-summary__row">
-            <div>
-              <div className="panel-heading">Servicio</div>
-              <div className="panel-sub">{selectedSvc?.nombre || 'Selecciona un servicio'}</div>
+          <div className="booking-step__subtitle">Revisa el resumen antes de finalizar</div>
+
+          {/* Resumen de la cita */}
+          <div className="mt-4 p-4 bg-[#FAFBFC] border border-[var(--border-soft)] rounded-lg space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Servicio</div>
+                <div className="text-sm font-medium text-[var(--text-main)]">{selectedSvc?.nombre || 'No seleccionado'}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Sede</div>
+                <div className="text-sm font-medium text-[var(--text-main)]">{selectedSedeName}</div>
+              </div>
             </div>
-            <div className="text-right">
-              <div className="panel-heading">Sede</div>
-              <div className="panel-sub">{selectedSedeName}</div>
+
+            <div className="border-t border-[var(--border-soft)] pt-4 grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Horario</div>
+                <div className="text-sm font-medium text-[var(--text-main)]">
+                  {selectedSlotInfo ? (
+                    <div>
+                      <div>{selectedSlotInfo.date}</div>
+                      <div className="text-xs text-[var(--brand-primary)] mt-0.5">{selectedSlotInfo.time}</div>
+                    </div>
+                  ) : (
+                    <span className="text-[var(--text-muted)]">Selecciona un horario</span>
+                  )}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Costo referencial</div>
+                <div className="text-lg font-bold text-[var(--brand-primary)]">{selectedSvc ? `$${selectedSvc.precio.toFixed(2)}` : '-'}</div>
+              </div>
             </div>
           </div>
-          <div className="booking-summary__row">
-            <div>
-              <div className="panel-heading">Horario</div>
-              <div className="panel-sub">{selectedSlotInfo ? `${selectedSlotInfo.date} - ${selectedSlotInfo.time}` : 'Selecciona un horario disponible'}</div>
-            </div>
-            <div className="text-right">
-              <div className="panel-heading">Costo referencial</div>
-              <div className="panel-sub">{selectedSvc ? `$${selectedSvc.precio.toFixed(2)}` : '-'}</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 mt-4">
-            <Toggle ariaLabel="Crear cotizacion automaticamente" checked={createQuote} onChange={setCreateQuote} />
-            <div>
-              <div className="text-sm font-semibold text-[var(--text-main)]">Generar cotizacion</div>
-              <div className="text-xs body-muted">Crea una cotizacion final al confirmar tu cita.</div>
+
+          {/* Opciones adicionales */}
+          <div className="mt-4 p-3 bg-white border border-[var(--border-soft)] rounded-lg hover:border-[var(--brand-primary)] transition-colors">
+            <div className="flex items-start gap-3">
+              <Toggle ariaLabel="Crear cotizacion automaticamente" checked={createQuote} onChange={setCreateQuote} />
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-[var(--text-main)]">Generar cotización</div>
+                <div className="text-xs text-[var(--text-muted)] mt-0.5">Crea una cotización formal al confirmar tu cita</div>
+              </div>
             </div>
           </div>
-          {feedback && <div className="alert-banner mt-4">{feedback}</div>}
+
+          {feedback && (
+            <div className="alert alert-info mt-4">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{feedback}</span>
+            </div>
+          )}
+
           <div className="booking-summary__cta">
-            <Button disabled={selectedSlot == null} onClick={agendar}>Confirmar cita</Button>
-            <Button variant="outline" disabled={selectedSlot == null} onClick={()=>setSelectedSlot(null)}>Limpiar seleccion</Button>
+            <Button className="btn-primary w-full" disabled={selectedSlot == null} onClick={agendar}>
+              {selectedSlot == null ? 'Selecciona un horario' : 'Confirmar cita'}
+            </Button>
+            {selectedSlot != null && (
+              <Button className="btn-ghost w-full" onClick={()=>setSelectedSlot(null)}>
+                Limpiar selección
+              </Button>
+            )}
           </div>
         </div>
       </div>
