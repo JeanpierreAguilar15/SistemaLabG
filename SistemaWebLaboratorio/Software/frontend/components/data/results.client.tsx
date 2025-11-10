@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ResultsTable } from '../tables/results-table';
 import { useSessionStore } from '../../lib/session-store';
 import { api } from '../../lib/api';
@@ -16,17 +16,19 @@ type ResultRow = {
 export const ResultsSection = () => {
   const { accessToken } = useSessionStore();
   const [items, setItems] = useState<ResultRow[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all'|'done'|'progress'>('all');
 
   useEffect(() => {
     const handleFetch = async () => {
-      if (!accessToken) { setLoading(false); setError('Inicia sesión para ver resultados.'); return; }
+      if (!accessToken) { setLoading(false); setError('Inicia sesion para ver resultados.'); return; }
       try {
         setLoading(true);
         const res = await api<{ items: ResultRow[] }>(`/results`, { method: 'GET' }, accessToken);
         setItems(res.items || []);
-      } catch (e) {
+        setError(null);
+      } catch {
         setError('No se pudieron cargar los resultados.');
       } finally {
         setLoading(false);
@@ -49,14 +51,44 @@ export const ResultsSection = () => {
     }
   };
 
-  const handleDownload = (codigo_resultado: number) => handleView(codigo_resultado);
+  const filteredItems = useMemo(() => {
+    if (filter === 'done') return items.filter(item => item.estado === 'COMPLETADO');
+    if (filter === 'progress') return items.filter(item => item.estado !== 'COMPLETADO');
+    return items;
+  }, [items, filter]);
 
-  if (loading) return <div className="card" aria-busy="true">Cargando resultados…</div>;
-  if (error) return <div className="card text-[color:var(--danger-fg)]">{error}</div>;
-  if (!items.length) return <div className="card">Aún no tienes resultados registrados.</div>;
+  if (loading) return <div className="panel" aria-busy="true">Cargando resultados...</div>;
+  if (error) return <div className="panel text-[color:var(--danger-fg)]">{error}</div>;
 
   return (
-    <ResultsTable items={items} onView={handleView} onDownload={handleDownload} />
+    <div className="panel" role="region" aria-label="historial de resultados">
+      <div className="panel-heading">Resultados de laboratorio</div>
+      <div className="panel-sub">Consulta tus ultimos analisis y descarga los informes oficiales.</div>
+      <div className="panel-toolbar mt-4">
+        <div className="filter-chips">
+          <button className={`chip ${filter==='all'?'chip-active':''}`} onClick={()=>setFilter('all')}>
+            Todos ({items.length})
+          </button>
+          <button className={`chip ${filter==='done'?'chip-active':''}`} onClick={()=>setFilter('done')}>
+            Completados ({items.filter(i=>i.estado==='COMPLETADO').length})
+          </button>
+          <button className={`chip ${filter==='progress'?'chip-active':''}`} onClick={()=>setFilter('progress')}>
+            En proceso ({items.filter(i=>i.estado!=='COMPLETADO').length})
+          </button>
+        </div>
+        <div className="filter-meta">{filteredItems.length} coincidencia(s)</div>
+      </div>
+      {filteredItems.length ? (
+        <div className="mt-3 overflow-auto">
+          <ResultsTable items={filteredItems} onView={handleView} onDownload={handleView} />
+        </div>
+      ) : (
+        <div className="agenda-empty mt-3">No hay resultados para este filtro.</div>
+      )}
+      {!items.length && !loading && (
+        <div className="agenda-empty mt-3">Aun no tienes resultados registrados.</div>
+      )}
+    </div>
   );
 };
 

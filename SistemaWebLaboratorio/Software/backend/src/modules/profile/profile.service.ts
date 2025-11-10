@@ -25,7 +25,7 @@ export class ProfileService {
     return rows[0] ?? null;
   }
 
-  async updateMe(cedula: string, dto: UpdateProfileDto) {
+  async updateMe(cedula: string, dto: UpdateProfileDto, ctx?: { ip: string; user_agent: string }) {
     await query(
       `insert into usuario.perfil_paciente (cedula, direccion, contacto_emergencia_nombre, contacto_emergencia_telefono)
        values ($1,$2,$3,$4)
@@ -51,41 +51,47 @@ export class ProfileService {
       values.push(cedula);
       await query(`update usuario.usuarios set ${sets.join(', ')}, updated_at = now() where cedula = $${values.length}`, values);
     }
-    await this.audit.log({ cedula, modulo: 'USUARIOS', accion: 'ACTUALIZAR_PERFIL', descripcion: 'actualización de datos personales' });
+    const changedFields = Object.keys(dto).filter((k) => (dto as any)[k] !== undefined);
+    const metadata: Record<string, unknown> = { changed_fields: changedFields };
+    if (ctx) {
+      metadata.ip = ctx.ip;
+      metadata.user_agent = ctx.user_agent;
+    }
+    await this.audit.log({ cedula, modulo: 'USUARIOS', accion: 'ACTUALIZAR_PERFIL', descripcion: 'actualización de datos personales', metadata });
     return this.getMe(cedula);
   }
 
   async upsertConsent(cedula: string, tipo: string, aceptado: boolean) {
-    if (aceptado) {
-      // Aceptar: upsert y siempre marca aceptado_en = ahora
-      await query(
-        `insert into usuario.consentimientos (cedula, tipo_consentimiento, version_texto, aceptado, aceptado_en)
-         values ($1,$2,'v1', true, now())
-         on conflict (cedula, tipo_consentimiento)
-         do update set aceptado = excluded.aceptado,
-                       aceptado_en = now()`,
-        [cedula, tipo],
-      );
-    } else {
-      // Revocar: no podemos poner aceptado_en = null (columna NOT NULL)
-      // Solo marcamos aceptado=false y mantenemos la fecha de aceptación previa
-      await query(
-        `update usuario.consentimientos
-            set aceptado = false
-          where cedula = $1 and tipo_consentimiento = $2`,
-        [cedula, tipo],
-      );
-    }
-    await this.audit.log({ cedula, modulo: 'USUARIOS', accion: 'CONSENTIMIENTO', descripcion: `${tipo}=${aceptado}` });
-    return { ok: true };
+  if (aceptado) {
+    // Aceptar: upsert y siempre marca aceptado_en = ahora
+    await query(
+      `insert into usuario.consentimientos (cedula, tipo_consentimiento, version_texto, aceptado, aceptado_en)
+       values ($1,$2,'v1', true, now())
+       on conflict (cedula, tipo_consentimiento)
+       do update set aceptado = excluded.aceptado,
+                     aceptado_en = now()`,
+      [cedula, tipo],
+    );
+  } else {
+    // Revocar: garantizar registro aunque no exista previamente (idempotente)
+    await query(
+      `insert into usuario.consentimientos (cedula, tipo_consentimiento, version_texto, aceptado, aceptado_en)
+       values ($1,$2,'v1', false, now())
+       on conflict (cedula, tipo_consentimiento)
+       do update set aceptado = false`,
+      [cedula, tipo],
+    );
   }
+  await this.audit.log({ cedula, modulo: 'USUARIOS', accion: 'CONSENTIMIENTO', descripcion: `${tipo}=${aceptado}` });
+  return { ok: true };
+}
 
   async changePassword(cedula: string, dto: ChangePasswordDto) {
     const { rows } = await query<{ password_hash: string }>(`select password_hash from usuario.usuarios where cedula = $1`, [cedula]);
     const user = rows[0];
     if (!user) throw new ForbiddenException('no permitido');
     const ok = await this.pwd.verify(dto.current_password, user.password_hash);
-    if (!ok) throw new ForbiddenException('contraseña actual incorrecta');
+    if (!ok) throw new ForbiddenException('contrasena actual incorrecta');
     const new_hash = await this.pwd.hash(dto.new_password);
     await query(`update usuario.usuarios set password_hash = $1 where cedula = $2`, [new_hash, cedula]);
     await this.audit.log({ cedula, modulo: 'USUARIOS', accion: 'CAMBIO_PASSWORD' });

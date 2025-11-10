@@ -27,4 +27,12 @@ export const tokens = {
   },
 } as const;
 
-export type StatusKind = 'completado' | 'en-proceso' | 'pendiente' | 'confirmada' | 'vencido' | 'pagado';
+export type StatusKind =
+  | 'completado'
+  | 'en-proceso'
+  | 'pendiente'
+  | 'confirmada'
+  | 'cancelada'
+  | 'finalizada'
+  | 'vencido'
+  | 'pagado';

@@ -18,8 +18,11 @@ export class AuthController {
 
   // login (RF-02), auditar fallidos/ok
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: any) {
+    const user_agent = req.headers['user-agent'] || '';
+    const fwd = req.headers['x-forwarded-for'] as string | undefined;
+    const ip = (fwd ? fwd.split(',')[0].trim() : '') || req.ip || req.socket?.remoteAddress || '';
+    return this.auth.login(dto, { ip, user_agent });
   }
 
   // solicitar recuperación (RF-03)
@@ -45,5 +48,14 @@ export class AuthController {
   @Post('refresh')
   refresh(@Body() dto: RefreshDto) {
     return this.auth.refresh(dto.refresh_token);
+  }
+
+  // endpoint de prueba para forzar errores y probar auditoria.tb_error
+  @Post('test-error')
+  testError(@Req() req: any) {
+    const user_agent = req.headers['user-agent'] || '';
+    const fwd = req.headers['x-forwarded-for'] as string | undefined;
+    const ip = (fwd ? fwd.split(',')[0].trim() : '') || req.ip || req.socket?.remoteAddress || '';
+    throw new Error(`Error de prueba desde login - IP: ${ip}, UA: ${user_agent}`);
   }
 }

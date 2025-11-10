@@ -21,7 +21,7 @@ function ToastInline({ title, children, variant = 'info', autoCloseMs = 3000, on
   const [visible, setVisible] = useState(true);
   useEffect(() => { const t = setTimeout(() => { setVisible(false); setTimeout(onClose, 220); }, autoCloseMs); return () => clearTimeout(t); }, [autoCloseMs, onClose]);
   return (
-    <div className={`pointer-events-auto rounded-lg border border-[var(--border-soft)] bg-white shadow-xl transition-all duration-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+    <div className={`pointer-events-auto rounded-lg border border-[var(--border-soft)] bg-white transition-all duration-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
       {title && <div className={`m-3 inline-block rounded px-2 py-1 text-xs font-medium ${colorClasses(variant)}`}>{title}</div>}
       <div className="px-4 pb-3 text-sm text-[var(--text-main)] whitespace-pre-line">{children}</div>
     </div>
@@ -40,4 +40,3 @@ export function Toaster(){
     </div>
   );
 }
-

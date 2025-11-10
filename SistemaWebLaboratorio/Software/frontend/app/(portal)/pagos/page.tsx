@@ -1,32 +1,51 @@
+"use client";
 import { Header } from '../components/header';
-import { PaymentsSection } from '../../../components/data/payments.client';
+import { PaymentsSection, usePaymentsData } from '../../../components/data/payments.client';
 import { KpiCard } from '../../../components/ui/kpi-card';
 import { Button } from '../../../components/ui/button';
-import { Suspense } from 'react';
+import { CreditCardIcon, ReceiptIcon, CalendarIcon } from '../../../components/ui/icons';
 
 export default function Page(){
+  const { items, loading, error, pay, receipt, stats } = usePaymentsData();
+
   return (
-    <section aria-label="pagos">
-      <Header title="Gestión de Pagos" subtitle="Administra tus pagos y facturas" />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mt-4">
-        <KpiCard title="Pagos Pendientes" value={'—'} accent="orange" />
-        <KpiCard title="Pagos Completados" value={'—'} accent="green" />
-        <KpiCard title="Total Facturado" value={'—'} accent="blue" />
+    <section aria-label="pagos" className="space-y-5">
+      <Header
+        meta="Pagos"
+        title="Gestion de pagos"
+        subtitle="Consulta tus facturas pendientes, historial y metodos disponibles"
+        actions={<Button variant="outline" onClick={()=>location.href='/historial'}>Ver historial</Button>}
+      />
+      <div className="portal-grid cols-3">
+        <KpiCard variant="tile" title="Pendientes" value={`$${stats.pendingTotal.toFixed(2)}`} subtitle={`${stats.pendingCount} factura(s)`} accent="orange" icon={<CreditCardIcon />} />
+        <KpiCard variant="tile" title="Pagados" value={`$${stats.paidTotal.toFixed(2)}`} subtitle={`${stats.paidCount} factura(s)`} accent="green" icon={<ReceiptIcon />} />
+        <KpiCard variant="tile" title="Total facturado" value={`$${stats.total.toFixed(2)}`} subtitle="Historico acumulado" accent="blue" icon={<CalendarIcon />} />
       </div>
-      <div className="mt-4">
-        <Suspense fallback={<div className="card" aria-busy="true">Cargando pagos…</div>}>
-          <PaymentsSection />
-        </Suspense>
-      </div>
-      <div className="card mt-4">
-        <div className="heading-sm">Métodos de Pago Disponibles</div>
-        <div className="body-muted">Elige la forma de pago más conveniente para ti</div>
-        <div className="grid gap-3 grid-cols-1 md:grid-cols-3 mt-3">
-          <div className="border border-[var(--border-soft)] rounded-md p-4">Tarjeta de crédito/débito <Button className="mt-2">Pagar</Button></div>
-          <div className="border border-[var(--border-soft)] rounded-md p-4">Transferencia bancaria <Button className="mt-2" variant="outline">Ver datos</Button></div>
-          <div className="border border-[var(--border-soft)] rounded-md p-4">Comprobante en oficina <Button className="mt-2" variant="outline">Más info</Button></div>
+      <div className="portal-grid cols-2">
+        <PaymentsSection items={items} loading={loading} error={error} onPay={pay} onReceipt={receipt} />
+        <div className="panel">
+          <div className="panel-heading">Metodos de pago disponibles</div>
+          <div className="panel-sub">Elige la forma de pago mas conveniente para ti.</div>
+          <div className="portal-grid cols-1 mt-3">
+            <div className="panel hoverable">
+              <div className="panel-heading">Tarjeta de credito/debito</div>
+              <div className="panel-sub">Procesamiento seguro e inmediato.</div>
+              <Button className="mt-3" onClick={()=>location.href='/pagos'}>Pagar ahora</Button>
+            </div>
+            <div className="panel hoverable">
+              <div className="panel-heading">Transferencia bancaria</div>
+              <div className="panel-sub">Recibe las instrucciones por correo.</div>
+              <Button className="mt-3" variant="outline">Ver datos</Button>
+            </div>
+            <div className="panel hoverable">
+              <div className="panel-heading">Pago en oficina</div>
+              <div className="panel-sub">Entrega tu comprobante de manera presencial.</div>
+              <Button className="mt-3" variant="outline">Mas informacion</Button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
   );
 }
+

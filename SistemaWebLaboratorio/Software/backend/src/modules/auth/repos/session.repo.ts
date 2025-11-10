@@ -6,12 +6,14 @@ export async function createSession(params: {
   expira_en: Date;
   ip_origen?: string | null;
   user_agent?: string | null;
-}): Promise<void> {
-  await query(
+}): Promise<number> {
+  const { rows } = await query<{ token_id: number }>(
     `insert into usuario.sesiones (cedula, refresh_token_hash, expira_en, ip_origen, user_agent)
-     values ($1,$2,$3,$4,$5)`,
+     values ($1,$2,$3,$4,$5)
+     returning token_id`,
     [params.cedula, params.refresh_hash, params.expira_en, params.ip_origen ?? null, params.user_agent ?? null],
   );
+  return rows[0].token_id;
 }
 
 export async function revokeAllSessions(cedula: string): Promise<number> {

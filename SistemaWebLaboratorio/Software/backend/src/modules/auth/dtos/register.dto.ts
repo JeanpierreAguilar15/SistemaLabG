@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, Length, Matches } from 'class-validator';
 import { IsCedulaEcuador } from '../../../common/validators/cedula-ecuador.validator';
 
 export class RegisterDto {
@@ -22,9 +22,11 @@ export class RegisterDto {
 
   @IsString()
   @Length(8, 100)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/, { message: 'La contrasena debe incluir mayusculas, minusculas y numeros' })
   password!: string;
 
   @IsOptional()
   @IsBoolean()
   acepta_terminos?: boolean;
 }
+

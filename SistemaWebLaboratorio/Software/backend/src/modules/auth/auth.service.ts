@@ -46,7 +46,7 @@ export class AuthService {
     return { ok: true };
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, ctx: { ip: string; user_agent: string }) {
     // bloqueo por intentos fallidos configurable
     const maxAttempts = parseInt(process.env.LOGIN_MAX_FAILED_ATTEMPTS || '5', 10);
     const windowMinutes = parseInt(process.env.LOGIN_FAIL_WINDOW_MINUTES || '15', 10);
@@ -58,17 +58,17 @@ export class AuthService {
       [dto.cedula, intervalTxt],
     );
     if ((attempts[0]?.c ?? 0) >= maxAttempts) {
-      await this.audit.log({ cedula: dto.cedula, modulo: 'LOGIN', accion: 'LOGIN_BLOQUEADO', descripcion: 'demasiados intentos fallidos', metadata: { ip: dto.ip, user_agent: dto.user_agent } });
+      await this.audit.log({ cedula: dto.cedula, modulo: 'LOGIN', accion: 'LOGIN_BLOQUEADO', descripcion: 'demasiados intentos fallidos', metadata: { ip: ctx.ip, user_agent: ctx.user_agent } });
       throw new UnauthorizedException('cuenta temporalmente bloqueada');
     }
     const user = await findUserByCedula(dto.cedula);
     if (!user) {
-      await this.audit.log({ cedula: dto.cedula, modulo: 'LOGIN', accion: 'LOGIN_FALLIDO', descripcion: 'usuario no encontrado', metadata: { ip: dto.ip, user_agent: dto.user_agent } });
+      await this.audit.log({ cedula: dto.cedula, modulo: 'LOGIN', accion: 'LOGIN_FALLIDO', descripcion: 'usuario no encontrado', metadata: { ip: ctx.ip, user_agent: ctx.user_agent } });
       throw new UnauthorizedException('credenciales inválidas');
     }
     const valid = await this.pwd.verify(dto.password, user.password_hash);
     if (!valid) {
-      await this.audit.log({ cedula: dto.cedula, modulo: 'LOGIN', accion: 'LOGIN_FALLIDO', descripcion: 'password inválido', metadata: { ip: dto.ip, user_agent: dto.user_agent } });
+      await this.audit.log({ cedula: dto.cedula, modulo: 'LOGIN', accion: 'LOGIN_FALLIDO', descripcion: 'password inválido', metadata: { ip: ctx.ip, user_agent: ctx.user_agent } });
       throw new UnauthorizedException('credenciales inválidas');
     }
     const roles = await getUserRoles(user.cedula);
@@ -78,8 +78,8 @@ export class AuthService {
     // calcular expira_en desde 'exp' del JWT de refresh
     const decoded: any = this.jwt.decode(refresh);
     const expira_en = decoded?.exp ? new Date(decoded.exp * 1000) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    await createSession({ cedula: user.cedula, refresh_hash, expira_en, ip_origen: dto.ip, user_agent: dto.user_agent });
-    await this.audit.log({ cedula: user.cedula, modulo: 'LOGIN', accion: 'LOGIN_OK', descripcion: 'login correcto', metadata: { ip: dto.ip, user_agent: dto.user_agent } });
+    const tokenId = await createSession({ cedula: user.cedula, refresh_hash, expira_en, ip_origen: ctx.ip, user_agent: ctx.user_agent });
+    await this.audit.log({ cedula: user.cedula, modulo: 'LOGIN', accion: 'LOGIN_OK', referencia_clave: String(tokenId), descripcion: 'login correcto', metadata: { ip: ctx.ip, user_agent: ctx.user_agent } });
     return { access_token: access, refresh_token: refresh, roles };
   }
 

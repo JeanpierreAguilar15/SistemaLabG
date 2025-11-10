@@ -18,16 +18,16 @@ export const ResultsKpis = () => {
         const done = res.items.filter(r => r.estado === 'COMPLETADO').length;
         const inProgress = res.items.filter(r => r.estado !== 'COMPLETADO').length;
         setCounts({ done, inProgress, total: res.items.length });
-      }catch{}
+      }catch{/* ignore */}
     };
     fetchCounts();
   }, [accessToken]);
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mt-4">
-      <KpiCard title="Completados" value={counts.done} accent="green" />
-      <KpiCard title="En Proceso" value={counts.inProgress} accent="orange" />
-      <KpiCard title="Total Análisis" value={counts.total} accent="blue" />
+    <div className="portal-grid cols-3">
+      <KpiCard variant="tile" title="Completados" value={counts.done} subtitle="Listos para descargar" accent="green" />
+      <KpiCard variant="tile" title="En proceso" value={counts.inProgress} subtitle="Analisis en curso" accent="orange" />
+      <KpiCard variant="tile" title="Total analisis" value={counts.total} subtitle="Historico registrado" accent="blue" />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { EditProfileForm } from '../../../components/profile/edit-profile.client';
 import { ProfileHero } from '../../../components/profile/profile-hero.client';
 import { useEffect, useState } from 'react';
@@ -8,27 +8,13 @@ import { Toggle } from '../../../components/ui/toggle';
 import { Toast } from '../../../components/ui/toast';
 import { Tooltip } from '../../../components/ui/tooltip';
 import { QuestionIcon } from '../../../components/ui/icons';
+import { Header } from '../components/header';
 
 export default function Page(){
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
   const [consent, setConsent] = useState(false);
   const [toast, setToast] = useState<{ open:boolean; title:string; message:string; variant:'success'|'error'|'info' }>(()=>({ open:false, title:'', message:'', variant:'info' }));
-  const { accessToken } = useSessionStore();
+  const { accessToken, clear } = useSessionStore();
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!current || !next) { setToast({ open:true, title:'Datos incompletos', message:'Completa ambos campos.', variant:'info' }); return; }
-    try{
-      await api('/profile/change-password', { method:'POST', body: JSON.stringify({ current_password: current, new_password: next }) }, accessToken);
-      setCurrent(''); setNext('');
-      setToast({ open:true, title:'Listo', message:'Contrasena actualizada', variant:'success' });
-    }catch{
-      setToast({ open:true, title:'No se pudo', message:'No fue posible cambiar la contrasena', variant:'error' });
-    }
-  };
-
-  // cargar consentimiento actual
   useEffect(() => {
     (async () => {
       try{
@@ -50,34 +36,38 @@ export default function Page(){
     }
   };
 
+  const handleLogoutAll = async () => {
+    try{ if (accessToken) await api('/auth/logout-all', { method:'POST' }, accessToken); }catch{}
+    clear();
+    setToast({ open:true, title:'Sesiones cerradas', message:'Se cerraron todas tus Sesiones activas.', variant:'success' });
+    setTimeout(()=>{ location.href = '/login'; }, 600);
+  };
+
   return (
-    <section aria-label="perfil">
+    <section aria-label="perfil" className="space-y-5">
+      <Header meta="Perfil" title="Mi perfil" subtitle="Actualiza tu informacion personal y preferencias" />
       <ProfileHero />
-      <div className="row cols-2" style={{ marginTop:'1rem' }}>
+      <div className="portal-grid cols-2">
         <EditProfileForm />
-        <div className="card">
-          <div className="title">Consentimientos</div>
-          <div className="flex items-center gap-2">
+        <div className="panel">
+          <div className="panel-heading">Preferencias</div>
+          <div className="panel-sub">Configura el uso de datos y notificaciones.</div>
+          <div className="flex items-center gap-2 mt-4">
             <Toggle ariaLabel="Aceptar uso de datos" checked={consent} onChange={(v)=>{ setConsent(v); handleSaveConsent(v); }} />
             <span>Acepto uso de datos y notificaciones</span>
-            <Tooltip content="Permite usar tu informacion para el asistente virtual y envio de notificaciones. Puedes cambiarlo cuando quieras.">
-              <span className="inline-flex items-center justify-center rounded-full border border-[var(--border-soft)] bg-white p-1 text-[var(--text-muted)]" aria-label="Que es esto?">
+            <Tooltip content="Permite usar tu informacion para el asistente virtual y envio de notificaciones.">
+              <span className="inline-flex items-center justify-center rounded-full border border-[var(--border-soft)] bg-white p-1 text-[var(--text-muted)]" aria-label="Mas detalles">
                 <QuestionIcon />
               </span>
             </Tooltip>
           </div>
-          <div className="title" style={{ marginTop:'1rem' }}>Cambiar contraseña</div>
-          <form onSubmit={handleChangePassword}>
-            <label>
-              <span>Contraseña actual</span>
-              <input value={current} onChange={(e)=>setCurrent(e.target.value)} type="password" style={{ display:'block', width:'100%', border:'1px solid var(--border-soft)', borderRadius:'.375rem', padding:'.5rem' }} />
-            </label>
-            <label>
-              <span>Nueva contraseña</span>
-              <input value={next} onChange={(e)=>setNext(e.target.value)} type="password" style={{ display:'block', width:'100%', border:'1px solid var(--border-soft)', borderRadius:'.375rem', padding:'.5rem' }} />
-            </label>
-            <button className="primary" style={{ marginTop:'1rem' }}>Cambiar contraseña</button>
-          </form>
+
+          <div className="panel-divider" />
+          <div className="panel-heading">Sesiones</div>
+          <p className="panel-sub">Cierra tu sesion en todos los dispositivos conectados.</p>
+          <button className="mt-3 inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium bg-[var(--brand-primary)] text-white" onClick={handleLogoutAll}>
+            Cerrar sesion en todos los dispositivos
+          </button>
         </div>
       </div>
       <Toast open={toast.open} onClose={()=>setToast(s=>({ ...s, open:false }))} title={toast.title} variant={toast.variant} autoCloseMs={3000}>{toast.message}</Toast>

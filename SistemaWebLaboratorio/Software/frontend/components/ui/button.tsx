@@ -5,14 +5,20 @@ type Props = {
   children: ReactNode;
   onClick?: () => void;
   variant?: 'primary' | 'danger' | 'outline' | 'ghost' | 'brand';
+  size?: 'sm' | 'md' | 'lg';
   className?: string;
   ariaLabel?: string;
   type?: 'button' | 'submit' | 'reset';
   disabled?: boolean;
 };
 
-export function Button({ children, onClick, variant = 'primary', className = '', ariaLabel, type = 'button', disabled }: Props){
-  const base = 'inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium focus:outline-none transition-all duration-200 active:scale-[.99]';
+export function Button({ children, onClick, variant = 'primary', size = 'md', className = '', ariaLabel, type = 'button', disabled }: Props){
+  const base = 'inline-flex items-center justify-center rounded-xl font-semibold focus:outline-none transition-all duration-150 active:scale-[.99]';
+  const sizes = {
+    sm: 'h-8 px-3 text-xs rounded-lg',
+    md: 'h-11 px-4 text-sm',
+    lg: 'h-12 px-5 text-base',
+  } as const;
   const styles = {
     primary: 'bg-[var(--brand-secondary)] text-white hover:opacity-95',
     danger: 'bg-[#dc2626] text-white hover:opacity-95',
@@ -21,7 +27,7 @@ export function Button({ children, onClick, variant = 'primary', className = '',
     brand: 'bg-[var(--brand-primary)] text-white hover:opacity-95'
   } as const;
   return (
-    <button type={type} aria-label={ariaLabel} disabled={disabled} onClick={onClick} className={`${base} ${styles[variant]} ${className}`}>
+    <button type={type} aria-label={ariaLabel} aria-disabled={disabled} disabled={disabled} onClick={onClick} className={`${base} ${sizes[size]} ${styles[variant]} ${className}`}>
       {children}
     </button>
   );

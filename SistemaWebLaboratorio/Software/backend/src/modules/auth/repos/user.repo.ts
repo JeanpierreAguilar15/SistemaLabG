@@ -16,12 +16,12 @@ export async function findUserByCedula(cedula: string): Promise<UserRow | null> 
 }
 
 export async function emailExists(email: string): Promise<boolean> {
-  const { rows } = await query<{ exists: boolean }>('select exists(select 1 from usuario.usuarios where email = $1) as exists', [email]);
+  const { rows } = await query<{ exists: boolean }>('select exists(select 1 from usuario.usuarios where lower(email) = lower($1)) as exists', [email]);
   return rows[0]?.exists ?? false;
 }
 
 export async function findUserByEmail(email: string): Promise<UserRow | null> {
-  const { rows } = await query<UserRow>('select * from usuario.usuarios where email = $1', [email]);
+  const { rows } = await query<UserRow>('select * from usuario.usuarios where lower(email) = lower($1)', [email]);
   return rows[0] ?? null;
 }
 
@@ -42,6 +42,8 @@ export async function getUserRoles(cedula: string): Promise<string[]> {
 }
 
 export async function assignRole(cedula: string, nombre_rol: string): Promise<void> {
+  // asegurar que el rol exista para evitar FK violada tras truncates
+  await query(`insert into usuario.roles (nombre_rol) values ($1) on conflict do nothing`, [nombre_rol]);
   await query(
     `insert into usuario.usuario_rol (cedula, nombre_rol)
      values ($1,$2)

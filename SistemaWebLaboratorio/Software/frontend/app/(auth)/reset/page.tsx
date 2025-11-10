@@ -25,14 +25,14 @@ function ResetInner(){
     }catch{ setToast({ open:true, title:'No se pudo', message:'No fue posible actualizar la contrasena', variant:'error' }); }
   });
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#EEF3FF] to-[#FFF1F2] p-4">
-      <section className="card w-full max-w-lg shadow-xl">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--surface-page)] p-4">
+      <section className="card w-full max-w-lg">
         <div className="flex flex-col items-center">
-          <div aria-hidden className="w-14 h-14 rounded-xl mb-2" style={{ background:'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }} />
+          <div aria-hidden className="w-14 h-14 rounded-xl mb-2" style={{ background:'var(--brand-secondary)' }} />
           <h1 className="heading-lg">Restablecer contrasena</h1>
           <p className="body-muted">Ingresa el token recibido y tu nueva contrasena.</p>
         </div>
-        <form onSubmit={(e)=>{ e.preventDefault(); onSubmit(); }} className="mt-3">
+        <form aria-busy={isSubmitting} onSubmit={(e)=>{ e.preventDefault(); onSubmit(); }} className="mt-3">
           <label className="space-y-1">
             <span>Token</span>
             <input aria-invalid={!!errors.token} {...register('token')} className="block w-full rounded-md p-2 border border-[var(--border-soft)]" />

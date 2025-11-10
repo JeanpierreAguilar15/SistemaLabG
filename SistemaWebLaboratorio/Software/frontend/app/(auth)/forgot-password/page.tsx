@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,14 +21,14 @@ export default function Page(){
     }catch{ setToast({ open:true, title:'No pudimos procesarlo', message:'Intentalo nuevamente.', variant:'error' }); }
   });
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#EEF3FF] to-[#FFF1F2] p-4">
-      <section className="card w-full max-w-lg shadow-xl">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--surface-page)] p-4">
+      <section className="card w-full max-w-lg">
         <div className="flex flex-col items-center">
-          <div aria-hidden className="w-14 h-14 rounded-xl mb-2" style={{ background:'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }} />
-          <h1 className="heading-lg">Recuperar contraseña</h1>
+          <div aria-hidden className="w-14 h-14 rounded-xl mb-2" style={{ background:'var(--brand-secondary)' }} />
+          <h1 className="heading-lg">Recuperar contrasena</h1>
           <p className="body-muted">Te enviaremos un enlace de restablecimiento al correo indicado.</p>
         </div>
-        <form onSubmit={(e)=>{ e.preventDefault(); onSubmit(); }} className="mt-3">
+        <form aria-busy={isSubmitting} onSubmit={(e)=>{ e.preventDefault(); onSubmit(); }} className="mt-3">
           <label className="space-y-1">
             <span>Correo electronico</span>
             <input aria-invalid={!!errors.email} {...register('email')} placeholder="tu@correo.com" className="block w-full rounded-md p-2 border border-[var(--border-soft)]" />

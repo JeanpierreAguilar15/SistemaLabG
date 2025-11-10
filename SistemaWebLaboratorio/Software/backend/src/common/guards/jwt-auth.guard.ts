@@ -11,7 +11,7 @@ export class JwtAuthGuard implements CanActivate {
     }
     const token = header.slice('Bearer '.length);
     try {
-      const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET || 'dev_secret');
+      const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET || 'dev_access');
       req.user = payload;
       return true;
     } catch {
@@ -19,4 +19,3 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 }
-

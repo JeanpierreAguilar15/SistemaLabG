@@ -5,7 +5,11 @@ import { Toaster } from '../components/ui/toaster';
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
-      <body className="min-h-screen bg-surface-page text-text-main antialiased">
+      <head>
+        <meta charSet="utf-8" />
+      </head>
+      <body className="min-h-screen bg-surface-page text-text-main antialiased theme-accent-blue app-shell">
+        <a href="#contenido" className="skip-link">Saltar al contenido</a>
         {children}
         <Toaster />
       </body>

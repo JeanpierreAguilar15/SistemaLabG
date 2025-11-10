@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useSessionStore } from '../../lib/session-store';
 import { api } from '../../lib/api';
+import { Button } from '../ui/button';
 
 type Me = { nombres?: string; apellidos?: string; email?: string; avatar_url?: string } | null;
 
@@ -15,7 +16,7 @@ export function ProfileHero(){
         if (!accessToken) return;
         const res = await api<any>('/profile/me', { method:'GET' }, accessToken);
         setMe({ nombres: res?.nombres, apellidos: res?.apellidos, email: res?.email, avatar_url: res?.avatar_url });
-      }catch{}
+      }catch{/* ignore */}
     })();
   }, [accessToken]);
 
@@ -24,21 +25,21 @@ export function ProfileHero(){
   const initial = fullName.charAt(0).toUpperCase();
 
   return (
-    <div className="card" role="region" aria-label="cabecera de perfil">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {me?.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={me.avatar_url} alt={fullName} className="w-14 h-14 rounded-full border border-[var(--border-soft)] object-cover" />
-          ) : (
-            <div aria-hidden className="w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-semibold" style={{ background:'linear-gradient(135deg, var(--brand-secondary), var(--brand-primary))' }}>{initial}</div>
-          )}
-          <div>
-            <div className="text-lg font-semibold">{fullName}</div>
-            <div className="text-sm text-[var(--text-muted)]">{email}</div>
-          </div>
-        </div>
-        {/* Botón de edición eliminado a solicitud */}
+    <div className="profile-banner" role="region" aria-label="tarjeta de perfil">
+      {me?.avatar_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={me.avatar_url} alt={fullName} className="profile-banner__avatar object-cover" />
+      ) : (
+        <div aria-hidden className="profile-banner__avatar">{initial}</div>
+      )}
+      <div className="profile-banner__body">
+        <div className="text-lg font-semibold">{fullName}</div>
+        <div className="profile-banner__meta">{email}</div>
+        <div className="profile-banner__meta">Paciente activo - Portal Laboratorio</div>
+      </div>
+      <div className="profile-banner__actions">
+        <Button size="sm" variant="outline" onClick={()=>location.href='/resultados'}>Ver resultados</Button>
+        <Button size="sm" onClick={()=>location.href='/pagos'}>Ver pagos</Button>
       </div>
     </div>
   );

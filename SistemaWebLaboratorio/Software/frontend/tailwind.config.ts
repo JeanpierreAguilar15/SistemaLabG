@@ -10,9 +10,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // brand / structure
-        'brand-primary': 'var(--brand-primary)', // #D8232A
-        'brand-secondary': 'var(--brand-secondary)', // #2A2CCF
+        // brand / structure (tema azul)
+        'brand-primary': 'var(--brand-primary)', // #2563EB
+        'brand-secondary': 'var(--brand-secondary)', // #1D4ED8
 
         // surfaces
         'surface-page': 'var(--surface-page)', // #F8F9FA
@@ -35,10 +35,7 @@ const config: Config = {
         'state-info-fg': 'var(--info-fg)',
       },
       borderRadius: {
-        card: '0.5rem', // ~8px
-      },
-      boxShadow: {
-        card: '0 1px 2px rgba(0,0,0,0.04), 0 4px 24px rgba(0,0,0,0.06)',
+        card: '12px', // radius-card
       },
       spacing: {
         2: '8px',
@@ -46,6 +43,18 @@ const config: Config = {
         6: '24px',
         8: '32px',
       },
+    },
+    boxShadow: {
+      sm: '0 1px 0 rgba(0,0,0,0.03)',
+      DEFAULT: '0 1px 0 rgba(0,0,0,0.03)',
+      md: '0 1px 0 rgba(0,0,0,0.04)',
+      lg: '0 1px 0 rgba(0,0,0,0.05)',
+      xl: '0 1px 0 rgba(0,0,0,0.06)',
+      '2xl': '0 1px 0 rgba(0,0,0,0.06)',
+      inner: 'inset 0 1px 0 rgba(255,255,255,0.2)',
+      none: 'none',
+      // custom flat card if needed
+      card: '0 1px 0 rgba(0,0,0,0.04)'
     },
   },
   plugins: [],

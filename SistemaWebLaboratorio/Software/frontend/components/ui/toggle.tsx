@@ -21,8 +21,7 @@ export function Toggle({ checked = false, onChange, ariaLabel, disabled }: Props
       onClick={toggle}
       className={`h-6 w-10 rounded-full border transition-colors ${disabled?'opacity-60 cursor-not-allowed':'cursor-pointer'} ${on ? 'bg-[var(--brand-secondary)] border-[var(--brand-secondary)]' : 'bg-white border-[var(--border-soft)]'}`}
     >
-      <span className={`block h-5 w-5 rounded-full bg-white shadow transition-transform translate-x-[2px] ${on ? 'translate-x-[22px]' : ''}`} />
+      <span className={`block h-5 w-5 rounded-full bg-white transition-transform translate-x-[2px] ${on ? 'translate-x-[22px]' : ''}`} />
     </button>
   );
 }
-

@@ -46,7 +46,7 @@ export function Toast({ open, onClose, title, children, variant = 'info', autoCl
   return (
     <div aria-live="polite" role="status" className="pointer-events-none fixed inset-0 z-[60] flex items-end justify-end">
       <div className={`m-4 w-[min(92vw,380px)] pointer-events-auto`}>
-        <div className={`rounded-lg border border-[var(--border-soft)] bg-white shadow-xl transition-all duration-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+        <div className={`rounded-lg border border-[var(--border-soft)] bg-white transition-all duration-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
           {title && <div className={`m-3 inline-block rounded px-2 py-1 text-xs font-medium ${color}`}>{title}</div>}
           <div className="px-4 pb-3 text-sm text-[var(--text-main)] whitespace-pre-line">{children}</div>
           <div className="px-3 pb-3 flex justify-end">
@@ -57,4 +57,3 @@ export function Toast({ open, onClose, title, children, variant = 'info', autoCl
     </div>
   );
 }
-

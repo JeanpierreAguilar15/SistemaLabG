@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(for dir in \"c:\\Users\\fzzch\\OneDrive\\Escritorio\\Espoch_Semestres\\9 Semestre\\API_II\\SistemaWeb_Lab\\SistemaWebLaboratorio\\software\\backend\\src\\modules\"/*)",
+      "Bash(ls:*)",
+      "Bash(done)",
+      "Bash(for dir in \"c:\\Users\\fzzch\\OneDrive\\Escritorio\\Espoch_Semestres\\9 Semestre\\API_II\\SistemaWeb_Lab\\SistemaWebLaboratorio\\software\\frontend\\app\\admin\"/*)",
+      "Bash(for dir in \"c:\\Users\\fzzch\\OneDrive\\Escritorio\\Espoch_Semestres\\9 Semestre\\API_II\\SistemaWeb_Lab\\SistemaWebLaboratorio\\software\\frontend\\components\"/*)",
+      "Bash(dir:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
