@@ -2,7 +2,8 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
@@ -175,8 +176,8 @@ model HorarioAtencion {
   codigo_servicio   Int
   codigo_sede       Int
   dia_semana        Int
-  hora_inicio       String    @db.Time
-  hora_fin          String    @db.Time
+  hora_inicio       DateTime  @db.Time
+  hora_fin          DateTime  @db.Time
   cupos_por_hora    Int       @default(4)
   activo            Boolean   @default(true)
 
@@ -192,8 +193,8 @@ model Slot {
   codigo_servicio     Int
   codigo_sede         Int
   fecha               DateTime  @db.Date
-  hora_inicio         String    @db.Time
-  hora_fin            String    @db.Time
+  hora_inicio         DateTime  @db.Time
+  hora_fin            DateTime  @db.Time
   cupos_totales       Int       @default(1)
   cupos_disponibles   Int       @default(1)
   activo              Boolean   @default(true)
