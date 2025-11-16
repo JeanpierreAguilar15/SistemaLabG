@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { authApi, ApiError } from '@/lib/api'
-import { validateCedulaEcuador } from '@/lib/utils'
+import { validateCedulaEcuador, checkPasswordStrength, type PasswordStrengthResult } from '@/lib/utils'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -24,6 +24,7 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [apiError, setApiError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [passwordStrength, setPasswordStrength] = useState<PasswordStrengthResult | null>(null)
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -92,6 +93,12 @@ export default function RegisterPage() {
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+
+    // Check password strength in real-time
+    if (field === 'password') {
+      setPasswordStrength(checkPasswordStrength(value))
+    }
+
     // Clear error for this field
     if (errors[field]) {
       setErrors((prev) => {
@@ -221,7 +228,7 @@ export default function RegisterPage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="password">Contraseña *</Label>
                   <Input
@@ -236,9 +243,55 @@ export default function RegisterPage() {
                   {errors.password && (
                     <p className="text-sm text-lab-danger-600">{errors.password}</p>
                   )}
-                  <p className="text-xs text-lab-neutral-500">
-                    Mínimo 8 caracteres, incluye mayúsculas, minúsculas y números
-                  </p>
+
+                  {/* Password Strength Meter */}
+                  {formData.password && passwordStrength && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-lab-neutral-600">Fortaleza:</span>
+                        <span className={`font-semibold ${passwordStrength.color}`}>
+                          {passwordStrength.label}
+                        </span>
+                      </div>
+
+                      {/* Strength Bar */}
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4].map((level) => {
+                          let bgColor = 'bg-lab-neutral-200'
+                          if (passwordStrength.score >= level * 2) {
+                            if (passwordStrength.strength === 'weak') bgColor = 'bg-lab-danger-500'
+                            else if (passwordStrength.strength === 'moderate') bgColor = 'bg-lab-warning-500'
+                            else if (passwordStrength.strength === 'strong') bgColor = 'bg-lab-success-500'
+                            else if (passwordStrength.strength === 'very-strong') bgColor = 'bg-lab-success-600'
+                          }
+                          return (
+                            <div
+                              key={level}
+                              className={`h-1.5 flex-1 rounded-full transition-colors ${bgColor}`}
+                            />
+                          )
+                        })}
+                      </div>
+
+                      {/* Feedback */}
+                      {passwordStrength.feedback.length > 0 && (
+                        <div className="space-y-1">
+                          {passwordStrength.feedback.map((tip, idx) => (
+                            <p key={idx} className="text-xs text-lab-neutral-500 flex items-start">
+                              <span className="mr-1">•</span>
+                              <span>{tip}</span>
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!formData.password && (
+                    <p className="text-xs text-lab-neutral-500">
+                      Mínimo 8 caracteres, incluye mayúsculas, minúsculas y números
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
