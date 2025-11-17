@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -12,6 +13,7 @@ import { InventarioModule } from './modules/inventario/inventario.module';
 import { ComunicacionesModule } from './modules/comunicaciones/comunicaciones.module';
 import { AuditoriaModule } from './modules/auditoria/auditoria.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { EventsModule } from './modules/events/events.module';
 
 @Module({
   imports: [
@@ -29,6 +31,13 @@ import { AdminModule } from './modules/admin/admin.module';
       },
     ]),
 
+    // Event Emitter
+    EventEmitterModule.forRoot({
+      wildcard: true,
+      delimiter: '.',
+      maxListeners: 20,
+    }),
+
     // Database
     PrismaModule,
 
@@ -36,6 +45,7 @@ import { AdminModule } from './modules/admin/admin.module';
     AuthModule,
     UsersModule,
     AdminModule,
+    EventsModule,
     AgendaModule,
     CatalogoModule,
     PagosModule,

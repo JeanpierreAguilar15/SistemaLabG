@@ -1,17 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AdminEventPayload } from '../../admin/admin-events.service';
+import { EventsGateway } from '../../events/events.gateway';
 
 /**
  * Listener que registra todos los eventos administrativos en la tabla de auditoría
  * Proporciona trazabilidad completa de todas las acciones admin
+ * También emite notificaciones en tiempo real vía WebSocket
  */
 @Injectable()
 export class AdminEventsListener {
   private readonly logger = new Logger(AdminEventsListener.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => EventsGateway))
+    private readonly eventsGateway: EventsGateway,
+  ) {}
 
   /**
    * Escucha TODOS los eventos admin usando wildcard
@@ -37,6 +43,16 @@ export class AdminEventsListener {
       this.logger.log(
         `📝 Audit logged: ${payload.entityType}.${payload.action} by user ${payload.userId}`,
       );
+
+      // Emitir notificación en tiempo real a admins
+      this.eventsGateway.notifyAdminEvent({
+        eventType: payload.eventType,
+        entityType: payload.entityType,
+        entityId: payload.entityId,
+        action: payload.action,
+        userId: payload.userId,
+        data: payload.data,
+      });
     } catch (error) {
       this.logger.error(`Failed to log admin event: ${error.message}`, error.stack);
 

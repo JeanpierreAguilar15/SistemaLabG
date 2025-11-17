@@ -1,14 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { AdminEventPayload } from '../../admin/admin-events.service';
+import { EventsGateway } from '../../events/events.gateway';
 
 /**
  * Listener que invalida caché del catálogo cuando los datos cambian
  * Asegura que el catálogo público siempre muestre información actualizada
+ * También emite notificaciones en tiempo real a todos los clientes
  */
 @Injectable()
 export class CatalogoAdminEventsListener {
   private readonly logger = new Logger(CatalogoAdminEventsListener.name);
+
+  constructor(
+    @Inject(forwardRef(() => EventsGateway))
+    private readonly eventsGateway: EventsGateway,
+  ) {}
 
   // TODO: Inyectar CacheManager cuando se implemente caching
   // constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
@@ -28,6 +35,14 @@ export class CatalogoAdminEventsListener {
 
     // Por ahora, solo loguear
     this.logger.debug(`Cache invalidation triggered for exam operations`);
+
+    // Notificar en tiempo real a todos los clientes
+    this.eventsGateway.notifyCatalogUpdate({
+      type: 'exam',
+      action: payload.action,
+      entityId: payload.entityId,
+      entityName: payload.data?.nombre,
+    });
   }
 
   /**
@@ -47,6 +62,13 @@ export class CatalogoAdminEventsListener {
     // await this.cacheManager.del('catalog:prices');
 
     this.logger.debug(`Cache invalidation triggered for price operations`);
+
+    // Notificar en tiempo real a todos los clientes
+    this.eventsGateway.notifyCatalogUpdate({
+      type: 'price',
+      action: payload.action,
+      entityId: payload.entityId,
+    });
   }
 
   /**
@@ -63,6 +85,14 @@ export class CatalogoAdminEventsListener {
     // await this.cacheManager.del(`catalog:category:${payload.entityId}`);
 
     this.logger.debug(`Cache invalidation triggered for category operations`);
+
+    // Notificar en tiempo real a todos los clientes
+    this.eventsGateway.notifyCatalogUpdate({
+      type: 'category',
+      action: payload.action,
+      entityId: payload.entityId,
+      entityName: payload.data?.nombre,
+    });
   }
 
   /**
@@ -79,6 +109,14 @@ export class CatalogoAdminEventsListener {
     // await this.cacheManager.del(`catalog:package:${payload.entityId}`);
 
     this.logger.debug(`Cache invalidation triggered for package operations`);
+
+    // Notificar en tiempo real a todos los clientes
+    this.eventsGateway.notifyCatalogUpdate({
+      type: 'package',
+      action: payload.action,
+      entityId: payload.entityId,
+      entityName: payload.data?.nombre,
+    });
   }
 
   /**
@@ -94,6 +132,13 @@ export class CatalogoAdminEventsListener {
     // await this.cacheManager.del('catalog:locations');
 
     this.logger.debug(`Cache invalidation triggered for location operations`);
+
+    // Notificar en tiempo real a todos los clientes
+    this.eventsGateway.notifyCatalogUpdate({
+      type: 'location',
+      action: payload.action,
+      entityId: payload.entityId,
+    });
   }
 
   /**
