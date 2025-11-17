@@ -9,10 +9,14 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { ValidateCedulaEcuatoriana } from './dto/user.dto';
 import { ValidateRucEcuador } from './dto/supplier.dto';
+import { AdminEventsService } from './admin-events.service';
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventsService: AdminEventsService,
+  ) {}
 
   // ==================== USUARIOS ====================
 
