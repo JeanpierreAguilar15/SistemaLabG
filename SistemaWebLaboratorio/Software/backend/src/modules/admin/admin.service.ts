@@ -7,6 +7,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { ValidateCedulaEcuatoriana } from './dto/user.dto';
+import { ValidateRucEcuador } from './dto/supplier.dto';
 
 @Injectable()
 export class AdminService {
@@ -86,6 +88,11 @@ export class AdminService {
   }
 
   async createUser(data: any) {
+    // Validar formato de cédula ecuatoriana
+    if (!ValidateCedulaEcuatoriana(data.cedula)) {
+      throw new BadRequestException('La cédula ecuatoriana no es válida');
+    }
+
     // Validar que el email y cedula no existan
     const existingUser = await this.prisma.usuario.findFirst({
       where: {
@@ -128,6 +135,11 @@ export class AdminService {
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Validar formato de cédula si se está actualizando
+    if (data.cedula && !ValidateCedulaEcuatoriana(data.cedula)) {
+      throw new BadRequestException('La cédula ecuatoriana no es válida');
     }
 
     // Si se está actualizando email o cedula, validar que no existan
@@ -570,16 +582,24 @@ export class AdminService {
 
   // ==================== PRECIOS ====================
 
-  async createPrice(data: Prisma.PrecioCreateInput) {
+  async createPrice(data: any) {
     return this.prisma.precio.create({
-      data,
+      data: {
+        precio: data.precio,
+        fecha_inicio: data.fecha_inicio,
+        fecha_fin: data.fecha_fin,
+        activo: data.activo !== undefined ? data.activo : true,
+        examen: {
+          connect: { codigo_examen: data.codigo_examen },
+        },
+      },
       include: {
         examen: true,
       },
     });
   }
 
-  async updatePrice(codigo_precio: number, data: Prisma.PrecioUpdateInput) {
+  async updatePrice(codigo_precio: number, data: any) {
     const price = await this.prisma.precio.findUnique({
       where: { codigo_precio },
     });
@@ -588,9 +608,15 @@ export class AdminService {
       throw new NotFoundException('Precio no encontrado');
     }
 
+    const updateData: any = {};
+    if (data.precio !== undefined) updateData.precio = data.precio;
+    if (data.fecha_inicio !== undefined) updateData.fecha_inicio = data.fecha_inicio;
+    if (data.fecha_fin !== undefined) updateData.fecha_fin = data.fecha_fin;
+    if (data.activo !== undefined) updateData.activo = data.activo;
+
     return this.prisma.precio.update({
       where: { codigo_precio },
-      data,
+      data: updateData,
       include: {
         examen: true,
       },
@@ -779,6 +805,60 @@ export class AdminService {
   async getAllInventoryItems(page: number = 1, limit: number = 50, filters?: any) {
     const skip = (page - 1) * limit;
 
+    // Si se requiere filtro de stock bajo, usar consulta SQL cruda
+    if (filters?.stock_bajo === 'true' || filters?.stock_bajo === true) {
+      const items = await this.prisma.$queryRaw<any[]>`
+        SELECT i.*, c.nombre as categoria_nombre, c.descripcion as categoria_descripcion,
+               c.fecha_creacion as categoria_fecha_creacion
+        FROM inventario.item i
+        LEFT JOIN inventario.categoria_item c ON i.codigo_categoria = c.codigo_categoria
+        WHERE i.stock_actual <= i.stock_minimo
+        ${filters?.search ? Prisma.sql`AND (i.nombre ILIKE ${`%${filters.search}%`} OR i.codigo_interno ILIKE ${`%${filters.search}%`})` : Prisma.empty}
+        ${filters?.codigo_categoria ? Prisma.sql`AND i.codigo_categoria = ${parseInt(filters.codigo_categoria)}` : Prisma.empty}
+        ORDER BY i.nombre ASC
+        LIMIT ${limit} OFFSET ${skip}
+      `;
+
+      const totalResult = await this.prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*)::int as count
+        FROM inventario.item i
+        WHERE i.stock_actual <= i.stock_minimo
+        ${filters?.search ? Prisma.sql`AND (i.nombre ILIKE ${`%${filters.search}%`} OR i.codigo_interno ILIKE ${`%${filters.search}%`})` : Prisma.empty}
+        ${filters?.codigo_categoria ? Prisma.sql`AND i.codigo_categoria = ${parseInt(filters.codigo_categoria)}` : Prisma.empty}
+      `;
+
+      const total = Number(totalResult[0].count);
+
+      // Transformar resultados para que tengan la estructura esperada con categoria
+      const itemsWithCategory = items.map((item: any) => ({
+        ...item,
+        categoria: item.codigo_categoria ? {
+          codigo_categoria: item.codigo_categoria,
+          nombre: item.categoria_nombre,
+          descripcion: item.categoria_descripcion,
+          fecha_creacion: item.categoria_fecha_creacion,
+        } : null,
+      }));
+
+      // Eliminar campos de categoria redundantes
+      itemsWithCategory.forEach((item: any) => {
+        delete item.categoria_nombre;
+        delete item.categoria_descripcion;
+        delete item.categoria_fecha_creacion;
+      });
+
+      return {
+        data: itemsWithCategory,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    }
+
+    // Consulta normal sin filtro de stock bajo
     const where: Prisma.ItemWhereInput = {};
 
     if (filters?.search) {
@@ -790,10 +870,6 @@ export class AdminService {
 
     if (filters?.codigo_categoria) {
       where.codigo_categoria = parseInt(filters.codigo_categoria);
-    }
-
-    if (filters?.stock_bajo) {
-      where.stock_actual = { lte: this.prisma.item.fields.stock_minimo };
     }
 
     const [items, total] = await Promise.all([
@@ -934,6 +1010,11 @@ export class AdminService {
   }
 
   async createSupplier(data: Prisma.ProveedorCreateInput) {
+    // Validar formato de RUC ecuatoriano
+    if (!ValidateRucEcuador(data.ruc)) {
+      throw new BadRequestException('El RUC ecuatoriano no es válido');
+    }
+
     // Verificar que el RUC no exista
     const existingSupplier = await this.prisma.proveedor.findUnique({
       where: { ruc: data.ruc },
@@ -955,6 +1036,22 @@ export class AdminService {
 
     if (!supplier) {
       throw new NotFoundException('Proveedor no encontrado');
+    }
+
+    // Validar formato de RUC si se está actualizando
+    if (data.ruc && typeof data.ruc === 'string' && !ValidateRucEcuador(data.ruc)) {
+      throw new BadRequestException('El RUC ecuatoriano no es válido');
+    }
+
+    // Si se está actualizando el RUC, validar que no exista
+    if (data.ruc && data.ruc !== supplier.ruc) {
+      const existingSupplier = await this.prisma.proveedor.findUnique({
+        where: { ruc: data.ruc as string },
+      });
+
+      if (existingSupplier) {
+        throw new BadRequestException('El RUC ya existe');
+      }
     }
 
     return this.prisma.proveedor.update({
@@ -1108,13 +1205,12 @@ export class AdminService {
       this.prisma.resultado.count({
         where: { estado: 'EN_PROCESO' },
       }),
-      this.prisma.item.count({
-        where: {
-          stock_actual: {
-            lte: this.prisma.item.fields.stock_minimo,
-          },
-        },
-      }),
+      // Usar consulta SQL cruda para comparar columnas
+      this.prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*)::int as count
+        FROM inventario.item
+        WHERE stock_actual <= stock_minimo
+      `.then(result => Number(result[0].count)),
       this.prisma.logActividad.findMany({
         take: 10,
         orderBy: { fecha_accion: 'desc' },

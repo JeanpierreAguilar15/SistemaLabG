@@ -11,15 +11,41 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  ValidationPipe,
+  UsePipes,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import {
+  CreateUserDto,
+  UpdateUserDto,
+  ResetPasswordDto,
+  CreateRoleDto,
+  UpdateRoleDto,
+  CreateServiceDto,
+  UpdateServiceDto,
+  CreateLocationDto,
+  UpdateLocationDto,
+  CreateExamDto,
+  UpdateExamDto,
+  CreatePriceDto,
+  UpdatePriceDto,
+  CreateCategoryDto,
+  UpdateCategoryDto,
+  CreatePackageDto,
+  UpdatePackageDto,
+  CreateInventoryItemDto,
+  UpdateInventoryItemDto,
+  CreateSupplierDto,
+  UpdateSupplierDto,
+} from './dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('Administrador') // Solo administradores pueden acceder
+@UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
@@ -45,14 +71,14 @@ export class AdminController {
 
   @Post('users')
   @HttpCode(HttpStatus.CREATED)
-  async createUser(@Body() data: any) {
+  async createUser(@Body() data: CreateUserDto) {
     return this.adminService.createUser(data);
   }
 
   @Put('users/:id')
   async updateUser(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdateUserDto,
   ) {
     return this.adminService.updateUser(id, data);
   }
@@ -71,9 +97,9 @@ export class AdminController {
   @Post('users/:id/reset-password')
   async resetUserPassword(
     @Param('id', ParseIntPipe) id: number,
-    @Body('newPassword') newPassword: string,
+    @Body() data: ResetPasswordDto,
   ) {
-    return this.adminService.resetUserPassword(id, newPassword);
+    return this.adminService.resetUserPassword(id, data.newPassword);
   }
 
   // ==================== ROLES ====================
@@ -90,14 +116,14 @@ export class AdminController {
 
   @Post('roles')
   @HttpCode(HttpStatus.CREATED)
-  async createRole(@Body() data: any) {
+  async createRole(@Body() data: CreateRoleDto) {
     return this.adminService.createRole(data);
   }
 
   @Put('roles/:id')
   async updateRole(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdateRoleDto,
   ) {
     return this.adminService.updateRole(id, data);
   }
@@ -122,14 +148,14 @@ export class AdminController {
 
   @Post('services')
   @HttpCode(HttpStatus.CREATED)
-  async createService(@Body() data: any) {
+  async createService(@Body() data: CreateServiceDto) {
     return this.adminService.createService(data);
   }
 
   @Put('services/:id')
   async updateService(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdateServiceDto,
   ) {
     return this.adminService.updateService(id, data);
   }
@@ -154,14 +180,14 @@ export class AdminController {
 
   @Post('locations')
   @HttpCode(HttpStatus.CREATED)
-  async createLocation(@Body() data: any) {
+  async createLocation(@Body() data: CreateLocationDto) {
     return this.adminService.createLocation(data);
   }
 
   @Put('locations/:id')
   async updateLocation(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdateLocationDto,
   ) {
     return this.adminService.updateLocation(id, data);
   }
@@ -194,14 +220,14 @@ export class AdminController {
 
   @Post('exams')
   @HttpCode(HttpStatus.CREATED)
-  async createExam(@Body() data: any) {
+  async createExam(@Body() data: CreateExamDto) {
     return this.adminService.createExam(data);
   }
 
   @Put('exams/:id')
   async updateExam(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdateExamDto,
   ) {
     return this.adminService.updateExam(id, data);
   }
@@ -216,14 +242,14 @@ export class AdminController {
 
   @Post('prices')
   @HttpCode(HttpStatus.CREATED)
-  async createPrice(@Body() data: any) {
+  async createPrice(@Body() data: CreatePriceDto) {
     return this.adminService.createPrice(data);
   }
 
   @Put('prices/:id')
   async updatePrice(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdatePriceDto,
   ) {
     return this.adminService.updatePrice(id, data);
   }
@@ -237,14 +263,14 @@ export class AdminController {
 
   @Post('exam-categories')
   @HttpCode(HttpStatus.CREATED)
-  async createExamCategory(@Body() data: any) {
+  async createExamCategory(@Body() data: CreateCategoryDto) {
     return this.adminService.createExamCategory(data);
   }
 
   @Put('exam-categories/:id')
   async updateExamCategory(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdateCategoryDto,
   ) {
     return this.adminService.updateExamCategory(id, data);
   }
@@ -269,14 +295,14 @@ export class AdminController {
 
   @Post('packages')
   @HttpCode(HttpStatus.CREATED)
-  async createPackage(@Body() data: any) {
+  async createPackage(@Body() data: CreatePackageDto) {
     return this.adminService.createPackage(data);
   }
 
   @Put('packages/:id')
   async updatePackage(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdatePackageDto,
   ) {
     return this.adminService.updatePackage(id, data);
   }
@@ -309,14 +335,14 @@ export class AdminController {
 
   @Post('inventory/items')
   @HttpCode(HttpStatus.CREATED)
-  async createInventoryItem(@Body() data: any) {
+  async createInventoryItem(@Body() data: CreateInventoryItemDto) {
     return this.adminService.createInventoryItem(data);
   }
 
   @Put('inventory/items/:id')
   async updateInventoryItem(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdateInventoryItemDto,
   ) {
     return this.adminService.updateInventoryItem(id, data);
   }
@@ -341,14 +367,14 @@ export class AdminController {
 
   @Post('suppliers')
   @HttpCode(HttpStatus.CREATED)
-  async createSupplier(@Body() data: any) {
+  async createSupplier(@Body() data: CreateSupplierDto) {
     return this.adminService.createSupplier(data);
   }
 
   @Put('suppliers/:id')
   async updateSupplier(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdateSupplierDto,
   ) {
     return this.adminService.updateSupplier(id, data);
   }
