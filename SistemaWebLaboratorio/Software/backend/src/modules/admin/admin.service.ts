@@ -262,6 +262,13 @@ export class AdminService {
       },
     });
 
+    // Emitir evento de actualización de usuario (password reset)
+    this.eventsService.emitUserUpdated(
+      codigo_usuario,
+      0, // TODO: Obtener del contexto de autenticación
+      { action: 'password_reset', cuenta_desbloqueada: true },
+    );
+
     return { message: 'Contraseña restablecida exitosamente' };
   }
 
@@ -296,9 +303,18 @@ export class AdminService {
   }
 
   async createRole(data: Prisma.RolCreateInput) {
-    return this.prisma.rol.create({
+    const role = await this.prisma.rol.create({
       data,
     });
+
+    // Emitir evento de creación de rol
+    this.eventsService.emitRoleCreated(
+      role.codigo_rol,
+      0, // TODO: Obtener del contexto de autenticación
+      { nombre: role.nombre, nivel_acceso: role.nivel_acceso },
+    );
+
+    return role;
   }
 
   async updateRole(codigo_rol: number, data: Prisma.RolUpdateInput) {
@@ -310,10 +326,19 @@ export class AdminService {
       throw new NotFoundException('Rol no encontrado');
     }
 
-    return this.prisma.rol.update({
+    const updatedRole = await this.prisma.rol.update({
       where: { codigo_rol },
       data,
     });
+
+    // Emitir evento de actualización de rol
+    this.eventsService.emitRoleUpdated(
+      codigo_rol,
+      0, // TODO: Obtener del contexto de autenticación
+      { changedFields: Object.keys(data) },
+    );
+
+    return updatedRole;
   }
 
   async deleteRole(codigo_rol: number) {
@@ -334,9 +359,14 @@ export class AdminService {
       throw new BadRequestException('No se puede eliminar un rol con usuarios asignados');
     }
 
-    return this.prisma.rol.delete({
+    const deletedRole = await this.prisma.rol.delete({
       where: { codigo_rol },
     });
+
+    // Emitir evento de eliminación de rol
+    this.eventsService.emitRoleDeleted(codigo_rol, 0);
+
+    return deletedRole;
   }
 
   // ==================== SERVICIOS ====================
@@ -372,9 +402,18 @@ export class AdminService {
   }
 
   async createService(data: Prisma.ServicioCreateInput) {
-    return this.prisma.servicio.create({
+    const service = await this.prisma.servicio.create({
       data,
     });
+
+    // Emitir evento de creación de servicio
+    this.eventsService.emitServiceCreated(
+      service.codigo_servicio,
+      0, // TODO: Obtener del contexto de autenticación
+      { nombre: service.nombre, activo: service.activo },
+    );
+
+    return service;
   }
 
   async updateService(codigo_servicio: number, data: Prisma.ServicioUpdateInput) {
@@ -386,10 +425,19 @@ export class AdminService {
       throw new NotFoundException('Servicio no encontrado');
     }
 
-    return this.prisma.servicio.update({
+    const updatedService = await this.prisma.servicio.update({
       where: { codigo_servicio },
       data,
     });
+
+    // Emitir evento de actualización de servicio
+    this.eventsService.emitServiceUpdated(
+      codigo_servicio,
+      0, // TODO: Obtener del contexto de autenticación
+      { changedFields: Object.keys(data) },
+    );
+
+    return updatedService;
   }
 
   async deleteService(codigo_servicio: number) {
@@ -402,10 +450,15 @@ export class AdminService {
     }
 
     // Desactivar en lugar de eliminar
-    return this.prisma.servicio.update({
+    const result = await this.prisma.servicio.update({
       where: { codigo_servicio },
       data: { activo: false },
     });
+
+    // Emitir evento de eliminación de servicio (soft delete)
+    this.eventsService.emitServiceDeleted(codigo_servicio, 0);
+
+    return result;
   }
 
   // ==================== SEDES ====================
@@ -441,9 +494,18 @@ export class AdminService {
   }
 
   async createLocation(data: Prisma.SedeCreateInput) {
-    return this.prisma.sede.create({
+    const location = await this.prisma.sede.create({
       data,
     });
+
+    // Emitir evento de creación de sede
+    this.eventsService.emitLocationCreated(
+      location.codigo_sede,
+      0, // TODO: Obtener del contexto de autenticación
+      { nombre: location.nombre, direccion: location.direccion, activo: location.activo },
+    );
+
+    return location;
   }
 
   async updateLocation(codigo_sede: number, data: Prisma.SedeUpdateInput) {
@@ -455,10 +517,19 @@ export class AdminService {
       throw new NotFoundException('Sede no encontrada');
     }
 
-    return this.prisma.sede.update({
+    const updatedLocation = await this.prisma.sede.update({
       where: { codigo_sede },
       data,
     });
+
+    // Emitir evento de actualización de sede
+    this.eventsService.emitLocationUpdated(
+      codigo_sede,
+      0, // TODO: Obtener del contexto de autenticación
+      { changedFields: Object.keys(data) },
+    );
+
+    return updatedLocation;
   }
 
   async deleteLocation(codigo_sede: number) {
@@ -471,10 +542,15 @@ export class AdminService {
     }
 
     // Desactivar en lugar de eliminar
-    return this.prisma.sede.update({
+    const result = await this.prisma.sede.update({
       where: { codigo_sede },
       data: { activo: false },
     });
+
+    // Emitir evento de eliminación de sede (soft delete)
+    this.eventsService.emitLocationDeleted(codigo_sede, 0);
+
+    return result;
   }
 
   // ==================== EXAMENES ====================
@@ -714,9 +790,18 @@ export class AdminService {
   }
 
   async createExamCategory(data: Prisma.CategoriaExamenCreateInput) {
-    return this.prisma.categoriaExamen.create({
+    const category = await this.prisma.categoriaExamen.create({
       data,
     });
+
+    // Emitir evento de creación de categoría
+    this.eventsService.emitCategoryCreated(
+      category.codigo_categoria,
+      0, // TODO: Obtener del contexto de autenticación
+      { nombre: category.nombre, descripcion: category.descripcion },
+    );
+
+    return category;
   }
 
   async updateExamCategory(codigo_categoria: number, data: Prisma.CategoriaExamenUpdateInput) {
@@ -728,10 +813,19 @@ export class AdminService {
       throw new NotFoundException('Categoría no encontrada');
     }
 
-    return this.prisma.categoriaExamen.update({
+    const updatedCategory = await this.prisma.categoriaExamen.update({
       where: { codigo_categoria },
       data,
     });
+
+    // Emitir evento de actualización de categoría
+    this.eventsService.emitCategoryUpdated(
+      codigo_categoria,
+      0, // TODO: Obtener del contexto de autenticación
+      { changedFields: Object.keys(data) },
+    );
+
+    return updatedCategory;
   }
 
   async deleteExamCategory(codigo_categoria: number) {
@@ -752,9 +846,14 @@ export class AdminService {
       throw new BadRequestException('No se puede eliminar una categoría con exámenes asignados');
     }
 
-    return this.prisma.categoriaExamen.delete({
+    const deletedCategory = await this.prisma.categoriaExamen.delete({
       where: { codigo_categoria },
     });
+
+    // Emitir evento de eliminación de categoría
+    this.eventsService.emitCategoryDeleted(codigo_categoria, 0);
+
+    return deletedCategory;
   }
 
   // ==================== PAQUETES ====================
@@ -801,7 +900,7 @@ export class AdminService {
   async createPackage(data: any) {
     const { examenes, ...packageData } = data;
 
-    return this.prisma.paquete.create({
+    const package_ = await this.prisma.paquete.create({
       data: {
         ...packageData,
         examenes: examenes
@@ -820,6 +919,15 @@ export class AdminService {
         },
       },
     });
+
+    // Emitir evento de creación de paquete
+    this.eventsService.emitPackageCreated(
+      package_.codigo_paquete,
+      0, // TODO: Obtener del contexto de autenticación
+      { nombre: package_.nombre, precio: package_.precio, examenesCount: examenes?.length || 0 },
+    );
+
+    return package_;
   }
 
   async updatePackage(codigo_paquete: number, data: any) {
@@ -848,7 +956,7 @@ export class AdminService {
       });
     }
 
-    return this.prisma.paquete.update({
+    const updatedPackage = await this.prisma.paquete.update({
       where: { codigo_paquete },
       data: packageData,
       include: {
@@ -859,6 +967,15 @@ export class AdminService {
         },
       },
     });
+
+    // Emitir evento de actualización de paquete
+    this.eventsService.emitPackageUpdated(
+      codigo_paquete,
+      0, // TODO: Obtener del contexto de autenticación
+      { changedFields: Object.keys(data), examenesUpdated: examenes !== undefined },
+    );
+
+    return updatedPackage;
   }
 
   async deletePackage(codigo_paquete: number) {
@@ -871,10 +988,15 @@ export class AdminService {
     }
 
     // Desactivar en lugar de eliminar
-    return this.prisma.paquete.update({
+    const result = await this.prisma.paquete.update({
       where: { codigo_paquete },
       data: { activo: false },
     });
+
+    // Emitir evento de eliminación de paquete (soft delete)
+    this.eventsService.emitPackageDeleted(codigo_paquete, 0);
+
+    return result;
   }
 
   // ==================== INVENTARIO ====================
@@ -1013,12 +1135,21 @@ export class AdminService {
       throw new BadRequestException('El código interno ya existe');
     }
 
-    return this.prisma.item.create({
+    const item = await this.prisma.item.create({
       data,
       include: {
         categoria: true,
       },
     });
+
+    // Emitir evento de creación de item de inventario
+    this.eventsService.emitInventoryItemCreated(
+      item.codigo_item,
+      0, // TODO: Obtener del contexto de autenticación
+      { nombre: item.nombre, codigo_interno: item.codigo_interno, stock_actual: item.stock_actual },
+    );
+
+    return item;
   }
 
   async updateInventoryItem(codigo_item: number, data: any) {
@@ -1030,13 +1161,22 @@ export class AdminService {
       throw new NotFoundException('Item no encontrado');
     }
 
-    return this.prisma.item.update({
+    const updatedItem = await this.prisma.item.update({
       where: { codigo_item },
       data,
       include: {
         categoria: true,
       },
     });
+
+    // Emitir evento de actualización de item de inventario
+    this.eventsService.emitInventoryItemUpdated(
+      codigo_item,
+      0, // TODO: Obtener del contexto de autenticación
+      { changedFields: Object.keys(data) },
+    );
+
+    return updatedItem;
   }
 
   async deleteInventoryItem(codigo_item: number) {
@@ -1049,10 +1189,15 @@ export class AdminService {
     }
 
     // Desactivar en lugar de eliminar
-    return this.prisma.item.update({
+    const result = await this.prisma.item.update({
       where: { codigo_item },
       data: { activo: false },
     });
+
+    // Emitir evento de eliminación de item de inventario (soft delete)
+    this.eventsService.emitInventoryItemDeleted(codigo_item, 0);
+
+    return result;
   }
 
   // ==================== PROVEEDORES ====================
@@ -1101,9 +1246,18 @@ export class AdminService {
       throw new BadRequestException('El RUC ya existe');
     }
 
-    return this.prisma.proveedor.create({
+    const supplier = await this.prisma.proveedor.create({
       data,
     });
+
+    // Emitir evento de creación de proveedor
+    this.eventsService.emitSupplierCreated(
+      supplier.codigo_proveedor,
+      0, // TODO: Obtener del contexto de autenticación
+      { razon_social: supplier.razon_social, ruc: supplier.ruc },
+    );
+
+    return supplier;
   }
 
   async updateSupplier(codigo_proveedor: number, data: Prisma.ProveedorUpdateInput) {
@@ -1131,10 +1285,19 @@ export class AdminService {
       }
     }
 
-    return this.prisma.proveedor.update({
+    const updatedSupplier = await this.prisma.proveedor.update({
       where: { codigo_proveedor },
       data,
     });
+
+    // Emitir evento de actualización de proveedor
+    this.eventsService.emitSupplierUpdated(
+      codigo_proveedor,
+      0, // TODO: Obtener del contexto de autenticación
+      { changedFields: Object.keys(data) },
+    );
+
+    return updatedSupplier;
   }
 
   async deleteSupplier(codigo_proveedor: number) {
@@ -1147,10 +1310,15 @@ export class AdminService {
     }
 
     // Desactivar en lugar de eliminar
-    return this.prisma.proveedor.update({
+    const result = await this.prisma.proveedor.update({
       where: { codigo_proveedor },
       data: { activo: false },
     });
+
+    // Emitir evento de eliminación de proveedor (soft delete)
+    this.eventsService.emitSupplierDeleted(codigo_proveedor, 0);
+
+    return result;
   }
 
   // ==================== AUDITORIA ====================

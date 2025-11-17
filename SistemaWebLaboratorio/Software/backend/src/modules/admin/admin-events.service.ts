@@ -270,4 +270,136 @@ export class AdminEventsService {
       timestamp: new Date(),
     });
   }
+
+  // Roles
+  emitRoleCreated(roleId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.ROLE_CREATED, {
+      entityType: 'role',
+      entityId: roleId,
+      action: 'created',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitRoleUpdated(roleId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.ROLE_UPDATED, {
+      entityType: 'role',
+      entityId: roleId,
+      action: 'updated',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitRoleDeleted(roleId: number, adminId: number) {
+    this.emitEvent(AdminEventType.ROLE_DELETED, {
+      entityType: 'role',
+      entityId: roleId,
+      action: 'deleted',
+      userId: adminId,
+      timestamp: new Date(),
+    });
+  }
+
+  // Categorías
+  emitCategoryCreated(categoryId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.CATEGORY_CREATED, {
+      entityType: 'category',
+      entityId: categoryId,
+      action: 'created',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitCategoryUpdated(categoryId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.CATEGORY_UPDATED, {
+      entityType: 'category',
+      entityId: categoryId,
+      action: 'updated',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitCategoryDeleted(categoryId: number, adminId: number) {
+    this.emitEvent(AdminEventType.CATEGORY_DELETED, {
+      entityType: 'category',
+      entityId: categoryId,
+      action: 'deleted',
+      userId: adminId,
+      timestamp: new Date(),
+    });
+  }
+
+  // Inventario
+  emitInventoryItemCreated(itemId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.INVENTORY_ITEM_CREATED, {
+      entityType: 'inventory_item',
+      entityId: itemId,
+      action: 'created',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitInventoryItemUpdated(itemId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.INVENTORY_ITEM_UPDATED, {
+      entityType: 'inventory_item',
+      entityId: itemId,
+      action: 'updated',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitInventoryItemDeleted(itemId: number, adminId: number) {
+    this.emitEvent(AdminEventType.INVENTORY_ITEM_DELETED, {
+      entityType: 'inventory_item',
+      entityId: itemId,
+      action: 'deleted',
+      userId: adminId,
+      timestamp: new Date(),
+    });
+  }
+
+  // Proveedores
+  emitSupplierCreated(supplierId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.SUPPLIER_CREATED, {
+      entityType: 'supplier',
+      entityId: supplierId,
+      action: 'created',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitSupplierUpdated(supplierId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.SUPPLIER_UPDATED, {
+      entityType: 'supplier',
+      entityId: supplierId,
+      action: 'updated',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitSupplierDeleted(supplierId: number, adminId: number) {
+    this.emitEvent(AdminEventType.SUPPLIER_DELETED, {
+      entityType: 'supplier',
+      entityId: supplierId,
+      action: 'deleted',
+      userId: adminId,
+      timestamp: new Date(),
+    });
+  }
 }
