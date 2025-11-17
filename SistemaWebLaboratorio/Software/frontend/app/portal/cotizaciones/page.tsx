@@ -238,7 +238,7 @@ export default function CotizacionesPage() {
     }
   }
 
-  const handleAgendarCitaDesdeC otizacion = async () => {
+  const handleAgendarCitaDesdeCotizacion = async () => {
     if (!selectedCotizacion || !fechaCita || !horaCita) {
       setMessage({ type: 'error', text: 'Debes completar la fecha y hora de la cita' })
       return
@@ -651,7 +651,7 @@ export default function CotizacionesPage() {
                   >
                     Cancelar
                   </Button>
-                  <Button onClick={handleAgendarCitaDesde Cotizacion} disabled={!fechaCita || !horaCita}>
+                  <Button onClick={handleAgendarCitaDesdeCotizacion} disabled={!fechaCita || !horaCita}>
                     Confirmar Cita
                   </Button>
                 </div>

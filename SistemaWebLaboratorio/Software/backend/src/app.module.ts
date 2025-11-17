@@ -11,6 +11,7 @@ import { ResultadosModule } from './modules/resultados/resultados.module';
 import { InventarioModule } from './modules/inventario/inventario.module';
 import { ComunicacionesModule } from './modules/comunicaciones/comunicaciones.module';
 import { AuditoriaModule } from './modules/auditoria/auditoria.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { AuditoriaModule } from './modules/auditoria/auditoria.module';
     // Feature modules
     AuthModule,
     UsersModule,
+    AdminModule,
     AgendaModule,
     CatalogoModule,
     PagosModule,
