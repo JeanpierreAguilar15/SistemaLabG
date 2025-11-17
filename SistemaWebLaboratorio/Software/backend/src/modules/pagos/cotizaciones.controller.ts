@@ -85,6 +85,15 @@ export class CotizacionesController {
     return this.cotizacionesService.getMyCotizaciones(codigo_paciente);
   }
 
+  @Get('mis-cotizaciones')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener mis cotizaciones (Paciente) - Alias' })
+  @ApiResponse({ status: 200, description: 'Lista de cotizaciones del paciente' })
+  async getMisCotizaciones(@CurrentUser('codigo_usuario') codigo_paciente: number) {
+    return this.cotizacionesService.getMyCotizaciones(codigo_paciente);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
