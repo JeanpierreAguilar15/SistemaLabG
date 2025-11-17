@@ -128,6 +128,13 @@ export class AdminService {
       },
     });
 
+    // Emitir evento de creación de usuario
+    this.eventsService.emitUserCreated(
+      user.codigo_usuario,
+      0, // TODO: Obtener del contexto de autenticación
+      { rol: user.rol.nombre, email: user.email, nombres: user.nombres },
+    );
+
     const { password_hash: _, salt: __, ...sanitizedUser } = user;
     return sanitizedUser;
   }
@@ -175,6 +182,13 @@ export class AdminService {
       },
     });
 
+    // Emitir evento de actualización de usuario
+    this.eventsService.emitUserUpdated(
+      codigo_usuario,
+      0, // TODO: Obtener del contexto de autenticación
+      { changedFields: Object.keys(data) },
+    );
+
     const { password_hash, salt, ...sanitizedUser } = updatedUser;
     return sanitizedUser;
   }
@@ -195,6 +209,9 @@ export class AdminService {
       data: { activo: false },
     });
 
+    // Emitir evento de eliminación (soft delete)
+    this.eventsService.emitUserDeleted(codigo_usuario, 0);
+
     const { password_hash, salt, ...sanitizedUser } = updatedUser;
     return sanitizedUser;
   }
@@ -212,6 +229,19 @@ export class AdminService {
       where: { codigo_usuario },
       data: { activo: !user.activo },
     });
+
+    // Emitir evento de cambio de estado
+    this.eventsService.emitEvent(
+      'admin.user.status_changed' as any,
+      {
+        entityType: 'user',
+        entityId: codigo_usuario,
+        action: 'updated',
+        userId: 0,
+        data: { activo: updatedUser.activo },
+        timestamp: new Date(),
+      },
+    );
 
     const { password_hash, salt, ...sanitizedUser } = updatedUser;
     return sanitizedUser;
@@ -531,12 +561,21 @@ export class AdminService {
       throw new BadRequestException('El código interno ya existe');
     }
 
-    return this.prisma.examen.create({
+    const exam = await this.prisma.examen.create({
       data,
       include: {
         categoria: true,
       },
     });
+
+    // Emitir evento de creación de examen
+    this.eventsService.emitExamCreated(
+      exam.codigo_examen,
+      0,
+      { nombre: exam.nombre, codigo_interno: exam.codigo_interno, activo: exam.activo },
+    );
+
+    return exam;
   }
 
   async updateExam(codigo_examen: number, data: any) {
@@ -559,13 +598,22 @@ export class AdminService {
       }
     }
 
-    return this.prisma.examen.update({
+    const updatedExam = await this.prisma.examen.update({
       where: { codigo_examen },
       data,
       include: {
         categoria: true,
       },
     });
+
+    // Emitir evento de actualización de examen
+    this.eventsService.emitExamUpdated(
+      codigo_examen,
+      0,
+      { changedFields: Object.keys(data) },
+    );
+
+    return updatedExam;
   }
 
   async deleteExam(codigo_examen: number) {
@@ -578,16 +626,21 @@ export class AdminService {
     }
 
     // Desactivar en lugar de eliminar
-    return this.prisma.examen.update({
+    const result = await this.prisma.examen.update({
       where: { codigo_examen },
       data: { activo: false },
     });
+
+    // Emitir evento de eliminación de examen
+    this.eventsService.emitExamDeleted(codigo_examen, 0);
+
+    return result;
   }
 
   // ==================== PRECIOS ====================
 
   async createPrice(data: any) {
-    return this.prisma.precio.create({
+    const price = await this.prisma.precio.create({
       data: {
         precio: data.precio,
         fecha_inicio: data.fecha_inicio,
@@ -601,6 +654,16 @@ export class AdminService {
         examen: true,
       },
     });
+
+    // Emitir evento de creación de precio
+    this.eventsService.emitPriceCreated(
+      price.codigo_precio,
+      data.codigo_examen,
+      0,
+      { precio: price.precio, fecha_inicio: price.fecha_inicio },
+    );
+
+    return price;
   }
 
   async updatePrice(codigo_precio: number, data: any) {
@@ -618,13 +681,23 @@ export class AdminService {
     if (data.fecha_fin !== undefined) updateData.fecha_fin = data.fecha_fin;
     if (data.activo !== undefined) updateData.activo = data.activo;
 
-    return this.prisma.precio.update({
+    const updatedPrice = await this.prisma.precio.update({
       where: { codigo_precio },
       data: updateData,
       include: {
         examen: true,
       },
     });
+
+    // Emitir evento de actualización de precio
+    this.eventsService.emitPriceUpdated(
+      codigo_precio,
+      price.codigo_examen,
+      0,
+      { changedFields: Object.keys(updateData) },
+    );
+
+    return updatedPrice;
   }
 
   // ==================== CATEGORIAS ====================
