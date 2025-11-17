@@ -144,3 +144,7 @@
 .lab-badge-info {
   @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-lab-primary-100 text-lab-primary-800;
 }
+
+.lab-badge-neutral {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-lab-neutral-100 text-lab-neutral-800;
+}
