@@ -18,6 +18,7 @@ import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -71,35 +72,46 @@ export class AdminController {
 
   @Post('users')
   @HttpCode(HttpStatus.CREATED)
-  async createUser(@Body() data: CreateUserDto) {
-    return this.adminService.createUser(data);
+  async createUser(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateUserDto,
+  ) {
+    return this.adminService.createUser(data, adminId);
   }
 
   @Put('users/:id')
   async updateUser(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateUserDto,
   ) {
-    return this.adminService.updateUser(id, data);
+    return this.adminService.updateUser(id, data, adminId);
   }
 
   @Delete('users/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteUser(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.deleteUser(id);
+  async deleteUser(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deleteUser(id, adminId);
   }
 
   @Put('users/:id/toggle-status')
-  async toggleUserStatus(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.toggleUserStatus(id);
+  async toggleUserStatus(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.toggleUserStatus(id, adminId);
   }
 
   @Post('users/:id/reset-password')
   async resetUserPassword(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: ResetPasswordDto,
   ) {
-    return this.adminService.resetUserPassword(id, data.newPassword);
+    return this.adminService.resetUserPassword(id, data.newPassword, adminId);
   }
 
   // ==================== ROLES ====================
@@ -116,22 +128,29 @@ export class AdminController {
 
   @Post('roles')
   @HttpCode(HttpStatus.CREATED)
-  async createRole(@Body() data: CreateRoleDto) {
-    return this.adminService.createRole(data);
+  async createRole(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateRoleDto,
+  ) {
+    return this.adminService.createRole(data, adminId);
   }
 
   @Put('roles/:id')
   async updateRole(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateRoleDto,
   ) {
-    return this.adminService.updateRole(id, data);
+    return this.adminService.updateRole(id, data, adminId);
   }
 
   @Delete('roles/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteRole(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.deleteRole(id);
+  async deleteRole(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deleteRole(id, adminId);
   }
 
   // ==================== SERVICIOS ====================
@@ -148,22 +167,29 @@ export class AdminController {
 
   @Post('services')
   @HttpCode(HttpStatus.CREATED)
-  async createService(@Body() data: CreateServiceDto) {
-    return this.adminService.createService(data);
+  async createService(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateServiceDto,
+  ) {
+    return this.adminService.createService(data, adminId);
   }
 
   @Put('services/:id')
   async updateService(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateServiceDto,
   ) {
-    return this.adminService.updateService(id, data);
+    return this.adminService.updateService(id, data, adminId);
   }
 
   @Delete('services/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteService(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.deleteService(id);
+  async deleteService(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deleteService(id, adminId);
   }
 
   // ==================== SEDES ====================
@@ -180,22 +206,29 @@ export class AdminController {
 
   @Post('locations')
   @HttpCode(HttpStatus.CREATED)
-  async createLocation(@Body() data: CreateLocationDto) {
-    return this.adminService.createLocation(data);
+  async createLocation(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateLocationDto,
+  ) {
+    return this.adminService.createLocation(data, adminId);
   }
 
   @Put('locations/:id')
   async updateLocation(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateLocationDto,
   ) {
-    return this.adminService.updateLocation(id, data);
+    return this.adminService.updateLocation(id, data, adminId);
   }
 
   @Delete('locations/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteLocation(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.deleteLocation(id);
+  async deleteLocation(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deleteLocation(id, adminId);
   }
 
   // ==================== EXAMENES ====================
@@ -220,38 +253,49 @@ export class AdminController {
 
   @Post('exams')
   @HttpCode(HttpStatus.CREATED)
-  async createExam(@Body() data: CreateExamDto) {
-    return this.adminService.createExam(data);
+  async createExam(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateExamDto,
+  ) {
+    return this.adminService.createExam(data, adminId);
   }
 
   @Put('exams/:id')
   async updateExam(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateExamDto,
   ) {
-    return this.adminService.updateExam(id, data);
+    return this.adminService.updateExam(id, data, adminId);
   }
 
   @Delete('exams/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteExam(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.deleteExam(id);
+  async deleteExam(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deleteExam(id, adminId);
   }
 
   // ==================== PRECIOS ====================
 
   @Post('prices')
   @HttpCode(HttpStatus.CREATED)
-  async createPrice(@Body() data: CreatePriceDto) {
-    return this.adminService.createPrice(data);
+  async createPrice(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreatePriceDto,
+  ) {
+    return this.adminService.createPrice(data, adminId);
   }
 
   @Put('prices/:id')
   async updatePrice(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdatePriceDto,
   ) {
-    return this.adminService.updatePrice(id, data);
+    return this.adminService.updatePrice(id, data, adminId);
   }
 
   // ==================== CATEGORIAS ====================
@@ -263,22 +307,29 @@ export class AdminController {
 
   @Post('exam-categories')
   @HttpCode(HttpStatus.CREATED)
-  async createExamCategory(@Body() data: CreateCategoryDto) {
-    return this.adminService.createExamCategory(data);
+  async createExamCategory(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateCategoryDto,
+  ) {
+    return this.adminService.createExamCategory(data, adminId);
   }
 
   @Put('exam-categories/:id')
   async updateExamCategory(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateCategoryDto,
   ) {
-    return this.adminService.updateExamCategory(id, data);
+    return this.adminService.updateExamCategory(id, data, adminId);
   }
 
   @Delete('exam-categories/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteExamCategory(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.deleteExamCategory(id);
+  async deleteExamCategory(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deleteExamCategory(id, adminId);
   }
 
   // ==================== PAQUETES ====================
@@ -295,22 +346,29 @@ export class AdminController {
 
   @Post('packages')
   @HttpCode(HttpStatus.CREATED)
-  async createPackage(@Body() data: CreatePackageDto) {
-    return this.adminService.createPackage(data);
+  async createPackage(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreatePackageDto,
+  ) {
+    return this.adminService.createPackage(data, adminId);
   }
 
   @Put('packages/:id')
   async updatePackage(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdatePackageDto,
   ) {
-    return this.adminService.updatePackage(id, data);
+    return this.adminService.updatePackage(id, data, adminId);
   }
 
   @Delete('packages/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deletePackage(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.deletePackage(id);
+  async deletePackage(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deletePackage(id, adminId);
   }
 
   // ==================== INVENTARIO ====================
@@ -335,22 +393,29 @@ export class AdminController {
 
   @Post('inventory/items')
   @HttpCode(HttpStatus.CREATED)
-  async createInventoryItem(@Body() data: CreateInventoryItemDto) {
-    return this.adminService.createInventoryItem(data);
+  async createInventoryItem(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateInventoryItemDto,
+  ) {
+    return this.adminService.createInventoryItem(data, adminId);
   }
 
   @Put('inventory/items/:id')
   async updateInventoryItem(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateInventoryItemDto,
   ) {
-    return this.adminService.updateInventoryItem(id, data);
+    return this.adminService.updateInventoryItem(id, data, adminId);
   }
 
   @Delete('inventory/items/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteInventoryItem(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.deleteInventoryItem(id);
+  async deleteInventoryItem(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deleteInventoryItem(id, adminId);
   }
 
   // ==================== PROVEEDORES ====================
@@ -367,22 +432,29 @@ export class AdminController {
 
   @Post('suppliers')
   @HttpCode(HttpStatus.CREATED)
-  async createSupplier(@Body() data: CreateSupplierDto) {
-    return this.adminService.createSupplier(data);
+  async createSupplier(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateSupplierDto,
+  ) {
+    return this.adminService.createSupplier(data, adminId);
   }
 
   @Put('suppliers/:id')
   async updateSupplier(
+    @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateSupplierDto,
   ) {
-    return this.adminService.updateSupplier(id, data);
+    return this.adminService.updateSupplier(id, data, adminId);
   }
 
   @Delete('suppliers/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteSupplier(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.deleteSupplier(id);
+  async deleteSupplier(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deleteSupplier(id, adminId);
   }
 
   // ==================== AUDITORIA ====================

@@ -210,7 +210,7 @@ export class AdminService {
     });
 
     // Emitir evento de eliminación (soft delete)
-    this.eventsService.emitUserDeleted(codigo_usuario, 0);
+    this.eventsService.emitUserDeleted(codigo_usuario, adminId);
 
     const { password_hash, salt, ...sanitizedUser } = updatedUser;
     return sanitizedUser;
@@ -237,7 +237,7 @@ export class AdminService {
         entityType: 'user',
         entityId: codigo_usuario,
         action: 'updated',
-        userId: 0,
+        userId: adminId,
         data: { activo: updatedUser.activo },
         timestamp: new Date(),
       },
@@ -302,7 +302,7 @@ export class AdminService {
     return role;
   }
 
-  async createRole(data: Prisma.RolCreateInput) {
+  async createRole(data: Prisma.RolCreateInput, adminId: number) {
     const role = await this.prisma.rol.create({
       data,
     });
@@ -317,7 +317,7 @@ export class AdminService {
     return role;
   }
 
-  async updateRole(codigo_rol: number, data: Prisma.RolUpdateInput) {
+  async updateRole(codigo_rol: number, data: Prisma.RolUpdateInput, adminId: number) {
     const role = await this.prisma.rol.findUnique({
       where: { codigo_rol },
     });
@@ -341,7 +341,7 @@ export class AdminService {
     return updatedRole;
   }
 
-  async deleteRole(codigo_rol: number) {
+  async deleteRole(codigo_rol: number, adminId: number) {
     const role = await this.prisma.rol.findUnique({
       where: { codigo_rol },
       include: {
@@ -364,7 +364,7 @@ export class AdminService {
     });
 
     // Emitir evento de eliminación de rol
-    this.eventsService.emitRoleDeleted(codigo_rol, 0);
+    this.eventsService.emitRoleDeleted(codigo_rol, adminId);
 
     return deletedRole;
   }
@@ -401,7 +401,7 @@ export class AdminService {
     return service;
   }
 
-  async createService(data: Prisma.ServicioCreateInput) {
+  async createService(data: Prisma.ServicioCreateInput, adminId: number) {
     const service = await this.prisma.servicio.create({
       data,
     });
@@ -416,7 +416,7 @@ export class AdminService {
     return service;
   }
 
-  async updateService(codigo_servicio: number, data: Prisma.ServicioUpdateInput) {
+  async updateService(codigo_servicio: number, data: Prisma.ServicioUpdateInput, adminId: number) {
     const service = await this.prisma.servicio.findUnique({
       where: { codigo_servicio },
     });
@@ -440,7 +440,7 @@ export class AdminService {
     return updatedService;
   }
 
-  async deleteService(codigo_servicio: number) {
+  async deleteService(codigo_servicio: number, adminId: number) {
     const service = await this.prisma.servicio.findUnique({
       where: { codigo_servicio },
     });
@@ -456,7 +456,7 @@ export class AdminService {
     });
 
     // Emitir evento de eliminación de servicio (soft delete)
-    this.eventsService.emitServiceDeleted(codigo_servicio, 0);
+    this.eventsService.emitServiceDeleted(codigo_servicio, adminId);
 
     return result;
   }
@@ -493,7 +493,7 @@ export class AdminService {
     return location;
   }
 
-  async createLocation(data: Prisma.SedeCreateInput) {
+  async createLocation(data: Prisma.SedeCreateInput, adminId: number) {
     const location = await this.prisma.sede.create({
       data,
     });
@@ -508,7 +508,7 @@ export class AdminService {
     return location;
   }
 
-  async updateLocation(codigo_sede: number, data: Prisma.SedeUpdateInput) {
+  async updateLocation(codigo_sede: number, data: Prisma.SedeUpdateInput, adminId: number) {
     const location = await this.prisma.sede.findUnique({
       where: { codigo_sede },
     });
@@ -532,7 +532,7 @@ export class AdminService {
     return updatedLocation;
   }
 
-  async deleteLocation(codigo_sede: number) {
+  async deleteLocation(codigo_sede: number, adminId: number) {
     const location = await this.prisma.sede.findUnique({
       where: { codigo_sede },
     });
@@ -548,7 +548,7 @@ export class AdminService {
     });
 
     // Emitir evento de eliminación de sede (soft delete)
-    this.eventsService.emitLocationDeleted(codigo_sede, 0);
+    this.eventsService.emitLocationDeleted(codigo_sede, adminId);
 
     return result;
   }
@@ -627,7 +627,7 @@ export class AdminService {
     return exam;
   }
 
-  async createExam(data: any) {
+  async createExam(data: any, adminId: number) {
     // Verificar que el codigo_interno no exista
     const existingExam = await this.prisma.examen.findUnique({
       where: { codigo_interno: data.codigo_interno },
@@ -654,7 +654,7 @@ export class AdminService {
     return exam;
   }
 
-  async updateExam(codigo_examen: number, data: any) {
+  async updateExam(codigo_examen: number, data: any, adminId: number) {
     const exam = await this.prisma.examen.findUnique({
       where: { codigo_examen },
     });
@@ -692,7 +692,7 @@ export class AdminService {
     return updatedExam;
   }
 
-  async deleteExam(codigo_examen: number) {
+  async deleteExam(codigo_examen: number, adminId: number) {
     const exam = await this.prisma.examen.findUnique({
       where: { codigo_examen },
     });
@@ -708,14 +708,14 @@ export class AdminService {
     });
 
     // Emitir evento de eliminación de examen
-    this.eventsService.emitExamDeleted(codigo_examen, 0);
+    this.eventsService.emitExamDeleted(codigo_examen, adminId);
 
     return result;
   }
 
   // ==================== PRECIOS ====================
 
-  async createPrice(data: any) {
+  async createPrice(data: any, adminId: number) {
     const price = await this.prisma.precio.create({
       data: {
         precio: data.precio,
@@ -742,7 +742,7 @@ export class AdminService {
     return price;
   }
 
-  async updatePrice(codigo_precio: number, data: any) {
+  async updatePrice(codigo_precio: number, data: any, adminId: number) {
     const price = await this.prisma.precio.findUnique({
       where: { codigo_precio },
     });
@@ -789,7 +789,7 @@ export class AdminService {
     });
   }
 
-  async createExamCategory(data: Prisma.CategoriaExamenCreateInput) {
+  async createExamCategory(data: Prisma.CategoriaExamenCreateInput, adminId: number) {
     const category = await this.prisma.categoriaExamen.create({
       data,
     });
@@ -804,7 +804,7 @@ export class AdminService {
     return category;
   }
 
-  async updateExamCategory(codigo_categoria: number, data: Prisma.CategoriaExamenUpdateInput) {
+  async updateExamCategory(codigo_categoria: number, data: Prisma.CategoriaExamenUpdateInput, adminId: number) {
     const category = await this.prisma.categoriaExamen.findUnique({
       where: { codigo_categoria },
     });
@@ -828,7 +828,7 @@ export class AdminService {
     return updatedCategory;
   }
 
-  async deleteExamCategory(codigo_categoria: number) {
+  async deleteExamCategory(codigo_categoria: number, adminId: number) {
     const category = await this.prisma.categoriaExamen.findUnique({
       where: { codigo_categoria },
       include: {
@@ -851,7 +851,7 @@ export class AdminService {
     });
 
     // Emitir evento de eliminación de categoría
-    this.eventsService.emitCategoryDeleted(codigo_categoria, 0);
+    this.eventsService.emitCategoryDeleted(codigo_categoria, adminId);
 
     return deletedCategory;
   }
@@ -897,7 +897,7 @@ export class AdminService {
     return package_;
   }
 
-  async createPackage(data: any) {
+  async createPackage(data: any, adminId: number) {
     const { examenes, ...packageData } = data;
 
     const package_ = await this.prisma.paquete.create({
@@ -930,7 +930,7 @@ export class AdminService {
     return package_;
   }
 
-  async updatePackage(codigo_paquete: number, data: any) {
+  async updatePackage(codigo_paquete: number, data: any, adminId: number) {
     const package_ = await this.prisma.paquete.findUnique({
       where: { codigo_paquete },
     });
@@ -978,7 +978,7 @@ export class AdminService {
     return updatedPackage;
   }
 
-  async deletePackage(codigo_paquete: number) {
+  async deletePackage(codigo_paquete: number, adminId: number) {
     const package_ = await this.prisma.paquete.findUnique({
       where: { codigo_paquete },
     });
@@ -994,7 +994,7 @@ export class AdminService {
     });
 
     // Emitir evento de eliminación de paquete (soft delete)
-    this.eventsService.emitPackageDeleted(codigo_paquete, 0);
+    this.eventsService.emitPackageDeleted(codigo_paquete, adminId);
 
     return result;
   }
@@ -1125,7 +1125,7 @@ export class AdminService {
     return item;
   }
 
-  async createInventoryItem(data: any) {
+  async createInventoryItem(data: any, adminId: number) {
     // Verificar que el codigo_interno no exista
     const existingItem = await this.prisma.item.findUnique({
       where: { codigo_interno: data.codigo_interno },
@@ -1152,7 +1152,7 @@ export class AdminService {
     return item;
   }
 
-  async updateInventoryItem(codigo_item: number, data: any) {
+  async updateInventoryItem(codigo_item: number, data: any, adminId: number) {
     const item = await this.prisma.item.findUnique({
       where: { codigo_item },
     });
@@ -1179,7 +1179,7 @@ export class AdminService {
     return updatedItem;
   }
 
-  async deleteInventoryItem(codigo_item: number) {
+  async deleteInventoryItem(codigo_item: number, adminId: number) {
     const item = await this.prisma.item.findUnique({
       where: { codigo_item },
     });
@@ -1195,7 +1195,7 @@ export class AdminService {
     });
 
     // Emitir evento de eliminación de item de inventario (soft delete)
-    this.eventsService.emitInventoryItemDeleted(codigo_item, 0);
+    this.eventsService.emitInventoryItemDeleted(codigo_item, adminId);
 
     return result;
   }
@@ -1231,7 +1231,7 @@ export class AdminService {
     return supplier;
   }
 
-  async createSupplier(data: Prisma.ProveedorCreateInput) {
+  async createSupplier(data: Prisma.ProveedorCreateInput, adminId: number) {
     // Validar formato de RUC ecuatoriano
     if (!ValidateRucEcuador(data.ruc)) {
       throw new BadRequestException('El RUC ecuatoriano no es válido');
@@ -1260,7 +1260,7 @@ export class AdminService {
     return supplier;
   }
 
-  async updateSupplier(codigo_proveedor: number, data: Prisma.ProveedorUpdateInput) {
+  async updateSupplier(codigo_proveedor: number, data: Prisma.ProveedorUpdateInput, adminId: number) {
     const supplier = await this.prisma.proveedor.findUnique({
       where: { codigo_proveedor },
     });
@@ -1300,7 +1300,7 @@ export class AdminService {
     return updatedSupplier;
   }
 
-  async deleteSupplier(codigo_proveedor: number) {
+  async deleteSupplier(codigo_proveedor: number, adminId: number) {
     const supplier = await this.prisma.proveedor.findUnique({
       where: { codigo_proveedor },
     });
@@ -1316,7 +1316,7 @@ export class AdminService {
     });
 
     // Emitir evento de eliminación de proveedor (soft delete)
-    this.eventsService.emitSupplierDeleted(codigo_proveedor, 0);
+    this.eventsService.emitSupplierDeleted(codigo_proveedor, adminId);
 
     return result;
   }
