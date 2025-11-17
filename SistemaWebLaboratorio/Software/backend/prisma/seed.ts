@@ -100,6 +100,139 @@ async function main() {
     console.log(`ℹ️  Admin user already exists: ${adminEmail}`);
   }
 
+  // 2.1. Create test users (different roles)
+  console.log('Creating test users...');
+  const pacienteRole = roles.find((r) => r.nombre === 'PACIENTE');
+  const recepcionRole = roles.find((r) => r.nombre === 'RECEPCION');
+  const personalLabRole = roles.find((r) => r.nombre === 'PERSONAL_LAB');
+
+  // Helper function to create users
+  async function createUserIfNotExists(userData: any) {
+    const existing = await prisma.usuario.findFirst({
+      where: {
+        OR: [{ cedula: userData.cedula }, { email: userData.email }],
+      },
+    });
+
+    if (!existing) {
+      const salt = await bcrypt.genSalt(10);
+      const password_hash = await bcrypt.hash(userData.password, salt);
+      const { password, ...userDataWithoutPassword } = userData;
+
+      return await prisma.usuario.create({
+        data: {
+          ...userDataWithoutPassword,
+          password_hash,
+          salt,
+        },
+      });
+    }
+    return existing;
+  }
+
+  // Create pacientes de prueba
+  const pacientes = [
+    {
+      codigo_rol: pacienteRole.codigo_rol,
+      cedula: '1721456789',
+      nombres: 'María José',
+      apellidos: 'González Pérez',
+      email: 'maria.gonzalez@example.com',
+      telefono: '0987654321',
+      fecha_nacimiento: new Date('1990-05-15'),
+      genero: 'Femenino',
+      direccion: 'Av. 6 de Diciembre N34-123, Quito',
+      password: 'Paciente123!',
+      email_verificado: true,
+      activo: true,
+    },
+    {
+      codigo_rol: pacienteRole.codigo_rol,
+      cedula: '1712345678',
+      nombres: 'Juan Carlos',
+      apellidos: 'Morales Sánchez',
+      email: 'juan.morales@example.com',
+      telefono: '0998765432',
+      fecha_nacimiento: new Date('1985-08-22'),
+      genero: 'Masculino',
+      direccion: 'Av. América N45-678, Quito',
+      password: 'Paciente123!',
+      email_verificado: true,
+      activo: true,
+    },
+    {
+      codigo_rol: pacienteRole.codigo_rol,
+      cedula: '1723456789',
+      nombres: 'Ana Patricia',
+      apellidos: 'Rodríguez López',
+      email: 'ana.rodriguez@example.com',
+      telefono: '0976543210',
+      fecha_nacimiento: new Date('1995-12-10'),
+      genero: 'Femenino',
+      direccion: 'Calle Los Pinos 123, Quito',
+      password: 'Paciente123!',
+      email_verificado: true,
+      activo: true,
+    },
+  ];
+
+  for (const pacienteData of pacientes) {
+    const paciente = await createUserIfNotExists(pacienteData);
+
+    // Create perfil médico for each paciente
+    const existingPerfil = await prisma.perfilMedico.findUnique({
+      where: { codigo_usuario: paciente.codigo_usuario },
+    });
+
+    if (!existingPerfil) {
+      await prisma.perfilMedico.create({
+        data: {
+          codigo_usuario: paciente.codigo_usuario,
+          tipo_sangre: paciente.nombres === 'María José' ? 'O+' : paciente.nombres === 'Juan Carlos' ? 'A+' : 'B+',
+          alergias: paciente.nombres === 'María José' ? 'Penicilina, Polen' : null,
+          condiciones_cronicas: paciente.nombres === 'Juan Carlos' ? 'Hipertensión' : null,
+          medicamentos_actuales: paciente.nombres === 'Juan Carlos' ? 'Losartán 50mg' : null,
+        },
+      });
+    }
+
+    console.log(`✅ Created paciente: ${paciente.email}`);
+  }
+
+  // Create recepcionista
+  const recepcionista = await createUserIfNotExists({
+    codigo_rol: recepcionRole.codigo_rol,
+    cedula: '1734567890',
+    nombres: 'Laura',
+    apellidos: 'Martínez Vega',
+    email: 'recepcion@lab.com',
+    telefono: '0987123456',
+    fecha_nacimiento: new Date('1992-03-18'),
+    genero: 'Femenino',
+    direccion: 'Av. Shyris N35-456, Quito',
+    password: 'Recepcion123!',
+    email_verificado: true,
+    activo: true,
+  });
+  console.log(`✅ Created recepcionista: ${recepcionista.email}`);
+
+  // Create personal de laboratorio
+  const personalLab = await createUserIfNotExists({
+    codigo_rol: personalLabRole.codigo_rol,
+    cedula: '1745678901',
+    nombres: 'Carlos Alberto',
+    apellidos: 'Ramírez Torres',
+    email: 'laboratorio@lab.com',
+    telefono: '0976543219',
+    fecha_nacimiento: new Date('1988-07-25'),
+    genero: 'Masculino',
+    direccion: 'Av. República N23-789, Quito',
+    password: 'Personal123!',
+    email_verificado: true,
+    activo: true,
+  });
+  console.log(`✅ Created personal de laboratorio: ${personalLab.email}`);
+
   // 3. Create sede (location)
   console.log('Creating sede...');
   const sede = await prisma.sede.upsert({
