@@ -8,26 +8,36 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatDate } from '@/lib/utils'
 
+interface CotizacionDetalle {
+  codigo_detalle: number
+  codigo_examen: number
+  cantidad: number
+  precio_unitario: number
+  total_linea: number
+  examen: {
+    codigo_examen: number
+    nombre: string
+    precio: number
+  }
+}
+
 interface Cotizacion {
   codigo_cotizacion: number
   numero_cotizacion: string
   codigo_paciente: number
   fecha_cotizacion: string
+  fecha_expiracion: string
   subtotal: number
   descuento: number
   total: number
   estado: string
+  observaciones?: string
   paciente: {
     nombres: string
     apellidos: string
     email: string
   }
-  items: Array<{
-    examen: string
-    cantidad: number
-    precio_unitario: number
-    total_linea: number
-  }>
+  detalles: CotizacionDetalle[]
 }
 
 export default function CotizacionesAdminPage() {
@@ -37,12 +47,23 @@ export default function CotizacionesAdminPage() {
   const [filtro, setFiltro] = useState('TODAS')
   const [searchTerm, setSearchTerm] = useState('')
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedCotizacion, setSelectedCotizacion] = useState<Cotizacion | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     loadCotizaciones()
   }, [filtro])
+
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage(null)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
 
   const loadCotizaciones = async () => {
     try {
@@ -90,6 +111,74 @@ export default function CotizacionesAdminPage() {
   const handleViewDetails = (cotizacion: Cotizacion) => {
     setSelectedCotizacion(cotizacion)
     setShowDetailModal(true)
+  }
+
+  const handleEdit = (cotizacion: Cotizacion) => {
+    setSelectedCotizacion(cotizacion)
+    setShowEditModal(true)
+  }
+
+  const handleDelete = (cotizacion: Cotizacion) => {
+    setSelectedCotizacion(cotizacion)
+    setShowDeleteModal(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!selectedCotizacion) return
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/admin/${selectedCotizacion.codigo_cotizacion}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cotización eliminada exitosamente' })
+        loadCotizaciones()
+        setShowDeleteModal(false)
+        setSelectedCotizacion(null)
+      } else {
+        setMessage({ type: 'error', text: 'Error al eliminar cotización' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al eliminar cotización' })
+    }
+  }
+
+  const handleSaveEdit = async (estado: string, descuento: number, observaciones: string) => {
+    if (!selectedCotizacion) return
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/admin/${selectedCotizacion.codigo_cotizacion}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            estado,
+            descuento,
+            observaciones,
+          }),
+        }
+      )
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cotización actualizada exitosamente' })
+        loadCotizaciones()
+        setShowEditModal(false)
+        setSelectedCotizacion(null)
+      } else {
+        setMessage({ type: 'error', text: 'Error al actualizar cotización' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al actualizar cotización' })
+    }
   }
 
   const filteredCotizaciones = cotizaciones.filter((cotizacion) => {
@@ -140,13 +229,18 @@ export default function CotizacionesAdminPage() {
       {/* Message */}
       {message && (
         <div
-          className={`p-4 rounded-lg ${
+          className={`p-4 rounded-lg flex justify-between items-center ${
             message.type === 'success'
               ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
               : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
           }`}
         >
-          {message.text}
+          <span>{message.text}</span>
+          <button onClick={() => setMessage(null)} className="ml-4 hover:opacity-70">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -218,7 +312,7 @@ export default function CotizacionesAdminPage() {
                     <td className="p-4 text-sm text-lab-neutral-700">
                       {formatDate(new Date(cotizacion.fecha_cotizacion))}
                     </td>
-                    <td className="p-4 text-sm text-lab-neutral-700">{cotizacion.items.length} examen(es)</td>
+                    <td className="p-4 text-sm text-lab-neutral-700">{cotizacion.detalles?.length || 0} examen(es)</td>
                     <td className="p-4 font-semibold text-lab-neutral-900">${Number(cotizacion.total).toFixed(2)}</td>
                     <td className="p-4">
                       <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(cotizacion.estado)}`}>
@@ -228,6 +322,17 @@ export default function CotizacionesAdminPage() {
                     <td className="p-4 text-right space-x-2">
                       <Button size="sm" variant="outline" onClick={() => handleViewDetails(cotizacion)}>
                         Ver
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleEdit(cotizacion)}>
+                        Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-lab-danger-600 hover:bg-lab-danger-50"
+                        onClick={() => handleDelete(cotizacion)}
+                      >
+                        Eliminar
                       </Button>
                     </td>
                   </tr>
@@ -272,15 +377,15 @@ export default function CotizacionesAdminPage() {
               <div>
                 <h3 className="font-semibold text-lab-neutral-900 mb-3">Exámenes Solicitados</h3>
                 <div className="space-y-2">
-                  {selectedCotizacion.items.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center p-3 bg-lab-neutral-50 rounded-lg">
+                  {selectedCotizacion.detalles?.map((detalle, index) => (
+                    <div key={detalle.codigo_detalle} className="flex justify-between items-center p-3 bg-lab-neutral-50 rounded-lg">
                       <div>
-                        <p className="font-medium text-lab-neutral-900">{item.examen}</p>
+                        <p className="font-medium text-lab-neutral-900">{detalle.examen?.nombre || 'Examen'}</p>
                         <p className="text-sm text-lab-neutral-600">
-                          {item.cantidad} x ${Number(item.precio_unitario).toFixed(2)}
+                          {detalle.cantidad} x ${Number(detalle.precio_unitario).toFixed(2)}
                         </p>
                       </div>
-                      <p className="font-semibold text-lab-neutral-900">${Number(item.total_linea).toFixed(2)}</p>
+                      <p className="font-semibold text-lab-neutral-900">${Number(detalle.total_linea).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -333,6 +438,166 @@ export default function CotizacionesAdminPage() {
           </div>
         </div>
       )}
+
+      {/* Edit Modal */}
+      {showEditModal && selectedCotizacion && (
+        <EditCotizacionModal
+          cotizacion={selectedCotizacion}
+          onClose={() => {
+            setShowEditModal(false)
+            setSelectedCotizacion(null)
+          }}
+          onSave={handleSaveEdit}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && selectedCotizacion && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-lab-neutral-900 mb-4">Confirmar Eliminación</h2>
+            <p className="text-lab-neutral-600 mb-6">
+              ¿Estás seguro de que deseas eliminar la cotización{' '}
+              <span className="font-semibold">{selectedCotizacion.numero_cotizacion}</span>? Esta acción no se puede
+              deshacer.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteModal(false)
+                  setSelectedCotizacion(null)
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button className="bg-lab-danger-600 hover:bg-lab-danger-700" onClick={confirmDelete}>
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Edit Cotizacion Modal Component
+function EditCotizacionModal({
+  cotizacion,
+  onClose,
+  onSave,
+}: {
+  cotizacion: Cotizacion
+  onClose: () => void
+  onSave: (estado: string, descuento: number, observaciones: string) => void
+}) {
+  const [estado, setEstado] = useState(cotizacion.estado)
+  const [descuento, setDescuento] = useState(Number(cotizacion.descuento))
+  const [observaciones, setObservaciones] = useState(cotizacion.observaciones || '')
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(estado, descuento, observaciones)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-2xl w-full">
+        <div className="p-6 border-b border-lab-neutral-200">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold text-lab-neutral-900">
+              Editar Cotización {cotizacion.numero_cotizacion}
+            </h2>
+            <button onClick={onClose} className="text-lab-neutral-400 hover:text-lab-neutral-600">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Patient Info (readonly) */}
+          <div className="bg-lab-neutral-50 p-4 rounded-lg">
+            <p className="text-sm text-lab-neutral-600">Paciente</p>
+            <p className="font-semibold text-lab-neutral-900">
+              {cotizacion.paciente.nombres} {cotizacion.paciente.apellidos}
+            </p>
+            <p className="text-sm text-lab-neutral-600">{cotizacion.paciente.email}</p>
+          </div>
+
+          {/* Estado */}
+          <div className="space-y-2">
+            <Label htmlFor="estado">Estado</Label>
+            <select
+              id="estado"
+              value={estado}
+              onChange={(e) => setEstado(e.target.value)}
+              className="w-full h-10 px-3 rounded-md border border-lab-neutral-300"
+              required
+            >
+              <option value="PENDIENTE">Pendiente</option>
+              <option value="APROBADA">Aprobada</option>
+              <option value="RECHAZADA">Rechazada</option>
+              <option value="CONVERTIDA_A_PAGO">Convertida a Pago</option>
+              <option value="EXPIRADA">Expirada</option>
+            </select>
+          </div>
+
+          {/* Descuento */}
+          <div className="space-y-2">
+            <Label htmlFor="descuento">Descuento ($)</Label>
+            <Input
+              id="descuento"
+              type="number"
+              step="0.01"
+              min="0"
+              max={Number(cotizacion.subtotal)}
+              value={descuento}
+              onChange={(e) => setDescuento(parseFloat(e.target.value) || 0)}
+            />
+          </div>
+
+          {/* Observaciones */}
+          <div className="space-y-2">
+            <Label htmlFor="observaciones">Observaciones</Label>
+            <textarea
+              id="observaciones"
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              className="w-full min-h-[100px] px-3 py-2 rounded-md border border-lab-neutral-300"
+              placeholder="Notas o comentarios sobre la cotización..."
+            />
+          </div>
+
+          {/* Summary */}
+          <div className="bg-lab-neutral-50 p-4 rounded-lg space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-lab-neutral-600">Subtotal:</span>
+              <span className="font-semibold">${Number(cotizacion.subtotal).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-lab-neutral-600">Descuento:</span>
+              <span className="font-semibold text-lab-success-600">-${descuento.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-lg font-bold pt-2 border-t border-lab-neutral-200">
+              <span>Total:</span>
+              <span className="text-lab-primary-600">
+                ${(Number(cotizacion.subtotal) - descuento).toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end space-x-3 pt-4 border-t border-lab-neutral-200">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit">Guardar Cambios</Button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
