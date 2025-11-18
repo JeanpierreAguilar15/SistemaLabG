@@ -72,7 +72,7 @@ export class PagosController {
 
   @Get('admin/all')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener todos los pagos (Admin)' })
   @ApiResponse({ status: 200, description: 'Lista de todos los pagos' })
@@ -99,7 +99,7 @@ export class PagosController {
 
   @Put('admin/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar estado de pago (Admin)' })
   @ApiResponse({ status: 200, description: 'Pago actualizado' })
@@ -113,7 +113,7 @@ export class PagosController {
 
   @Get('admin/estadisticas')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener estadísticas de pagos (Admin)' })
   @ApiResponse({ status: 200, description: 'Estadísticas de pagos' })

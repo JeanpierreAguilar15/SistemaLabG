@@ -135,7 +135,7 @@ export class ResultadosController {
 
   @Get('admin/estadisticas')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener estadísticas de resultados (Admin)' })
   @ApiResponse({ status: 200, description: 'Estadísticas' })

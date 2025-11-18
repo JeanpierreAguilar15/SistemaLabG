@@ -32,7 +32,7 @@ export class AgendaController {
 
   @Post('slots')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear slot de disponibilidad (Admin)' })
   @ApiResponse({ status: 201, description: 'Slot creado exitosamente' })
@@ -54,7 +54,7 @@ export class AgendaController {
 
   @Get('slots/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener slot por ID (Admin)' })
   @ApiResponse({ status: 200, description: 'Slot encontrado' })
@@ -65,7 +65,7 @@ export class AgendaController {
 
   @Put('slots/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar slot (Admin)' })
   @ApiResponse({ status: 200, description: 'Slot actualizado' })
@@ -81,7 +81,7 @@ export class AgendaController {
 
   @Delete('slots/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Eliminar slot (Admin)' })
   @ApiResponse({ status: 200, description: 'Slot eliminado o desactivado' })
@@ -175,7 +175,7 @@ export class AgendaController {
 
   @Get('admin/citas')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener todas las citas (Admin)' })
   @ApiResponse({ status: 200, description: 'Lista de todas las citas' })
@@ -201,7 +201,7 @@ export class AgendaController {
 
   @Put('admin/citas/:id/confirm')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Confirmar cita (Admin)' })
   @ApiResponse({ status: 200, description: 'Cita confirmada' })
@@ -215,7 +215,7 @@ export class AgendaController {
 
   @Put('admin/citas/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar cita (Admin)' })
   @ApiResponse({ status: 200, description: 'Cita actualizada' })
@@ -230,7 +230,7 @@ export class AgendaController {
 
   @Get('admin/estadisticas')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener estadísticas de citas (Admin)' })
   @ApiResponse({ status: 200, description: 'Estadísticas de citas' })

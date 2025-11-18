@@ -45,7 +45,7 @@ import {
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('Administrador') // Solo administradores pueden acceder
+@Roles('ADMIN') // Solo administradores pueden acceder
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}

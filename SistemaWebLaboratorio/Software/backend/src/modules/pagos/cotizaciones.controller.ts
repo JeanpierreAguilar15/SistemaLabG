@@ -145,7 +145,7 @@ export class CotizacionesController {
 
   @Get('admin/all')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener todas las cotizaciones (Admin)' })
   @ApiResponse({ status: 200, description: 'Lista de todas las cotizaciones' })
@@ -167,7 +167,7 @@ export class CotizacionesController {
 
   @Put('admin/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar estado de cotización (Admin)' })
   @ApiResponse({ status: 200, description: 'Cotización actualizada' })
@@ -185,7 +185,7 @@ export class CotizacionesController {
 
   @Get('admin/estadisticas')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador')
+  @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener estadísticas de cotizaciones (Admin)' })
   @ApiResponse({ status: 200, description: 'Estadísticas de cotizaciones' })
