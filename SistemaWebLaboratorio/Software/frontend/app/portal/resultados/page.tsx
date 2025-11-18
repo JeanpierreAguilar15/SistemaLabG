@@ -55,7 +55,7 @@ export default function ResultadosPage() {
   const loadResultados = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/mis-resultados`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/my`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },

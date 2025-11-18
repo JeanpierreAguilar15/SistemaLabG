@@ -44,6 +44,21 @@ const navigation = [
     icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
   },
   {
+    name: 'Citas',
+    href: '/admin/citas',
+    icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+  },
+  {
+    name: 'Cotizaciones',
+    href: '/admin/cotizaciones',
+    icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z',
+  },
+  {
+    name: 'Resultados',
+    href: '/admin/resultados',
+    icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+  },
+  {
     name: 'Inventario',
     href: '/admin/inventario',
     icon: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4',
@@ -82,7 +97,7 @@ export default function AdminLayout({
     }
 
     // Verificar que el usuario sea administrador
-    if (user?.rol?.nombre !== 'Administrador') {
+    if (user?.rol !== 'ADMIN') {
       router.push('/portal')
       return
     }
@@ -93,7 +108,7 @@ export default function AdminLayout({
     router.push('/auth/login')
   }
 
-  if (!isAuthenticated || !user || user?.rol?.nombre !== 'Administrador') {
+  if (!isAuthenticated || !user || user?.rol !== 'ADMIN') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>

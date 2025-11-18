@@ -120,7 +120,7 @@ export default function CotizacionesPage() {
   const totales = useMemo(() => {
     let subtotal = 0
     examenesSeleccionados.forEach((examen) => {
-      subtotal += examen.subtotal
+      subtotal += Number(examen.subtotal) || 0
     })
 
     const descuento = 0 // Podría calcularse con lógica de descuentos
@@ -146,7 +146,7 @@ export default function CotizacionesPage() {
       newMap.set(examen.codigo_examen, {
         ...examen,
         cantidad: 1,
-        subtotal: examen.precio_actual,
+        subtotal: Number(examen.precio_actual) || 0,
       })
     }
 
@@ -163,7 +163,7 @@ export default function CotizacionesPage() {
       newMap.set(codigo_examen, {
         ...examen,
         cantidad,
-        subtotal: examen.precio_actual * cantidad,
+        subtotal: (Number(examen.precio_actual) || 0) * cantidad,
       })
       setExamenesSeleccionados(newMap)
     }
@@ -176,11 +176,9 @@ export default function CotizacionesPage() {
     }
 
     try {
-      const items = Array.from(examenesSeleccionados.values()).map((examen) => ({
+      const examenes = Array.from(examenesSeleccionados.values()).map((examen) => ({
         codigo_examen: examen.codigo_examen,
         cantidad: examen.cantidad,
-        precio_unitario: examen.precio_actual,
-        descripcion: examen.nombre,
       }))
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cotizaciones`, {
@@ -190,10 +188,8 @@ export default function CotizacionesPage() {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          items,
-          subtotal: totales.subtotal,
-          descuento: totales.descuento,
-          total: totales.total,
+          examenes,
+          descuento: 0, // El paciente no aplica descuentos, solo admin
         }),
       })
 
@@ -411,7 +407,9 @@ export default function CotizacionesPage() {
                             )}
                           </div>
                           <div className="text-right">
-                            <p className="font-bold text-lab-neutral-900">${examen.precio_actual.toFixed(2)}</p>
+                            <p className="font-bold text-lab-neutral-900">
+                              ${(Number(examen.precio_actual) || 0).toFixed(2)}
+                            </p>
                             {isSelected && (
                               <div className="flex items-center space-x-1 mt-2">
                                 <button
@@ -465,10 +463,10 @@ export default function CotizacionesPage() {
                         <div className="flex-1">
                           <p className="font-medium text-lab-neutral-900">{examen.nombre}</p>
                           <p className="text-lab-neutral-600">
-                            {examen.cantidad} x ${examen.precio_actual.toFixed(2)}
+                            {examen.cantidad} x ${(Number(examen.precio_actual) || 0).toFixed(2)}
                           </p>
                         </div>
-                        <p className="font-semibold">${examen.subtotal.toFixed(2)}</p>
+                        <p className="font-semibold">${(Number(examen.subtotal) || 0).toFixed(2)}</p>
                       </div>
                     ))}
                   </div>
@@ -552,7 +550,7 @@ export default function CotizacionesPage() {
 
                     <div className="flex items-center justify-between">
                       <span className="text-lg font-bold text-lab-primary-600">
-                        Total: ${cotizacion.total.toFixed(2)}
+                        Total: ${(Number(cotizacion.total) || 0).toFixed(2)}
                       </span>
                       <div className="flex space-x-2">
                         <Button size="sm" variant="outline" onClick={() => handleDescargarPDF(cotizacion)}>
@@ -604,7 +602,7 @@ export default function CotizacionesPage() {
                   <h4 className="font-semibold text-lab-neutral-900">{selectedCotizacion.numero_cotizacion}</h4>
                   <p className="text-sm text-lab-neutral-600 mt-1">
                     {selectedCotizacion.items.length} examen{selectedCotizacion.items.length !== 1 && 'es'} •
-                    Total: ${selectedCotizacion.total.toFixed(2)}
+                    Total: ${(Number(selectedCotizacion.total) || 0).toFixed(2)}
                   </p>
                 </div>
 

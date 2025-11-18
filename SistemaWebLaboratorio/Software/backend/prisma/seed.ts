@@ -3,6 +3,14 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+// Helper function to create time from HH:MM:SS string
+function createTime(timeString: string): Date {
+  const [hours, minutes, seconds] = timeString.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes, seconds || 0, 0);
+  return date;
+}
+
 async function main() {
   console.log('🌱 Seeding database...');
 
@@ -176,8 +184,15 @@ async function main() {
     },
   ];
 
-  for (const pacienteData of pacientes) {
+  let testPaciente; // Store reference to first paciente for test data
+  for (let i = 0; i < pacientes.length; i++) {
+    const pacienteData = pacientes[i];
     const paciente = await createUserIfNotExists(pacienteData);
+
+    // Store first paciente for test data
+    if (i === 0) {
+      testPaciente = paciente;
+    }
 
     // Create perfil médico for each paciente
     const existingPerfil = await prisma.perfilMedico.findUnique({
@@ -232,6 +247,24 @@ async function main() {
     activo: true,
   });
   console.log(`✅ Created personal de laboratorio: ${personalLab.email}`);
+
+  // Create médico de prueba
+  const medicoRole = roles.find((r) => r.nombre === 'MEDICO');
+  const medico = await createUserIfNotExists({
+    codigo_rol: medicoRole.codigo_rol,
+    cedula: '1756789012',
+    nombres: 'Dr. Juan Carlos',
+    apellidos: 'Méndez Silva',
+    email: 'medico@lab.com',
+    telefono: '0965432108',
+    fecha_nacimiento: new Date('1980-11-10'),
+    genero: 'Masculino',
+    direccion: 'Av. 10 de Agosto N45-678, Quito',
+    password: 'Medico123!',
+    email_verificado: true,
+    activo: true,
+  });
+  console.log(`✅ Created médico: ${medico.email}`);
 
   // 3. Create sede (location)
   console.log('Creating sede...');
@@ -436,6 +469,446 @@ async function main() {
       },
     }),
   ]);
+
+  // 8. Create paquetes de exámenes
+  console.log('Creating paquetes de exámenes...');
+  const examenesCreados = await prisma.examen.findMany({
+    orderBy: { codigo_examen: 'asc' },
+    take: 5,
+  });
+
+  const paquetes = [
+    {
+      nombre: 'Paquete Básico de Salud',
+      descripcion: 'Incluye hemograma completo y glucosa en ayunas',
+      precio_paquete: 18.0, // Descuento del 10% sobre precio individual
+      descuento: 10.0,
+      examenes: [examenesCreados[0].codigo_examen, examenesCreados[1].codigo_examen], // Hemograma + Glucosa
+    },
+    {
+      nombre: 'Paquete Chequeo Completo',
+      descripcion: 'Hemograma, glucosa, perfil lipídico y creatinina',
+      precio_paquete: 48.0, // Descuento del 15% sobre precio individual
+      descuento: 15.0,
+      examenes: [
+        examenesCreados[0].codigo_examen,
+        examenesCreados[1].codigo_examen,
+        examenesCreados[2].codigo_examen,
+        examenesCreados[4].codigo_examen,
+      ], // Hemograma + Glucosa + Perfil Lipídico + Creatinina
+    },
+    {
+      nombre: 'Paquete Pre-Operatorio',
+      descripcion: 'Exámenes requeridos antes de cirugía',
+      precio_paquete: 45.0, // Descuento del 12% sobre precio individual
+      descuento: 12.0,
+      examenes: [
+        examenesCreados[0].codigo_examen,
+        examenesCreados[1].codigo_examen,
+        examenesCreados[3].codigo_examen,
+        examenesCreados[4].codigo_examen,
+      ], // Hemograma + Glucosa + Orina + Creatinina
+    },
+  ];
+
+  for (const paqueteData of paquetes) {
+    const { examenes: examenesIds, ...paqueteInfo } = paqueteData;
+    const paquete = await prisma.paquete.upsert({
+      where: { codigo_paquete: paquetes.indexOf(paqueteData) + 1 },
+      update: {},
+      create: paqueteInfo,
+    });
+
+    // Relacionar exámenes con el paquete
+    for (const codigo_examen of examenesIds) {
+      await prisma.paqueteExamen.upsert({
+        where: {
+          codigo_paquete_examen: paquete.codigo_paquete * 100 + codigo_examen,
+        },
+        update: {},
+        create: {
+          codigo_paquete: paquete.codigo_paquete,
+          codigo_examen: codigo_examen,
+        },
+      });
+    }
+  }
+  console.log(`✅ Created ${paquetes.length} paquetes de exámenes`);
+
+  // 9. Create proveedores
+  console.log('Creating proveedores...');
+  const proveedores = [
+    {
+      ruc: '1790123456001',
+      razon_social: 'BioLab Ecuador S.A.',
+      nombre_comercial: 'BioLab',
+      telefono: '0223456789',
+      email: 'ventas@biolab.com.ec',
+      direccion: 'Av. De la República N45-123, Quito',
+      activo: true,
+    },
+    {
+      ruc: '1790234567001',
+      razon_social: 'MedSupply Distribuciones Cia. Ltda.',
+      nombre_comercial: 'MedSupply',
+      telefono: '0223456790',
+      email: 'contacto@medsupply.com.ec',
+      direccion: 'Av. 10 de Agosto N34-567, Quito',
+      activo: true,
+    },
+    {
+      ruc: '1790345678001',
+      razon_social: 'Reactivos y Equipos del Ecuador',
+      nombre_comercial: 'Reactivos Ecuador',
+      telefono: '0223456791',
+      email: 'info@reactivosecuador.com',
+      direccion: 'Av. Amazonas N23-890, Quito',
+      activo: true,
+    },
+  ];
+
+  for (const proveedorData of proveedores) {
+    await prisma.proveedor.upsert({
+      where: { ruc: proveedorData.ruc },
+      update: {},
+      create: proveedorData,
+    });
+  }
+  console.log(`✅ Created ${proveedores.length} proveedores`);
+
+  // 10. Create items de inventario
+  console.log('Creating items de inventario...');
+  const categoriaReactivos = await prisma.categoriaItem.findUnique({
+    where: { nombre: 'Reactivos' },
+  });
+  const categoriaInsumos = await prisma.categoriaItem.findUnique({
+    where: { nombre: 'Insumos' },
+  });
+
+  const items = [
+    {
+      codigo_interno: 'REAC-001',
+      nombre: 'Reactivo para Glucosa (500ml)',
+      descripcion: 'Reactivo enzimático para determinación de glucosa',
+      unidad_medida: 'Frasco',
+      stock_actual: 15,
+      stock_minimo: 5,
+      stock_maximo: 30,
+      costo_unitario: 45.0,
+      precio_venta: 60.0,
+      codigo_categoria: categoriaReactivos.codigo_categoria,
+      activo: true,
+    },
+    {
+      codigo_interno: 'REAC-002',
+      nombre: 'Kit Hemograma Automatizado',
+      descripcion: 'Kit de 100 determinaciones para hemograma',
+      unidad_medida: 'Kit',
+      stock_actual: 8,
+      stock_minimo: 3,
+      stock_maximo: 15,
+      costo_unitario: 120.0,
+      precio_venta: 150.0,
+      codigo_categoria: categoriaReactivos.codigo_categoria,
+      activo: true,
+    },
+    {
+      codigo_interno: 'INSU-001',
+      nombre: 'Tubos Vacutainer EDTA (100 unidades)',
+      descripcion: 'Tubos con anticoagulante EDTA para hematología',
+      unidad_medida: 'Caja',
+      stock_actual: 25,
+      stock_minimo: 10,
+      stock_maximo: 50,
+      costo_unitario: 15.0,
+      precio_venta: 20.0,
+      codigo_categoria: categoriaInsumos.codigo_categoria,
+      activo: true,
+    },
+    {
+      codigo_interno: 'INSU-002',
+      nombre: 'Agujas Vacutainer 21G (100 unidades)',
+      descripcion: 'Agujas estériles para extracción de sangre',
+      unidad_medida: 'Caja',
+      stock_actual: 30,
+      stock_minimo: 15,
+      stock_maximo: 60,
+      costo_unitario: 8.0,
+      precio_venta: 12.0,
+      codigo_categoria: categoriaInsumos.codigo_categoria,
+      activo: true,
+    },
+    {
+      codigo_interno: 'INSU-003',
+      nombre: 'Recipientes para Orina (50 unidades)',
+      descripcion: 'Recipientes estériles para recolección de orina',
+      unidad_medida: 'Caja',
+      stock_actual: 20,
+      stock_minimo: 8,
+      stock_maximo: 40,
+      costo_unitario: 5.0,
+      precio_venta: 8.0,
+      codigo_categoria: categoriaInsumos.codigo_categoria,
+      activo: true,
+    },
+  ];
+
+  for (const itemData of items) {
+    await prisma.item.upsert({
+      where: { codigo_interno: itemData.codigo_interno },
+      update: {},
+      create: itemData,
+    });
+  }
+  console.log(`✅ Created ${items.length} items de inventario`);
+
+  // 11. Create horarios (schedules for services)
+  console.log('Creating horarios...');
+  const horarios = [];
+  const diasSemana = [1, 2, 3, 4, 5]; // Lunes a Viernes
+  for (const dia of diasSemana) {
+    const horario = await prisma.horarioAtencion.upsert({
+      where: { codigo_horario: dia },
+      update: {},
+      create: {
+        codigo_servicio: servicios[0].codigo_servicio, // Toma de Muestras
+        codigo_sede: sede.codigo_sede,
+        dia_semana: dia,
+        hora_inicio: createTime('08:00:00'),
+        hora_fin: createTime('16:00:00'),
+        activo: true,
+      },
+    });
+    horarios.push(horario);
+  }
+  console.log(`✅ Created ${horarios.length} horarios`);
+
+  // 12. Create slots for appointments (próximos 7 días)
+  console.log('Creating slots for appointments...');
+  const slots = [];
+  const hoy = new Date();
+  for (let i = 0; i < 7; i++) {
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + i);
+    const diaSemana = fecha.getDay();
+
+    // Skip weekends
+    if (diaSemana === 0 || diaSemana === 6) continue;
+
+    // Create slots for morning and afternoon
+    const horariosSlots = [
+      { hora_inicio: createTime('08:00:00'), hora_fin: createTime('09:00:00') },
+      { hora_inicio: createTime('09:00:00'), hora_fin: createTime('10:00:00') },
+      { hora_inicio: createTime('10:00:00'), hora_fin: createTime('11:00:00') },
+      { hora_inicio: createTime('14:00:00'), hora_fin: createTime('15:00:00') },
+      { hora_inicio: createTime('15:00:00'), hora_fin: createTime('16:00:00') },
+    ];
+
+    for (const horario of horariosSlots) {
+      const slot = await prisma.slot.create({
+        data: {
+          codigo_servicio: servicios[0].codigo_servicio,
+          codigo_sede: sede.codigo_sede,
+          fecha: fecha,
+          hora_inicio: horario.hora_inicio,
+          hora_fin: horario.hora_fin,
+          cupos_totales: 4,
+          cupos_disponibles: 4,
+          activo: true,
+        },
+      });
+      slots.push(slot);
+    }
+  }
+  console.log(`✅ Created ${slots.length} slots`);
+
+  // 13. Create citas (appointments) for testing
+  console.log('Creating citas...');
+  const citas = [];
+  // Reservar algunos slots con el paciente de prueba
+  for (let i = 0; i < Math.min(3, slots.length); i++) {
+    const cita = await prisma.cita.create({
+      data: {
+        codigo_paciente: testPaciente.codigo_usuario,
+        codigo_slot: slots[i].codigo_slot,
+        estado: i === 0 ? 'CONFIRMADA' : i === 1 ? 'PENDIENTE' : 'COMPLETADA',
+        observaciones: `Cita de prueba ${i + 1}`,
+      },
+    });
+    citas.push(cita);
+
+    // Update slot cupos_disponibles
+    await prisma.slot.update({
+      where: { codigo_slot: slots[i].codigo_slot },
+      data: { cupos_disponibles: slots[i].cupos_disponibles - 1 },
+    });
+  }
+  console.log(`✅ Created ${citas.length} citas`);
+
+  // 14. Create cotizaciones (quotes) for testing
+  console.log('Creating cotizaciones...');
+  const cotizaciones = [];
+
+  // Cotización 1: Pendiente
+  const cotizacion1 = await prisma.cotizacion.create({
+    data: {
+      codigo_paciente: testPaciente.codigo_usuario,
+      numero_cotizacion: `COT-${Date.now()}-001`,
+      fecha_expiracion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días
+      subtotal: 30.0,
+      descuento: 0.0,
+      total: 30.0,
+      estado: 'PENDIENTE',
+      detalles: {
+        create: [
+          {
+            codigo_examen: examenesCreados[0].codigo_examen,
+            cantidad: 1,
+            precio_unitario: 15.0,
+            total_linea: 15.0,
+          },
+          {
+            codigo_examen: examenesCreados[1].codigo_examen,
+            cantidad: 1,
+            precio_unitario: 15.0,
+            total_linea: 15.0,
+          },
+        ],
+      },
+    },
+  });
+  cotizaciones.push(cotizacion1);
+
+  // Cotización 2: Aprobada
+  const cotizacion2 = await prisma.cotizacion.create({
+    data: {
+      codigo_paciente: testPaciente.codigo_usuario,
+      numero_cotizacion: `COT-${Date.now()}-002`,
+      fecha_expiracion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días
+      subtotal: 20.0,
+      descuento: 2.0,
+      total: 18.0,
+      estado: 'APROBADA',
+      detalles: {
+        create: [
+          {
+            codigo_examen: examenesCreados[2].codigo_examen,
+            cantidad: 1,
+            precio_unitario: 20.0,
+            total_linea: 20.0,
+          },
+        ],
+      },
+    },
+  });
+  cotizaciones.push(cotizacion2);
+  console.log(`✅ Created ${cotizaciones.length} cotizaciones`);
+
+  // 15. Create muestras (samples) for testing
+  console.log('Creating muestras...');
+  const muestras = [];
+
+  // Muestra 1: Para la primera cita completada
+  const muestra1 = await prisma.muestra.create({
+    data: {
+      codigo_paciente: testPaciente.codigo_usuario,
+      codigo_cita: citas[2]?.codigo_cita, // Cita completada
+      id_muestra: `M-${Date.now()}-001`,
+      tipo_muestra: 'Sangre',
+      estado: 'PROCESADA',
+      observaciones: 'Muestra de sangre para hemograma completo',
+      tomada_por: personalLab.codigo_usuario,
+    },
+  });
+  muestras.push(muestra1);
+
+  // Muestra 2: Para otra cita
+  const muestra2 = await prisma.muestra.create({
+    data: {
+      codigo_paciente: testPaciente.codigo_usuario,
+      codigo_cita: citas[1]?.codigo_cita,
+      id_muestra: `M-${Date.now()}-002`,
+      tipo_muestra: 'Sangre',
+      estado: 'PROCESADA',
+      observaciones: 'Muestra de sangre para glucosa',
+      tomada_por: personalLab.codigo_usuario,
+    },
+  });
+  muestras.push(muestra2);
+
+  // Muestra 3: Muestra reciente en proceso
+  const muestra3 = await prisma.muestra.create({
+    data: {
+      codigo_paciente: testPaciente.codigo_usuario,
+      codigo_cita: citas[0]?.codigo_cita,
+      id_muestra: `M-${Date.now()}-003`,
+      tipo_muestra: 'Sangre',
+      estado: 'RECOLECTADA',
+      observaciones: 'Muestra recién tomada',
+      tomada_por: personalLab.codigo_usuario,
+    },
+  });
+  muestras.push(muestra3);
+  console.log(`✅ Created ${muestras.length} muestras`);
+
+  // 16. Create resultados (results) for testing
+  console.log('Creating resultados...');
+  const resultados = [];
+
+  // Resultado 1: Normal - Hemoglobina
+  const resultado1 = await prisma.resultado.create({
+    data: {
+      codigo_muestra: muestra1.codigo_muestra,
+      codigo_examen: examenesCreados[0].codigo_examen,
+      fecha_resultado: new Date(),
+      valor_texto: '14.5 g/dL',
+      valor_numerico: 14.5,
+      unidad_medida: 'g/dL',
+      dentro_rango_normal: true,
+      nivel: 'NORMAL',
+      observaciones_tecnicas: 'Hemoglobina dentro de valores normales',
+      estado: 'VALIDADO',
+      validado_por: medico.codigo_usuario,
+      fecha_validacion: new Date(),
+      procesado_por: personalLab.codigo_usuario,
+    },
+  });
+  resultados.push(resultado1);
+
+  // Resultado 2: Alto - Glucosa
+  const resultado2 = await prisma.resultado.create({
+    data: {
+      codigo_muestra: muestra2.codigo_muestra,
+      codigo_examen: examenesCreados[1].codigo_examen,
+      fecha_resultado: new Date(),
+      valor_texto: '120 mg/dL',
+      valor_numerico: 120.0,
+      unidad_medida: 'mg/dL',
+      dentro_rango_normal: false,
+      nivel: 'ALTO',
+      observaciones_tecnicas: 'Glucosa elevada - Requiere seguimiento',
+      estado: 'VALIDADO',
+      validado_por: medico.codigo_usuario,
+      fecha_validacion: new Date(),
+      procesado_por: personalLab.codigo_usuario,
+    },
+  });
+  resultados.push(resultado2);
+
+  // Resultado 3: En proceso
+  const resultado3 = await prisma.resultado.create({
+    data: {
+      codigo_muestra: muestra3.codigo_muestra,
+      codigo_examen: examenesCreados[2].codigo_examen,
+      fecha_resultado: new Date(),
+      valor_texto: 'Pendiente',
+      nivel: 'NORMAL',
+      estado: 'EN_PROCESO',
+      procesado_por: personalLab.codigo_usuario,
+    },
+  });
+  resultados.push(resultado3);
+  console.log(`✅ Created ${resultados.length} resultados`);
 
   console.log('✅ Seed completed successfully!');
 }
