@@ -629,6 +629,197 @@ async function main() {
   }
   console.log(`✅ Created ${items.length} items de inventario`);
 
+  // 11. Create horarios (schedules for services)
+  console.log('Creating horarios...');
+  const horarios = [];
+  const diasSemana = [1, 2, 3, 4, 5]; // Lunes a Viernes
+  for (const dia of diasSemana) {
+    const horario = await prisma.horario.upsert({
+      where: { codigo_horario: dia },
+      update: {},
+      create: {
+        codigo_servicio: servicios[0].codigo_servicio, // Toma de Muestras
+        codigo_sede: sede.codigo_sede,
+        dia_semana: dia,
+        hora_inicio: '08:00:00',
+        hora_fin: '16:00:00',
+        activo: true,
+      },
+    });
+    horarios.push(horario);
+  }
+  console.log(`✅ Created ${horarios.length} horarios`);
+
+  // 12. Create slots for appointments (próximos 7 días)
+  console.log('Creating slots for appointments...');
+  const slots = [];
+  const hoy = new Date();
+  for (let i = 0; i < 7; i++) {
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + i);
+    const diaSemana = fecha.getDay();
+
+    // Skip weekends
+    if (diaSemana === 0 || diaSemana === 6) continue;
+
+    // Create slots for morning and afternoon
+    const horarios = [
+      { hora_inicio: '08:00:00', hora_fin: '09:00:00' },
+      { hora_inicio: '09:00:00', hora_fin: '10:00:00' },
+      { hora_inicio: '10:00:00', hora_fin: '11:00:00' },
+      { hora_inicio: '14:00:00', hora_fin: '15:00:00' },
+      { hora_inicio: '15:00:00', hora_fin: '16:00:00' },
+    ];
+
+    for (const horario of horarios) {
+      const slot = await prisma.slot.create({
+        data: {
+          codigo_servicio: servicios[0].codigo_servicio,
+          codigo_sede: sede.codigo_sede,
+          fecha: fecha,
+          hora_inicio: horario.hora_inicio,
+          hora_fin: horario.hora_fin,
+          capacidad: 4,
+          disponibles: 4,
+          activo: true,
+        },
+      });
+      slots.push(slot);
+    }
+  }
+  console.log(`✅ Created ${slots.length} slots`);
+
+  // 13. Create citas (appointments) for testing
+  console.log('Creating citas...');
+  const citas = [];
+  // Reservar algunos slots con el paciente de prueba
+  for (let i = 0; i < Math.min(3, slots.length); i++) {
+    const cita = await prisma.cita.create({
+      data: {
+        codigo_paciente: paciente.codigo_usuario,
+        codigo_slot: slots[i].codigo_slot,
+        estado: i === 0 ? 'CONFIRMADA' : i === 1 ? 'PENDIENTE' : 'COMPLETADA',
+        observaciones: `Cita de prueba ${i + 1}`,
+      },
+    });
+    citas.push(cita);
+
+    // Update slot disponibles
+    await prisma.slot.update({
+      where: { codigo_slot: slots[i].codigo_slot },
+      data: { disponibles: slots[i].disponibles - 1 },
+    });
+  }
+  console.log(`✅ Created ${citas.length} citas`);
+
+  // 14. Create cotizaciones (quotes) for testing
+  console.log('Creating cotizaciones...');
+  const cotizaciones = [];
+
+  // Cotización 1: Pendiente
+  const cotizacion1 = await prisma.cotizacion.create({
+    data: {
+      codigo_paciente: paciente.codigo_usuario,
+      numero_cotizacion: `COT-${Date.now()}-001`,
+      subtotal: 30.0,
+      descuento: 0.0,
+      total: 30.0,
+      estado: 'PENDIENTE',
+      items: {
+        create: [
+          {
+            codigo_examen: examenesCreados[0].codigo_examen,
+            cantidad: 1,
+            precio_unitario: 15.0,
+            total_linea: 15.0,
+          },
+          {
+            codigo_examen: examenesCreados[1].codigo_examen,
+            cantidad: 1,
+            precio_unitario: 15.0,
+            total_linea: 15.0,
+          },
+        ],
+      },
+    },
+  });
+  cotizaciones.push(cotizacion1);
+
+  // Cotización 2: Aprobada
+  const cotizacion2 = await prisma.cotizacion.create({
+    data: {
+      codigo_paciente: paciente.codigo_usuario,
+      numero_cotizacion: `COT-${Date.now()}-002`,
+      subtotal: 20.0,
+      descuento: 2.0,
+      total: 18.0,
+      estado: 'APROBADA',
+      items: {
+        create: [
+          {
+            codigo_examen: examenesCreados[2].codigo_examen,
+            cantidad: 1,
+            precio_unitario: 20.0,
+            total_linea: 20.0,
+          },
+        ],
+      },
+    },
+  });
+  cotizaciones.push(cotizacion2);
+  console.log(`✅ Created ${cotizaciones.length} cotizaciones`);
+
+  // 15. Create resultados (results) for testing
+  console.log('Creating resultados...');
+  const resultados = [];
+
+  // Resultado 1: Normal
+  const resultado1 = await prisma.resultado.create({
+    data: {
+      codigo_paciente: paciente.codigo_usuario,
+      codigo_examen: examenesCreados[0].codigo_examen,
+      fecha_resultado: new Date(),
+      valor_obtenido: '14.5 g/dL',
+      valor_numerico: 14.5,
+      nivel: 'NORMAL',
+      observaciones: 'Hemoglobina dentro de valores normales',
+      estado: 'VALIDADO',
+      codigo_validado_por: medico.codigo_usuario,
+    },
+  });
+  resultados.push(resultado1);
+
+  // Resultado 2: Alto
+  const resultado2 = await prisma.resultado.create({
+    data: {
+      codigo_paciente: paciente.codigo_usuario,
+      codigo_examen: examenesCreados[1].codigo_examen,
+      fecha_resultado: new Date(),
+      valor_obtenido: '120 mg/dL',
+      valor_numerico: 120.0,
+      nivel: 'ALTO',
+      observaciones: 'Glucosa elevada - Requiere seguimiento',
+      estado: 'VALIDADO',
+      codigo_validado_por: medico.codigo_usuario,
+    },
+  });
+  resultados.push(resultado2);
+
+  // Resultado 3: En proceso
+  const resultado3 = await prisma.resultado.create({
+    data: {
+      codigo_paciente: paciente.codigo_usuario,
+      codigo_examen: examenesCreados[2].codigo_examen,
+      fecha_resultado: new Date(),
+      valor_obtenido: 'Pendiente',
+      nivel: 'NORMAL',
+      observaciones: null,
+      estado: 'EN_PROCESO',
+    },
+  });
+  resultados.push(resultado3);
+  console.log(`✅ Created ${resultados.length} resultados`);
+
   console.log('✅ Seed completed successfully!');
 }
 
