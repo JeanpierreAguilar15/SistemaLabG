@@ -91,7 +91,7 @@ export class AdminService {
     return sanitizedUser;
   }
 
-  async createUser(data: any) {
+  async createUser(data: any, adminId?: number) {
     // Validar formato de cédula ecuatoriana
     if (!ValidateCedulaEcuatoriana(data.cedula)) {
       throw new BadRequestException('La cédula ecuatoriana no es válida');
@@ -131,7 +131,7 @@ export class AdminService {
     // Emitir evento de creación de usuario
     this.eventsService.emitUserCreated(
       user.codigo_usuario,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId || 0,
       { rol: user.rol.nombre, email: user.email, nombres: user.nombres },
     );
 
@@ -139,7 +139,7 @@ export class AdminService {
     return sanitizedUser;
   }
 
-  async updateUser(codigo_usuario: number, data: any) {
+  async updateUser(codigo_usuario: number, data: any, adminId?: number) {
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
     });
@@ -185,7 +185,7 @@ export class AdminService {
     // Emitir evento de actualización de usuario
     this.eventsService.emitUserUpdated(
       codigo_usuario,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId || 0,
       { changedFields: Object.keys(data) },
     );
 
@@ -193,7 +193,7 @@ export class AdminService {
     return sanitizedUser;
   }
 
-  async deleteUser(codigo_usuario: number) {
+  async deleteUser(codigo_usuario: number, adminId?: number) {
     // Verificar que el usuario existe
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
@@ -216,7 +216,7 @@ export class AdminService {
     return sanitizedUser;
   }
 
-  async toggleUserStatus(codigo_usuario: number) {
+  async toggleUserStatus(codigo_usuario: number, adminId?: number) {
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
     });
@@ -237,7 +237,7 @@ export class AdminService {
         entityType: 'user',
         entityId: codigo_usuario,
         action: 'updated',
-        userId: adminId,
+        userId: adminId || 0,
         data: { activo: updatedUser.activo },
         timestamp: new Date(),
       },
@@ -247,7 +247,7 @@ export class AdminService {
     return sanitizedUser;
   }
 
-  async resetUserPassword(codigo_usuario: number, newPassword: string) {
+  async resetUserPassword(codigo_usuario: number, newPassword: string, adminId?: number) {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(newPassword, salt);
 
@@ -265,7 +265,7 @@ export class AdminService {
     // Emitir evento de actualización de usuario (password reset)
     this.eventsService.emitUserUpdated(
       codigo_usuario,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId || 0,
       { action: 'password_reset', cuenta_desbloqueada: true },
     );
 
@@ -924,7 +924,7 @@ export class AdminService {
     this.eventsService.emitPackageCreated(
       package_.codigo_paquete,
       0, // TODO: Obtener del contexto de autenticación
-      { nombre: package_.nombre, precio: package_.precio, examenesCount: examenes?.length || 0 },
+      { nombre: package_.nombre, precio_paquete: package_.precio_paquete, examenesCount: examenes?.length || 0 },
     );
 
     return package_;
