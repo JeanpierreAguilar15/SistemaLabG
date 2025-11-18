@@ -22,8 +22,10 @@ export default function SuppliersManagement() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadSuppliers()
-  }, [])
+    if (accessToken) {
+      loadSuppliers()
+    }
+  }, [accessToken])
 
   const loadSuppliers = async () => {
     try {
@@ -36,7 +38,10 @@ export default function SuppliersManagement() {
 
       if (response.ok) {
         const data = await response.json()
+        console.log('Suppliers loaded:', data)
         setSuppliers(data)
+      } else {
+        console.error('Failed to load suppliers:', response.status, await response.text())
       }
     } catch (error) {
       console.error('Error loading suppliers:', error)

@@ -28,8 +28,10 @@ export default function InventarioPage() {
   const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
-    loadItems()
-  }, [])
+    if (accessToken) {
+      loadItems()
+    }
+  }, [accessToken])
 
   const loadItems = async () => {
     try {
@@ -38,8 +40,13 @@ export default function InventarioPage() {
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setItems(data)
+        const result = await response.json()
+        console.log('Inventory loaded:', result)
+        // Backend returns paginated data: { data: [], pagination: {} }
+        const items = result.data || result
+        setItems(items)
+      } else {
+        console.error('Failed to load inventory:', response.status, await response.text())
       }
     } catch (error) {
       console.error('Error loading items:', error)

@@ -23,8 +23,10 @@ export default function PackagesManagement() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadPackages()
-  }, [])
+    if (accessToken) {
+      loadPackages()
+    }
+  }, [accessToken])
 
   const loadPackages = async () => {
     try {
@@ -37,7 +39,10 @@ export default function PackagesManagement() {
 
       if (response.ok) {
         const data = await response.json()
+        console.log('Packages loaded:', data)
         setPackages(data)
+      } else {
+        console.error('Failed to load packages:', response.status, await response.text())
       }
     } catch (error) {
       console.error('Error loading packages:', error)
