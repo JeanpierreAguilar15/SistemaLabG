@@ -48,7 +48,7 @@ export default function CitasAdminPage() {
       const params = new URLSearchParams()
       if (filtro !== 'TODAS') params.append('estado', filtro)
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/citas?${params}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/admin/citas?${params}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
 
@@ -65,7 +65,7 @@ export default function CitasAdminPage() {
 
   const handleConfirm = async (codigo_cita: number) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/citas/${codigo_cita}/confirm`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/admin/citas/${codigo_cita}/confirm`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${accessToken}` },
       })
@@ -81,7 +81,7 @@ export default function CitasAdminPage() {
 
   const handleUpdateEstado = async (codigo_cita: number, nuevoEstado: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/citas/${codigo_cita}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/admin/citas/${codigo_cita}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

@@ -40,8 +40,7 @@ export default function ResultadosAdminPage() {
 
   const loadResultados = async () => {
     try {
-      // Este endpoint necesitaría implementarse en el backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/resultados`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/admin/all`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
 

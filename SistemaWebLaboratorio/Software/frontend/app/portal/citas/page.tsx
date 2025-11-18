@@ -66,7 +66,7 @@ export default function CitasPage() {
   const loadCitas = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/citas/mis-citas`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/citas/my`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -85,7 +85,7 @@ export default function CitasPage() {
 
   const loadServicios = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/servicios`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/services`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -105,7 +105,7 @@ export default function CitasPage() {
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/citas/slots-disponibles?servicio=${servicioId}&fecha=${fecha}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/agenda/slots/available?servicio_id=${servicioId}&fecha=${fecha}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -135,7 +135,7 @@ export default function CitasPage() {
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/citas`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/citas`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -168,14 +168,14 @@ export default function CitasPage() {
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/citas/${selectedCita.codigo_cita}/cancelar`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/citas/${selectedCita.codigo_cita}/cancel`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          motivo_cancelacion: motivoCancelacion,
+          motivo: motivoCancelacion,
         }),
       })
 
