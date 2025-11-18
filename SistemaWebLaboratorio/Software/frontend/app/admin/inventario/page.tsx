@@ -42,10 +42,21 @@ export default function InventarioPage() {
 
   const loadItems = async () => {
     try {
-      console.log('Loading inventory from:', `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items`)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+      const fullUrl = `${apiUrl}/admin/inventory/items`
+
+      console.log('=== INVENTARIO DEBUG ===')
+      console.log('API_URL:', process.env.NEXT_PUBLIC_API_URL)
+      console.log('Full URL:', fullUrl)
+      console.log('Token exists:', !!accessToken)
+      console.log('Token preview:', accessToken?.substring(0, 50))
+
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+      const response = await fetch(fullUrl, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
       })
 
       console.log('Inventory response status:', response.status)

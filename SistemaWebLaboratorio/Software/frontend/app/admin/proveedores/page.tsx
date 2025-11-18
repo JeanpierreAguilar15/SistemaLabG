@@ -36,11 +36,20 @@ export default function SuppliersManagement() {
 
   const loadSuppliers = async () => {
     try {
-      console.log('Loading suppliers from:', `${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+      const fullUrl = `${apiUrl}/admin/suppliers`
+
+      console.log('=== PROVEEDORES DEBUG ===')
+      console.log('API_URL:', process.env.NEXT_PUBLIC_API_URL)
+      console.log('Full URL:', fullUrl)
+      console.log('Token exists:', !!accessToken)
+      console.log('Token preview:', accessToken?.substring(0, 50))
+
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`, {
+      const response = await fetch(fullUrl, {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
         },
       })
 

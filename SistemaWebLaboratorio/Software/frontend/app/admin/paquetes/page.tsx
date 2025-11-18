@@ -37,11 +37,20 @@ export default function PackagesManagement() {
 
   const loadPackages = async () => {
     try {
-      console.log('Loading packages from:', `${process.env.NEXT_PUBLIC_API_URL}/admin/packages`)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+      const fullUrl = `${apiUrl}/admin/packages`
+
+      console.log('=== PAQUETES DEBUG ===')
+      console.log('API_URL:', process.env.NEXT_PUBLIC_API_URL)
+      console.log('Full URL:', fullUrl)
+      console.log('Token exists:', !!accessToken)
+      console.log('Token preview:', accessToken?.substring(0, 50))
+
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/packages`, {
+      const response = await fetch(fullUrl, {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
         },
       })
 
