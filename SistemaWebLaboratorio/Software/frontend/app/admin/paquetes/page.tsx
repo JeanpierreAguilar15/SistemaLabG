@@ -20,16 +20,24 @@ interface Package {
 export default function PackagesManagement() {
   const { accessToken } = useAuthStore()
   const [packages, setPackages] = useState<Package[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Esperar a que el componente se monte en el cliente
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
-    if (accessToken) {
+    console.log('Paquetes - accessToken:', accessToken ? 'exists' : 'null', 'mounted:', mounted)
+    if (mounted && accessToken) {
       loadPackages()
     }
-  }, [accessToken])
+  }, [accessToken, mounted])
 
   const loadPackages = async () => {
     try {
+      console.log('Loading packages from:', `${process.env.NEXT_PUBLIC_API_URL}/admin/packages`)
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/packages`, {
         headers: {
@@ -37,18 +45,28 @@ export default function PackagesManagement() {
         },
       })
 
+      console.log('Packages response status:', response.status)
       if (response.ok) {
         const data = await response.json()
-        console.log('Packages loaded:', data)
+        console.log('Packages loaded successfully:', data.length, 'items')
         setPackages(data)
       } else {
-        console.error('Failed to load packages:', response.status, await response.text())
+        const errorText = await response.text()
+        console.error('Failed to load packages:', response.status, errorText)
       }
     } catch (error) {
       console.error('Error loading packages:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>
+      </div>
+    )
   }
 
   if (loading) {

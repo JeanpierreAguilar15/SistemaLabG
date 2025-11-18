@@ -19,16 +19,24 @@ interface Supplier {
 export default function SuppliersManagement() {
   const { accessToken } = useAuthStore()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Esperar a que el componente se monte en el cliente
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
-    if (accessToken) {
+    console.log('Proveedores - accessToken:', accessToken ? 'exists' : 'null', 'mounted:', mounted)
+    if (mounted && accessToken) {
       loadSuppliers()
     }
-  }, [accessToken])
+  }, [accessToken, mounted])
 
   const loadSuppliers = async () => {
     try {
+      console.log('Loading suppliers from:', `${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`)
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`, {
         headers: {
@@ -36,18 +44,28 @@ export default function SuppliersManagement() {
         },
       })
 
+      console.log('Suppliers response status:', response.status)
       if (response.ok) {
         const data = await response.json()
-        console.log('Suppliers loaded:', data)
+        console.log('Suppliers loaded successfully:', data.length, 'items')
         setSuppliers(data)
       } else {
-        console.error('Failed to load suppliers:', response.status, await response.text())
+        const errorText = await response.text()
+        console.error('Failed to load suppliers:', response.status, errorText)
       }
     } catch (error) {
       console.error('Error loading suppliers:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>
+      </div>
+    )
   }
 
   if (loading) {

@@ -24,29 +24,41 @@ interface ItemInventario {
 export default function InventarioPage() {
   const { accessToken } = useAuthStore()
   const [items, setItems] = useState<ItemInventario[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
 
+  // Esperar a que el componente se monte en el cliente
   useEffect(() => {
-    if (accessToken) {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    console.log('Inventario - accessToken:', accessToken ? 'exists' : 'null', 'mounted:', mounted)
+    if (mounted && accessToken) {
       loadItems()
     }
-  }, [accessToken])
+  }, [accessToken, mounted])
 
   const loadItems = async () => {
     try {
+      console.log('Loading inventory from:', `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items`)
+      setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
 
+      console.log('Inventory response status:', response.status)
       if (response.ok) {
         const result = await response.json()
         console.log('Inventory loaded:', result)
         // Backend returns paginated data: { data: [], pagination: {} }
         const items = result.data || result
+        console.log('Inventory items extracted:', items.length, 'items')
         setItems(items)
       } else {
-        console.error('Failed to load inventory:', response.status, await response.text())
+        const errorText = await response.text()
+        console.error('Failed to load inventory:', response.status, errorText)
       }
     } catch (error) {
       console.error('Error loading items:', error)
@@ -75,6 +87,14 @@ export default function InventarioPage() {
       return { label: 'Exceso', color: 'bg-lab-info-100 text-lab-info-800' }
     }
     return { label: 'Óptimo', color: 'bg-lab-success-100 text-lab-success-800' }
+  }
+
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>
+      </div>
+    )
   }
 
   if (loading) {
