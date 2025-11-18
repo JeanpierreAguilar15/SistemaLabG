@@ -176,11 +176,9 @@ export default function CotizacionesPage() {
     }
 
     try {
-      const items = Array.from(examenesSeleccionados.values()).map((examen) => ({
+      const examenes = Array.from(examenesSeleccionados.values()).map((examen) => ({
         codigo_examen: examen.codigo_examen,
         cantidad: examen.cantidad,
-        precio_unitario: examen.precio_actual,
-        descripcion: examen.nombre,
       }))
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cotizaciones`, {
@@ -190,10 +188,8 @@ export default function CotizacionesPage() {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          items,
-          subtotal: totales.subtotal,
-          descuento: totales.descuento,
-          total: totales.total,
+          examenes,
+          descuento: 0, // El paciente no aplica descuentos, solo admin
         }),
       })
 

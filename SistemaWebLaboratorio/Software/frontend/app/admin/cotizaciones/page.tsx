@@ -217,7 +217,7 @@ export default function CotizacionesAdminPage() {
                       {formatDate(new Date(cotizacion.fecha_cotizacion))}
                     </td>
                     <td className="p-4 text-sm text-lab-neutral-700">{cotizacion.items.length} examen(es)</td>
-                    <td className="p-4 font-semibold text-lab-neutral-900">${cotizacion.total.toFixed(2)}</td>
+                    <td className="p-4 font-semibold text-lab-neutral-900">${Number(cotizacion.total).toFixed(2)}</td>
                     <td className="p-4">
                       <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(cotizacion.estado)}`}>
                         {cotizacion.estado}
@@ -275,10 +275,10 @@ export default function CotizacionesAdminPage() {
                       <div>
                         <p className="font-medium text-lab-neutral-900">{item.examen}</p>
                         <p className="text-sm text-lab-neutral-600">
-                          {item.cantidad} x ${item.precio_unitario.toFixed(2)}
+                          {item.cantidad} x ${Number(item.precio_unitario).toFixed(2)}
                         </p>
                       </div>
-                      <p className="font-semibold text-lab-neutral-900">${item.total_linea.toFixed(2)}</p>
+                      <p className="font-semibold text-lab-neutral-900">${Number(item.total_linea).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -288,19 +288,19 @@ export default function CotizacionesAdminPage() {
               <div className="border-t border-lab-neutral-200 pt-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-lab-neutral-600">Subtotal:</span>
-                  <span className="font-semibold">${selectedCotizacion.subtotal.toFixed(2)}</span>
+                  <span className="font-semibold">${Number(selectedCotizacion.subtotal).toFixed(2)}</span>
                 </div>
-                {selectedCotizacion.descuento > 0 && (
+                {Number(selectedCotizacion.descuento) > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-lab-neutral-600">Descuento:</span>
                     <span className="font-semibold text-lab-success-600">
-                      -${selectedCotizacion.descuento.toFixed(2)}
+                      -${Number(selectedCotizacion.descuento).toFixed(2)}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between text-lg font-bold pt-2 border-t border-lab-neutral-200">
                   <span>Total:</span>
-                  <span className="text-lab-primary-600">${selectedCotizacion.total.toFixed(2)}</span>
+                  <span className="text-lab-primary-600">${Number(selectedCotizacion.total).toFixed(2)}</span>
                 </div>
               </div>
 

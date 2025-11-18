@@ -326,7 +326,7 @@ export default function ExamenesPage() {
                     </td>
                     <td className="p-4 text-sm text-lab-neutral-700">{examen.categoria?.nombre}</td>
                     <td className="p-4 text-sm font-semibold text-lab-neutral-900">
-                      ${examen.precios?.[0]?.precio.toFixed(2) || '0.00'}
+                      ${examen.precios?.[0]?.precio ? Number(examen.precios[0].precio).toFixed(2) : '0.00'}
                     </td>
                     <td className="p-4">
                       {examen.requiere_ayuno ? (
