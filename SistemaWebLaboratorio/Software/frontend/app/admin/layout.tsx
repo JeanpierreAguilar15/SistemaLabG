@@ -82,7 +82,7 @@ export default function AdminLayout({
     }
 
     // Verificar que el usuario sea administrador
-    if (user?.rol?.nombre !== 'ADMIN') {
+    if (user?.rol !== 'ADMIN') {
       router.push('/portal')
       return
     }
@@ -93,7 +93,7 @@ export default function AdminLayout({
     router.push('/auth/login')
   }
 
-  if (!isAuthenticated || !user || user?.rol?.nombre !== 'ADMIN') {
+  if (!isAuthenticated || !user || user?.rol !== 'ADMIN') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>
