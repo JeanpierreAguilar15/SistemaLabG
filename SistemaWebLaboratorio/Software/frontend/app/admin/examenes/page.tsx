@@ -70,8 +70,10 @@ export default function ExamenesPage() {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       if (response.ok) {
-        const data = await response.json()
-        setExamenes(data)
+        const result = await response.json()
+        // Backend returns paginated data: { data: [], pagination: {} }
+        const examenes = result.data || result
+        setExamenes(examenes)
       }
     } catch (error) {
       console.error('Error loading examenes:', error)

@@ -53,8 +53,10 @@ export default function CitasAdminPage() {
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setCitas(data)
+        const result = await response.json()
+        // Handle both array and paginated response
+        const citas = result.data || result
+        setCitas(citas)
       }
     } catch (error) {
       console.error('Error loading citas:', error)

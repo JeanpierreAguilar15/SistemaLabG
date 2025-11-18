@@ -54,8 +54,10 @@ export default function CotizacionesAdminPage() {
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setCotizaciones(data)
+        const result = await response.json()
+        // Handle both array and paginated response
+        const cotizaciones = result.data || result
+        setCotizaciones(cotizaciones)
       }
     } catch (error) {
       console.error('Error loading cotizaciones:', error)

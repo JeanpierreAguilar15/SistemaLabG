@@ -45,8 +45,10 @@ export default function AuditoriaPage() {
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setLogs(data)
+        const result = await response.json()
+        // Backend returns paginated data: { data: [], pagination: {} }
+        const logs = result.data || result
+        setLogs(logs)
       }
     } catch (error) {
       console.error('Error loading logs:', error)

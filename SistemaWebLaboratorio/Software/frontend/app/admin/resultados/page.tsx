@@ -45,8 +45,10 @@ export default function ResultadosAdminPage() {
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setResultados(data)
+        const result = await response.json()
+        // Handle both array and paginated response
+        const resultados = result.data || result
+        setResultados(resultados)
       }
     } catch (error) {
       console.error('Error loading resultados:', error)
