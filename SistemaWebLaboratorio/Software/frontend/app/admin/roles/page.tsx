@@ -13,14 +13,37 @@ interface Role {
   fecha_creacion: string
 }
 
+interface RoleFormData {
+  nombre: string
+  descripcion: string
+  nivel_acceso: string
+  activo: boolean
+}
+
 export default function RolesManagement() {
   const { accessToken } = useAuthStore()
   const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [editingRole, setEditingRole] = useState<Role | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [formData, setFormData] = useState<RoleFormData>({
+    nombre: '',
+    descripcion: '',
+    nivel_acceso: '1',
+    activo: true,
+  })
 
   useEffect(() => {
     loadRoles()
   }, [])
+
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
 
   const loadRoles = async () => {
     try {
@@ -37,8 +60,160 @@ export default function RolesManagement() {
       }
     } catch (error) {
       console.error('Error loading roles:', error)
+      setMessage({ type: 'error', text: 'Error al cargar los roles' })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleOpenModal = (role?: Role) => {
+    if (role) {
+      setEditingRole(role)
+      setFormData({
+        nombre: role.nombre,
+        descripcion: role.descripcion || '',
+        nivel_acceso: role.nivel_acceso.toString(),
+        activo: role.activo,
+      })
+    } else {
+      setEditingRole(null)
+      setFormData({
+        nombre: '',
+        descripcion: '',
+        nivel_acceso: '1',
+        activo: true,
+      })
+    }
+    setShowModal(true)
+  }
+
+  const handleCloseModal = () => {
+    setShowModal(false)
+    setEditingRole(null)
+    setFormData({
+      nombre: '',
+      descripcion: '',
+      nivel_acceso: '1',
+      activo: true,
+    })
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
+    }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // Validaciones
+    if (!formData.nombre.trim()) {
+      setMessage({ type: 'error', text: 'El nombre del rol es requerido' })
+      return
+    }
+
+    if (formData.nombre.length < 2 || formData.nombre.length > 50) {
+      setMessage({ type: 'error', text: 'El nombre debe tener entre 2 y 50 caracteres' })
+      return
+    }
+
+    const nivel = parseInt(formData.nivel_acceso)
+    if (isNaN(nivel) || nivel < 1) {
+      setMessage({ type: 'error', text: 'El nivel de acceso debe ser al menos 1' })
+      return
+    }
+
+    const roleData = {
+      nombre: formData.nombre.trim(),
+      descripcion: formData.descripcion.trim() || null,
+      nivel_acceso: nivel,
+      activo: formData.activo,
+    }
+
+    try {
+      if (editingRole) {
+        // Actualizar rol existente
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/admin/roles/${editingRole.codigo_rol}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(roleData),
+          }
+        )
+
+        if (response.ok) {
+          setMessage({ type: 'success', text: '✅ Rol actualizado correctamente' })
+          loadRoles()
+          handleCloseModal()
+        } else {
+          const error = await response.json()
+          setMessage({
+            type: 'error',
+            text: error.message || 'Error al actualizar el rol',
+          })
+        }
+      } else {
+        // Crear nuevo rol
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/roles`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(roleData),
+        })
+
+        if (response.ok) {
+          setMessage({ type: 'success', text: '✅ Rol creado correctamente' })
+          loadRoles()
+          handleCloseModal()
+        } else {
+          const error = await response.json()
+          setMessage({
+            type: 'error',
+            text: error.message || 'Error al crear el rol',
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error submitting role:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleDelete = async (roleId: number, roleName: string) => {
+    if (!confirm(`¿Estás seguro de que deseas eliminar el rol "${roleName}"?`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/roles/${roleId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: '✅ Rol eliminado correctamente' })
+        loadRoles()
+      } else {
+        const error = await response.json()
+        setMessage({
+          type: 'error',
+          text: error.message || 'Error al eliminar el rol',
+        })
+      }
+    } catch (error) {
+      console.error('Error deleting role:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
 
@@ -52,13 +227,48 @@ export default function RolesManagement() {
 
   return (
     <div className="space-y-6">
+      {/* Message Toast */}
+      {message && (
+        <div
+          className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
+            message.type === 'success'
+              ? 'bg-lab-success-50 border border-lab-success-200 text-lab-success-800'
+              : 'bg-lab-danger-50 border border-lab-danger-200 text-lab-danger-800'
+          }`}
+        >
+          <div className="flex items-center space-x-2">
+            {message.type === 'success' ? (
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            )}
+            <p className="font-medium">{message.text}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Roles</h1>
           <p className="text-lab-neutral-600 mt-1">Administra los roles y permisos del sistema</p>
         </div>
-        <Button className="bg-lab-primary-600 hover:bg-lab-primary-700">
+        <Button
+          onClick={() => handleOpenModal()}
+          className="bg-lab-primary-600 hover:bg-lab-primary-700"
+        >
           <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
@@ -180,11 +390,29 @@ export default function RolesManagement() {
                     {new Date(role.fecha_creacion).toLocaleDateString('es-ES')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <Button variant="ghost" size="sm">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                    </Button>
+                    <div className="flex items-center justify-end space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenModal(role)}
+                        title="Editar rol"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(role.codigo_rol, role.nombre)}
+                        className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                        title="Eliminar rol"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -192,6 +420,132 @@ export default function RolesManagement() {
           </table>
         </div>
       </div>
+
+      {/* Modal for Create/Edit Role */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              onClick={handleCloseModal}
+            ></div>
+
+            {/* Modal panel */}
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <form onSubmit={handleSubmit}>
+                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-medium text-lab-neutral-900">
+                      {editingRole ? 'Editar Rol' : 'Nuevo Rol'}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="text-lab-neutral-400 hover:text-lab-neutral-600"
+                    >
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Nombre */}
+                    <div>
+                      <label htmlFor="nombre" className="block text-sm font-medium text-lab-neutral-700">
+                        Nombre del Rol <span className="text-lab-danger-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="nombre"
+                        name="nombre"
+                        value={formData.nombre}
+                        onChange={handleInputChange}
+                        required
+                        minLength={2}
+                        maxLength={50}
+                        className="mt-1 block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:outline-none focus:ring-1 focus:ring-lab-primary-500"
+                        placeholder="Ej: Administrador, Recepcionista, etc."
+                      />
+                    </div>
+
+                    {/* Descripción */}
+                    <div>
+                      <label htmlFor="descripcion" className="block text-sm font-medium text-lab-neutral-700">
+                        Descripción
+                      </label>
+                      <textarea
+                        id="descripcion"
+                        name="descripcion"
+                        value={formData.descripcion}
+                        onChange={handleInputChange}
+                        rows={3}
+                        maxLength={500}
+                        className="mt-1 block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:outline-none focus:ring-1 focus:ring-lab-primary-500"
+                        placeholder="Descripción del rol y sus responsabilidades"
+                      />
+                    </div>
+
+                    {/* Nivel de Acceso */}
+                    <div>
+                      <label htmlFor="nivel_acceso" className="block text-sm font-medium text-lab-neutral-700">
+                        Nivel de Acceso <span className="text-lab-danger-600">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        id="nivel_acceso"
+                        name="nivel_acceso"
+                        value={formData.nivel_acceso}
+                        onChange={handleInputChange}
+                        required
+                        min={1}
+                        max={10}
+                        className="mt-1 block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:outline-none focus:ring-1 focus:ring-lab-primary-500"
+                      />
+                      <p className="mt-1 text-xs text-lab-neutral-500">
+                        Nivel de 1 a 10 (mayor número = más privilegios)
+                      </p>
+                    </div>
+
+                    {/* Estado */}
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="activo"
+                        name="activo"
+                        checked={formData.activo}
+                        onChange={handleInputChange}
+                        className="h-4 w-4 text-lab-primary-600 focus:ring-lab-primary-500 border-lab-neutral-300 rounded"
+                      />
+                      <label htmlFor="activo" className="ml-2 block text-sm text-lab-neutral-700">
+                        Rol activo
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-lab-neutral-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                  <Button
+                    type="submit"
+                    className="w-full sm:w-auto sm:ml-3 bg-lab-primary-600 hover:bg-lab-primary-700"
+                  >
+                    {editingRole ? 'Actualizar' : 'Crear'} Rol
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCloseModal}
+                    className="mt-3 w-full sm:mt-0 sm:w-auto"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
