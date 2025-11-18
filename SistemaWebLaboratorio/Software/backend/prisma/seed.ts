@@ -176,8 +176,15 @@ async function main() {
     },
   ];
 
-  for (const pacienteData of pacientes) {
+  let testPaciente; // Store reference to first paciente for test data
+  for (let i = 0; i < pacientes.length; i++) {
+    const pacienteData = pacientes[i];
     const paciente = await createUserIfNotExists(pacienteData);
+
+    // Store first paciente for test data
+    if (i === 0) {
+      testPaciente = paciente;
+    }
 
     // Create perfil médico for each paciente
     const existingPerfil = await prisma.perfilMedico.findUnique({
@@ -232,6 +239,24 @@ async function main() {
     activo: true,
   });
   console.log(`✅ Created personal de laboratorio: ${personalLab.email}`);
+
+  // Create médico de prueba
+  const medicoRole = roles.find((r) => r.nombre === 'MEDICO');
+  const medico = await createUserIfNotExists({
+    codigo_rol: medicoRole.codigo_rol,
+    cedula: '1756789012',
+    nombres: 'Dr. Juan Carlos',
+    apellidos: 'Méndez Silva',
+    email: 'medico@lab.com',
+    telefono: '0965432108',
+    fecha_nacimiento: new Date('1980-11-10'),
+    genero: 'Masculino',
+    direccion: 'Av. 10 de Agosto N45-678, Quito',
+    password: 'Medico123!',
+    email_verificado: true,
+    activo: true,
+  });
+  console.log(`✅ Created médico: ${medico.email}`);
 
   // 3. Create sede (location)
   console.log('Creating sede...');
@@ -634,7 +659,7 @@ async function main() {
   const horarios = [];
   const diasSemana = [1, 2, 3, 4, 5]; // Lunes a Viernes
   for (const dia of diasSemana) {
-    const horario = await prisma.horario.upsert({
+    const horario = await prisma.horarioAtencion.upsert({
       where: { codigo_horario: dia },
       update: {},
       create: {
@@ -679,8 +704,8 @@ async function main() {
           fecha: fecha,
           hora_inicio: horario.hora_inicio,
           hora_fin: horario.hora_fin,
-          capacidad: 4,
-          disponibles: 4,
+          cupos_totales: 4,
+          cupos_disponibles: 4,
           activo: true,
         },
       });
@@ -696,7 +721,7 @@ async function main() {
   for (let i = 0; i < Math.min(3, slots.length); i++) {
     const cita = await prisma.cita.create({
       data: {
-        codigo_paciente: paciente.codigo_usuario,
+        codigo_paciente: testPaciente.codigo_usuario,
         codigo_slot: slots[i].codigo_slot,
         estado: i === 0 ? 'CONFIRMADA' : i === 1 ? 'PENDIENTE' : 'COMPLETADA',
         observaciones: `Cita de prueba ${i + 1}`,
@@ -704,10 +729,10 @@ async function main() {
     });
     citas.push(cita);
 
-    // Update slot disponibles
+    // Update slot cupos_disponibles
     await prisma.slot.update({
       where: { codigo_slot: slots[i].codigo_slot },
-      data: { disponibles: slots[i].disponibles - 1 },
+      data: { cupos_disponibles: slots[i].cupos_disponibles - 1 },
     });
   }
   console.log(`✅ Created ${citas.length} citas`);
@@ -719,13 +744,14 @@ async function main() {
   // Cotización 1: Pendiente
   const cotizacion1 = await prisma.cotizacion.create({
     data: {
-      codigo_paciente: paciente.codigo_usuario,
+      codigo_paciente: testPaciente.codigo_usuario,
       numero_cotizacion: `COT-${Date.now()}-001`,
+      fecha_expiracion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días
       subtotal: 30.0,
       descuento: 0.0,
       total: 30.0,
       estado: 'PENDIENTE',
-      items: {
+      detalles: {
         create: [
           {
             codigo_examen: examenesCreados[0].codigo_examen,
@@ -748,13 +774,14 @@ async function main() {
   // Cotización 2: Aprobada
   const cotizacion2 = await prisma.cotizacion.create({
     data: {
-      codigo_paciente: paciente.codigo_usuario,
+      codigo_paciente: testPaciente.codigo_usuario,
       numero_cotizacion: `COT-${Date.now()}-002`,
+      fecha_expiracion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días
       subtotal: 20.0,
       descuento: 2.0,
       total: 18.0,
       estado: 'APROBADA',
-      items: {
+      detalles: {
         create: [
           {
             codigo_examen: examenesCreados[2].codigo_examen,
@@ -769,38 +796,93 @@ async function main() {
   cotizaciones.push(cotizacion2);
   console.log(`✅ Created ${cotizaciones.length} cotizaciones`);
 
-  // 15. Create resultados (results) for testing
+  // 15. Create muestras (samples) for testing
+  console.log('Creating muestras...');
+  const muestras = [];
+
+  // Muestra 1: Para la primera cita completada
+  const muestra1 = await prisma.muestra.create({
+    data: {
+      codigo_paciente: testPaciente.codigo_usuario,
+      codigo_cita: citas[2]?.codigo_cita, // Cita completada
+      id_muestra: `M-${Date.now()}-001`,
+      tipo_muestra: 'Sangre',
+      estado: 'PROCESADA',
+      observaciones: 'Muestra de sangre para hemograma completo',
+      tomada_por: personalLab.codigo_usuario,
+    },
+  });
+  muestras.push(muestra1);
+
+  // Muestra 2: Para otra cita
+  const muestra2 = await prisma.muestra.create({
+    data: {
+      codigo_paciente: testPaciente.codigo_usuario,
+      codigo_cita: citas[1]?.codigo_cita,
+      id_muestra: `M-${Date.now()}-002`,
+      tipo_muestra: 'Sangre',
+      estado: 'PROCESADA',
+      observaciones: 'Muestra de sangre para glucosa',
+      tomada_por: personalLab.codigo_usuario,
+    },
+  });
+  muestras.push(muestra2);
+
+  // Muestra 3: Muestra reciente en proceso
+  const muestra3 = await prisma.muestra.create({
+    data: {
+      codigo_paciente: testPaciente.codigo_usuario,
+      codigo_cita: citas[0]?.codigo_cita,
+      id_muestra: `M-${Date.now()}-003`,
+      tipo_muestra: 'Sangre',
+      estado: 'RECOLECTADA',
+      observaciones: 'Muestra recién tomada',
+      tomada_por: personalLab.codigo_usuario,
+    },
+  });
+  muestras.push(muestra3);
+  console.log(`✅ Created ${muestras.length} muestras`);
+
+  // 16. Create resultados (results) for testing
   console.log('Creating resultados...');
   const resultados = [];
 
-  // Resultado 1: Normal
+  // Resultado 1: Normal - Hemoglobina
   const resultado1 = await prisma.resultado.create({
     data: {
-      codigo_paciente: paciente.codigo_usuario,
+      codigo_muestra: muestra1.codigo_muestra,
       codigo_examen: examenesCreados[0].codigo_examen,
       fecha_resultado: new Date(),
-      valor_obtenido: '14.5 g/dL',
+      valor_texto: '14.5 g/dL',
       valor_numerico: 14.5,
+      unidad_medida: 'g/dL',
+      dentro_rango_normal: true,
       nivel: 'NORMAL',
-      observaciones: 'Hemoglobina dentro de valores normales',
+      observaciones_tecnicas: 'Hemoglobina dentro de valores normales',
       estado: 'VALIDADO',
-      codigo_validado_por: medico.codigo_usuario,
+      validado_por: medico.codigo_usuario,
+      fecha_validacion: new Date(),
+      procesado_por: personalLab.codigo_usuario,
     },
   });
   resultados.push(resultado1);
 
-  // Resultado 2: Alto
+  // Resultado 2: Alto - Glucosa
   const resultado2 = await prisma.resultado.create({
     data: {
-      codigo_paciente: paciente.codigo_usuario,
+      codigo_muestra: muestra2.codigo_muestra,
       codigo_examen: examenesCreados[1].codigo_examen,
       fecha_resultado: new Date(),
-      valor_obtenido: '120 mg/dL',
+      valor_texto: '120 mg/dL',
       valor_numerico: 120.0,
+      unidad_medida: 'mg/dL',
+      dentro_rango_normal: false,
       nivel: 'ALTO',
-      observaciones: 'Glucosa elevada - Requiere seguimiento',
+      observaciones_tecnicas: 'Glucosa elevada - Requiere seguimiento',
       estado: 'VALIDADO',
-      codigo_validado_por: medico.codigo_usuario,
+      validado_por: medico.codigo_usuario,
+      fecha_validacion: new Date(),
+      procesado_por: personalLab.codigo_usuario,
     },
   });
   resultados.push(resultado2);
@@ -808,13 +890,13 @@ async function main() {
   // Resultado 3: En proceso
   const resultado3 = await prisma.resultado.create({
     data: {
-      codigo_paciente: paciente.codigo_usuario,
+      codigo_muestra: muestra3.codigo_muestra,
       codigo_examen: examenesCreados[2].codigo_examen,
       fecha_resultado: new Date(),
-      valor_obtenido: 'Pendiente',
+      valor_texto: 'Pendiente',
       nivel: 'NORMAL',
-      observaciones: null,
       estado: 'EN_PROCESO',
+      procesado_por: personalLab.codigo_usuario,
     },
   });
   resultados.push(resultado3);
