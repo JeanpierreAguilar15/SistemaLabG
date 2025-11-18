@@ -89,7 +89,6 @@ export class AdminController {
   }
 
   @Delete('users/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteUser(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
