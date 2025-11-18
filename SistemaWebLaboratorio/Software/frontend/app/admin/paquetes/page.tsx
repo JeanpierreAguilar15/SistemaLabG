@@ -22,7 +22,7 @@ export default function PackagesManagement() {
   const [packages, setPackages] = useState<Package[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect() => {
+  useEffect(() => {
     loadPackages()
   }, [])
 

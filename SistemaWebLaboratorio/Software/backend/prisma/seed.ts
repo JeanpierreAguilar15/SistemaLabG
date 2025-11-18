@@ -437,6 +437,198 @@ async function main() {
     }),
   ]);
 
+  // 8. Create paquetes de exámenes
+  console.log('Creating paquetes de exámenes...');
+  const examenesCreados = await prisma.examen.findMany({
+    orderBy: { codigo_examen: 'asc' },
+    take: 5,
+  });
+
+  const paquetes = [
+    {
+      nombre: 'Paquete Básico de Salud',
+      descripcion: 'Incluye hemograma completo y glucosa en ayunas',
+      precio_paquete: 18.0, // Descuento del 10% sobre precio individual
+      descuento: 10.0,
+      examenes: [examenesCreados[0].codigo_examen, examenesCreados[1].codigo_examen], // Hemograma + Glucosa
+    },
+    {
+      nombre: 'Paquete Chequeo Completo',
+      descripcion: 'Hemograma, glucosa, perfil lipídico y creatinina',
+      precio_paquete: 48.0, // Descuento del 15% sobre precio individual
+      descuento: 15.0,
+      examenes: [
+        examenesCreados[0].codigo_examen,
+        examenesCreados[1].codigo_examen,
+        examenesCreados[2].codigo_examen,
+        examenesCreados[4].codigo_examen,
+      ], // Hemograma + Glucosa + Perfil Lipídico + Creatinina
+    },
+    {
+      nombre: 'Paquete Pre-Operatorio',
+      descripcion: 'Exámenes requeridos antes de cirugía',
+      precio_paquete: 45.0, // Descuento del 12% sobre precio individual
+      descuento: 12.0,
+      examenes: [
+        examenesCreados[0].codigo_examen,
+        examenesCreados[1].codigo_examen,
+        examenesCreados[3].codigo_examen,
+        examenesCreados[4].codigo_examen,
+      ], // Hemograma + Glucosa + Orina + Creatinina
+    },
+  ];
+
+  for (const paqueteData of paquetes) {
+    const { examenes: examenesIds, ...paqueteInfo } = paqueteData;
+    const paquete = await prisma.paquete.upsert({
+      where: { codigo_paquete: paquetes.indexOf(paqueteData) + 1 },
+      update: {},
+      create: paqueteInfo,
+    });
+
+    // Relacionar exámenes con el paquete
+    for (const codigo_examen of examenesIds) {
+      await prisma.paqueteExamen.upsert({
+        where: {
+          codigo_paquete_examen: paquete.codigo_paquete * 100 + codigo_examen,
+        },
+        update: {},
+        create: {
+          codigo_paquete: paquete.codigo_paquete,
+          codigo_examen: codigo_examen,
+        },
+      });
+    }
+  }
+  console.log(`✅ Created ${paquetes.length} paquetes de exámenes`);
+
+  // 9. Create proveedores
+  console.log('Creating proveedores...');
+  const proveedores = [
+    {
+      ruc: '1790123456001',
+      razon_social: 'BioLab Ecuador S.A.',
+      nombre_comercial: 'BioLab',
+      telefono: '0223456789',
+      email: 'ventas@biolab.com.ec',
+      direccion: 'Av. De la República N45-123, Quito',
+      activo: true,
+    },
+    {
+      ruc: '1790234567001',
+      razon_social: 'MedSupply Distribuciones Cia. Ltda.',
+      nombre_comercial: 'MedSupply',
+      telefono: '0223456790',
+      email: 'contacto@medsupply.com.ec',
+      direccion: 'Av. 10 de Agosto N34-567, Quito',
+      activo: true,
+    },
+    {
+      ruc: '1790345678001',
+      razon_social: 'Reactivos y Equipos del Ecuador',
+      nombre_comercial: 'Reactivos Ecuador',
+      telefono: '0223456791',
+      email: 'info@reactivosecuador.com',
+      direccion: 'Av. Amazonas N23-890, Quito',
+      activo: true,
+    },
+  ];
+
+  for (const proveedorData of proveedores) {
+    await prisma.proveedor.upsert({
+      where: { ruc: proveedorData.ruc },
+      update: {},
+      create: proveedorData,
+    });
+  }
+  console.log(`✅ Created ${proveedores.length} proveedores`);
+
+  // 10. Create items de inventario
+  console.log('Creating items de inventario...');
+  const categoriaReactivos = await prisma.categoriaItem.findUnique({
+    where: { nombre: 'Reactivos' },
+  });
+  const categoriaInsumos = await prisma.categoriaItem.findUnique({
+    where: { nombre: 'Insumos' },
+  });
+
+  const items = [
+    {
+      codigo_interno: 'REAC-001',
+      nombre: 'Reactivo para Glucosa (500ml)',
+      descripcion: 'Reactivo enzimático para determinación de glucosa',
+      unidad_medida: 'Frasco',
+      stock_actual: 15,
+      stock_minimo: 5,
+      stock_maximo: 30,
+      costo_unitario: 45.0,
+      precio_venta: 60.0,
+      codigo_categoria: categoriaReactivos.codigo_categoria,
+      activo: true,
+    },
+    {
+      codigo_interno: 'REAC-002',
+      nombre: 'Kit Hemograma Automatizado',
+      descripcion: 'Kit de 100 determinaciones para hemograma',
+      unidad_medida: 'Kit',
+      stock_actual: 8,
+      stock_minimo: 3,
+      stock_maximo: 15,
+      costo_unitario: 120.0,
+      precio_venta: 150.0,
+      codigo_categoria: categoriaReactivos.codigo_categoria,
+      activo: true,
+    },
+    {
+      codigo_interno: 'INSU-001',
+      nombre: 'Tubos Vacutainer EDTA (100 unidades)',
+      descripcion: 'Tubos con anticoagulante EDTA para hematología',
+      unidad_medida: 'Caja',
+      stock_actual: 25,
+      stock_minimo: 10,
+      stock_maximo: 50,
+      costo_unitario: 15.0,
+      precio_venta: 20.0,
+      codigo_categoria: categoriaInsumos.codigo_categoria,
+      activo: true,
+    },
+    {
+      codigo_interno: 'INSU-002',
+      nombre: 'Agujas Vacutainer 21G (100 unidades)',
+      descripcion: 'Agujas estériles para extracción de sangre',
+      unidad_medida: 'Caja',
+      stock_actual: 30,
+      stock_minimo: 15,
+      stock_maximo: 60,
+      costo_unitario: 8.0,
+      precio_venta: 12.0,
+      codigo_categoria: categoriaInsumos.codigo_categoria,
+      activo: true,
+    },
+    {
+      codigo_interno: 'INSU-003',
+      nombre: 'Recipientes para Orina (50 unidades)',
+      descripcion: 'Recipientes estériles para recolección de orina',
+      unidad_medida: 'Caja',
+      stock_actual: 20,
+      stock_minimo: 8,
+      stock_maximo: 40,
+      costo_unitario: 5.0,
+      precio_venta: 8.0,
+      codigo_categoria: categoriaInsumos.codigo_categoria,
+      activo: true,
+    },
+  ];
+
+  for (const itemData of items) {
+    await prisma.item.upsert({
+      where: { codigo_interno: itemData.codigo_interno },
+      update: {},
+      create: itemData,
+    });
+  }
+  console.log(`✅ Created ${items.length} items de inventario`);
+
   console.log('✅ Seed completed successfully!');
 }
 
