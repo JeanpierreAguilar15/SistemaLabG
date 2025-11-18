@@ -26,7 +26,13 @@ export default function LoginPage() {
     try {
       const data = await authApi.login(identifier, password)
       setAuth(data.user, data.access_token, data.refresh_token)
-      router.push('/portal')
+
+      // Redirigir según el rol del usuario
+      if (data.user.rol === 'ADMIN') {
+        router.push('/admin')
+      } else {
+        router.push('/portal')
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)

@@ -28,8 +28,15 @@ export default function PortalLayout({
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/auth/login')
+      return
     }
-  }, [isAuthenticated, router])
+
+    // Si es admin, redirigir al panel de administración
+    if (user?.rol === 'ADMIN') {
+      router.push('/admin')
+      return
+    }
+  }, [isAuthenticated, user, router])
 
   const handleLogout = () => {
     clearAuth()
