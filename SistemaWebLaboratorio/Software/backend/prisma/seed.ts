@@ -3,6 +3,14 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+// Helper function to create time from HH:MM:SS string
+function createTime(timeString: string): Date {
+  const [hours, minutes, seconds] = timeString.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes, seconds || 0, 0);
+  return date;
+}
+
 async function main() {
   console.log('🌱 Seeding database...');
 
@@ -666,8 +674,8 @@ async function main() {
         codigo_servicio: servicios[0].codigo_servicio, // Toma de Muestras
         codigo_sede: sede.codigo_sede,
         dia_semana: dia,
-        hora_inicio: '08:00:00',
-        hora_fin: '16:00:00',
+        hora_inicio: createTime('08:00:00'),
+        hora_fin: createTime('16:00:00'),
         activo: true,
       },
     });
@@ -688,15 +696,15 @@ async function main() {
     if (diaSemana === 0 || diaSemana === 6) continue;
 
     // Create slots for morning and afternoon
-    const horarios = [
-      { hora_inicio: '08:00:00', hora_fin: '09:00:00' },
-      { hora_inicio: '09:00:00', hora_fin: '10:00:00' },
-      { hora_inicio: '10:00:00', hora_fin: '11:00:00' },
-      { hora_inicio: '14:00:00', hora_fin: '15:00:00' },
-      { hora_inicio: '15:00:00', hora_fin: '16:00:00' },
+    const horariosSlots = [
+      { hora_inicio: createTime('08:00:00'), hora_fin: createTime('09:00:00') },
+      { hora_inicio: createTime('09:00:00'), hora_fin: createTime('10:00:00') },
+      { hora_inicio: createTime('10:00:00'), hora_fin: createTime('11:00:00') },
+      { hora_inicio: createTime('14:00:00'), hora_fin: createTime('15:00:00') },
+      { hora_inicio: createTime('15:00:00'), hora_fin: createTime('16:00:00') },
     ];
 
-    for (const horario of horarios) {
+    for (const horario of horariosSlots) {
       const slot = await prisma.slot.create({
         data: {
           codigo_servicio: servicios[0].codigo_servicio,
