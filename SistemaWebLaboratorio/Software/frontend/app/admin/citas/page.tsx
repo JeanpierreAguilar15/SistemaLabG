@@ -37,11 +37,24 @@ export default function CitasAdminPage() {
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('TODAS')
   const [searchTerm, setSearchTerm] = useState('')
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [selectedCita, setSelectedCita] = useState<Cita | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     loadCitas()
   }, [filtro])
+
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage(null)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
 
   const loadCitas = async () => {
     try {
@@ -101,6 +114,73 @@ export default function CitasAdminPage() {
     }
   }
 
+  const handleViewDetails = (cita: Cita) => {
+    setSelectedCita(cita)
+    setShowDetailModal(true)
+  }
+
+  const handleEdit = (cita: Cita) => {
+    setSelectedCita(cita)
+    setShowEditModal(true)
+  }
+
+  const handleCancelCita = (cita: Cita) => {
+    setSelectedCita(cita)
+    setShowCancelModal(true)
+  }
+
+  const confirmCancel = async (motivoCancelacion: string) => {
+    if (!selectedCita) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/admin/citas/${selectedCita.codigo_cita}/cancel`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ motivo_cancelacion: motivoCancelacion }),
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cita cancelada exitosamente' })
+        loadCitas()
+        setShowCancelModal(false)
+        setSelectedCita(null)
+      } else {
+        setMessage({ type: 'error', text: 'Error al cancelar cita' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al cancelar cita' })
+    }
+  }
+
+  const handleSaveEdit = async (estado: string, observaciones: string) => {
+    if (!selectedCita) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/admin/citas/${selectedCita.codigo_cita}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ estado, observaciones }),
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cita actualizada exitosamente' })
+        loadCitas()
+        setShowEditModal(false)
+        setSelectedCita(null)
+      } else {
+        setMessage({ type: 'error', text: 'Error al actualizar cita' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al actualizar cita' })
+    }
+  }
+
   const filteredCitas = citas.filter((cita) => {
     const matchSearch =
       searchTerm === '' ||
@@ -147,13 +227,18 @@ export default function CitasAdminPage() {
       {/* Message */}
       {message && (
         <div
-          className={`p-4 rounded-lg ${
+          className={`p-4 rounded-lg flex justify-between items-center ${
             message.type === 'success'
               ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
               : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
           }`}
         >
-          {message.text}
+          <span>{message.text}</span>
+          <button onClick={() => setMessage(null)} className="ml-4 hover:opacity-70">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -231,25 +316,22 @@ export default function CitasAdminPage() {
                     </td>
                     <td className="p-4 text-sm text-lab-neutral-600">{cita.paciente.telefono || 'N/A'}</td>
                     <td className="p-4 text-right">
-                      <div className="flex justify-end space-x-2">
-                        {cita.estado === 'PENDIENTE' && (
-                          <Button size="sm" onClick={() => handleConfirm(cita.codigo_cita)}>
-                            Confirmar
+                      <div className="flex justify-end space-x-2 flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleViewDetails(cita)}>
+                          Ver
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleEdit(cita)}>
+                          Editar
+                        </Button>
+                        {cita.estado !== 'CANCELADA' && cita.estado !== 'COMPLETADA' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-lab-danger-600 hover:bg-lab-danger-50"
+                            onClick={() => handleCancelCita(cita)}
+                          >
+                            Cancelar
                           </Button>
-                        )}
-                        {cita.estado === 'CONFIRMADA' && (
-                          <>
-                            <Button size="sm" onClick={() => handleUpdateEstado(cita.codigo_cita, 'COMPLETADA')}>
-                              Completar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleUpdateEstado(cita.codigo_cita, 'NO_ASISTIO')}
-                            >
-                              No Asistió
-                            </Button>
-                          </>
                         )}
                       </div>
                     </td>
@@ -264,6 +346,249 @@ export default function CitasAdminPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Detail Modal */}
+      {showDetailModal && selectedCita && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-2xl w-full">
+            <div className="p-6 border-b border-lab-neutral-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-lab-neutral-900">Detalles de la Cita</h2>
+                <button
+                  onClick={() => {
+                    setShowDetailModal(false)
+                    setSelectedCita(null)
+                  }}
+                  className="text-lab-neutral-400 hover:text-lab-neutral-600"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Patient Info */}
+              <div className="bg-lab-neutral-50 p-4 rounded-lg">
+                <p className="text-sm text-lab-neutral-600 mb-1">Paciente</p>
+                <p className="font-semibold text-lab-neutral-900">
+                  {selectedCita.paciente.nombres} {selectedCita.paciente.apellidos}
+                </p>
+                <p className="text-sm text-lab-neutral-600">{selectedCita.paciente.email}</p>
+                <p className="text-sm text-lab-neutral-600">{selectedCita.paciente.telefono || 'Sin teléfono'}</p>
+              </div>
+
+              {/* Appointment Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-lab-neutral-50 p-4 rounded-lg">
+                  <p className="text-sm text-lab-neutral-600 mb-1">Fecha</p>
+                  <p className="font-semibold text-lab-neutral-900">{formatDate(new Date(selectedCita.slot.fecha))}</p>
+                </div>
+                <div className="bg-lab-neutral-50 p-4 rounded-lg">
+                  <p className="text-sm text-lab-neutral-600 mb-1">Hora</p>
+                  <p className="font-semibold text-lab-neutral-900">
+                    {selectedCita.slot.hora_inicio} - {selectedCita.slot.hora_fin}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-lab-neutral-50 p-4 rounded-lg">
+                <p className="text-sm text-lab-neutral-600 mb-1">Servicio</p>
+                <p className="font-semibold text-lab-neutral-900">{selectedCita.slot.servicio.nombre}</p>
+              </div>
+
+              <div className="bg-lab-neutral-50 p-4 rounded-lg">
+                <p className="text-sm text-lab-neutral-600 mb-1">Estado</p>
+                <span className={`text-sm px-3 py-1 rounded ${getEstadoBadge(selectedCita.estado)}`}>
+                  {selectedCita.estado}
+                </span>
+              </div>
+
+              {selectedCita.observaciones && (
+                <div className="bg-lab-neutral-50 p-4 rounded-lg">
+                  <p className="text-sm text-lab-neutral-600 mb-1">Observaciones</p>
+                  <p className="text-sm text-lab-neutral-900">{selectedCita.observaciones}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && selectedCita && (
+        <EditCitaModal
+          cita={selectedCita}
+          onClose={() => {
+            setShowEditModal(false)
+            setSelectedCita(null)
+          }}
+          onSave={handleSaveEdit}
+        />
+      )}
+
+      {/* Cancel Modal */}
+      {showCancelModal && selectedCita && (
+        <CancelCitaModal
+          cita={selectedCita}
+          onClose={() => {
+            setShowCancelModal(false)
+            setSelectedCita(null)
+          }}
+          onConfirm={confirmCancel}
+        />
+      )}
+    </div>
+  )
+}
+
+// Edit Cita Modal Component
+function EditCitaModal({
+  cita,
+  onClose,
+  onSave,
+}: {
+  cita: Cita
+  onClose: () => void
+  onSave: (estado: string, observaciones: string) => void
+}) {
+  const [estado, setEstado] = useState(cita.estado)
+  const [observaciones, setObservaciones] = useState(cita.observaciones || '')
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(estado, observaciones)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-2xl w-full">
+        <div className="p-6 border-b border-lab-neutral-200">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold text-lab-neutral-900">Editar Cita</h2>
+            <button onClick={onClose} className="text-lab-neutral-400 hover:text-lab-neutral-600">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Patient Info (readonly) */}
+          <div className="bg-lab-neutral-50 p-4 rounded-lg">
+            <p className="text-sm text-lab-neutral-600">Paciente</p>
+            <p className="font-semibold text-lab-neutral-900">
+              {cita.paciente.nombres} {cita.paciente.apellidos}
+            </p>
+            <p className="text-sm text-lab-neutral-600">
+              {formatDate(new Date(cita.slot.fecha))} - {cita.slot.hora_inicio} a {cita.slot.hora_fin}
+            </p>
+          </div>
+
+          {/* Estado */}
+          <div className="space-y-2">
+            <Label htmlFor="estado">Estado</Label>
+            <select
+              id="estado"
+              value={estado}
+              onChange={(e) => setEstado(e.target.value)}
+              className="w-full h-10 px-3 rounded-md border border-lab-neutral-300"
+              required
+            >
+              <option value="PENDIENTE">Pendiente</option>
+              <option value="CONFIRMADA">Confirmada</option>
+              <option value="COMPLETADA">Completada</option>
+              <option value="CANCELADA">Cancelada</option>
+              <option value="NO_ASISTIO">No Asistió</option>
+            </select>
+          </div>
+
+          {/* Observaciones */}
+          <div className="space-y-2">
+            <Label htmlFor="observaciones">Observaciones</Label>
+            <textarea
+              id="observaciones"
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              className="w-full min-h-[100px] px-3 py-2 rounded-md border border-lab-neutral-300"
+              placeholder="Notas adicionales sobre la cita..."
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end space-x-3 pt-4 border-t border-lab-neutral-200">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit">Guardar Cambios</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Cancel Cita Modal Component
+function CancelCitaModal({
+  cita,
+  onClose,
+  onConfirm,
+}: {
+  cita: Cita
+  onClose: () => void
+  onConfirm: (motivo: string) => void
+}) {
+  const [motivo, setMotivo] = useState('')
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (motivo.trim()) {
+      onConfirm(motivo)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-md w-full">
+        <div className="p-6 border-b border-lab-neutral-200">
+          <h2 className="text-xl font-bold text-lab-neutral-900">Cancelar Cita</h2>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="bg-lab-neutral-50 p-4 rounded-lg">
+            <p className="text-sm text-lab-neutral-600">Paciente</p>
+            <p className="font-semibold text-lab-neutral-900">
+              {cita.paciente.nombres} {cita.paciente.apellidos}
+            </p>
+            <p className="text-sm text-lab-neutral-600">
+              {formatDate(new Date(cita.slot.fecha))} - {cita.slot.hora_inicio}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="motivo">Motivo de Cancelación *</Label>
+            <textarea
+              id="motivo"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              className="w-full min-h-[100px] px-3 py-2 rounded-md border border-lab-neutral-300"
+              placeholder="Explique el motivo de la cancelación..."
+              required
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4 border-t border-lab-neutral-200">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Volver
+            </Button>
+            <Button type="submit" className="bg-lab-danger-600 hover:bg-lab-danger-700">
+              Confirmar Cancelación
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
