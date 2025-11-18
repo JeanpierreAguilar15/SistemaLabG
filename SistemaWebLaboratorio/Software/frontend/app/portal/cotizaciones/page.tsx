@@ -146,7 +146,7 @@ export default function CotizacionesPage() {
       newMap.set(examen.codigo_examen, {
         ...examen,
         cantidad: 1,
-        subtotal: examen.precio_actual,
+        subtotal: examen.precio_actual || 0,
       })
     }
 
@@ -163,7 +163,7 @@ export default function CotizacionesPage() {
       newMap.set(codigo_examen, {
         ...examen,
         cantidad,
-        subtotal: examen.precio_actual * cantidad,
+        subtotal: (examen.precio_actual || 0) * cantidad,
       })
       setExamenesSeleccionados(newMap)
     }
@@ -411,7 +411,9 @@ export default function CotizacionesPage() {
                             )}
                           </div>
                           <div className="text-right">
-                            <p className="font-bold text-lab-neutral-900">${examen.precio_actual.toFixed(2)}</p>
+                            <p className="font-bold text-lab-neutral-900">
+                              ${(examen.precio_actual || 0).toFixed(2)}
+                            </p>
                             {isSelected && (
                               <div className="flex items-center space-x-1 mt-2">
                                 <button
@@ -465,7 +467,7 @@ export default function CotizacionesPage() {
                         <div className="flex-1">
                           <p className="font-medium text-lab-neutral-900">{examen.nombre}</p>
                           <p className="text-lab-neutral-600">
-                            {examen.cantidad} x ${examen.precio_actual.toFixed(2)}
+                            {examen.cantidad} x ${(examen.precio_actual || 0).toFixed(2)}
                           </p>
                         </div>
                         <p className="font-semibold">${examen.subtotal.toFixed(2)}</p>
