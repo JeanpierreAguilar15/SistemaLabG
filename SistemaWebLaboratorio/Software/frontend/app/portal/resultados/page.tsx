@@ -11,20 +11,28 @@ import { formatDate } from '@/lib/utils'
 interface Resultado {
   codigo_resultado: number
   codigo_muestra: number
-  id_muestra: string
-  examen: string
-  categoria: string
   fecha_resultado: string
   estado: string
-  valor_numerico?: number
-  valor_texto?: string
-  unidad_medida?: string
-  nivel?: string
+  valor_numerico?: number | null
+  valor_texto?: string | null
+  unidad_medida?: string | null
+  nivel?: string | null
   dentro_rango_normal?: boolean
-  valor_referencia_min?: number
-  valor_referencia_max?: number
-  url_pdf?: string
-  codigo_verificacion?: string
+  valor_referencia_min?: number | null
+  valor_referencia_max?: number | null
+  url_pdf?: string | null
+  codigo_verificacion?: string | null
+  examen: {
+    codigo_examen: number
+    nombre: string
+    codigo_interno: string
+  }
+  muestra: {
+    codigo_muestra: number
+    id_muestra: string
+    fecha_toma: string
+    tipo_muestra: string | null
+  }
 }
 
 export default function ResultadosPage() {
@@ -79,8 +87,8 @@ export default function ResultadosPage() {
     if (searchTerm) {
       filtered = filtered.filter(
         (r) =>
-          r.examen.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          r.id_muestra.toLowerCase().includes(searchTerm.toLowerCase())
+          r.examen.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          r.muestra.id_muestra.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
@@ -120,7 +128,7 @@ export default function ResultadosPage() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `resultado_${resultado.id_muestra}_${resultado.examen}.pdf`
+        a.download = `resultado_${resultado.muestra.id_muestra}_${resultado.examen.nombre}.pdf`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
@@ -384,9 +392,9 @@ export default function ResultadosPage() {
                     <div className="flex-1">
                       <div className="flex items-start justify-between">
                         <div>
-                          <h4 className="font-semibold text-lab-neutral-900">{resultado.examen}</h4>
+                          <h4 className="font-semibold text-lab-neutral-900">{resultado.examen.nombre}</h4>
                           <p className="text-sm text-lab-neutral-600 mt-1">
-                            Muestra: {resultado.id_muestra} • {resultado.categoria}
+                            Código: {resultado.examen.codigo_interno} • Muestra: {resultado.muestra.id_muestra}
                           </p>
                           <p className="text-sm text-lab-neutral-500">
                             {formatDate(new Date(resultado.fecha_resultado))}
@@ -470,15 +478,15 @@ export default function ResultadosPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-lab-neutral-600">Examen</p>
-                    <p className="font-semibold text-lab-neutral-900">{selectedResultado.examen}</p>
+                    <p className="font-semibold text-lab-neutral-900">{selectedResultado.examen.nombre}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-lab-neutral-600">Categoría</p>
-                    <p className="font-semibold text-lab-neutral-900">{selectedResultado.categoria}</p>
+                    <p className="text-sm text-lab-neutral-600">Código</p>
+                    <p className="font-semibold text-lab-neutral-900">{selectedResultado.examen.codigo_interno}</p>
                   </div>
                   <div>
                     <p className="text-sm text-lab-neutral-600">ID Muestra</p>
-                    <p className="font-semibold text-lab-neutral-900">{selectedResultado.id_muestra}</p>
+                    <p className="font-semibold text-lab-neutral-900">{selectedResultado.muestra.id_muestra}</p>
                   </div>
                   <div>
                     <p className="text-sm text-lab-neutral-600">Fecha</p>
