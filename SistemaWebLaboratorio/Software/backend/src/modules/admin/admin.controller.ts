@@ -463,6 +463,27 @@ export class AdminController {
     return this.adminService.getKardexByItem(itemId, fecha_desde, fecha_hasta);
   }
 
+  // ==================== ALERTAS DE STOCK ====================
+
+  @Get('inventory/alertas')
+  async getAlertasStock(
+    @Query('tipo') tipo?: string,
+    @Query('codigo_item') codigo_item?: string,
+    @Query('activo') activo?: string,
+  ) {
+    const filters: any = {};
+    if (tipo) filters.tipo = tipo;
+    if (codigo_item) filters.codigo_item = parseInt(codigo_item);
+    if (activo) filters.activo = activo;
+
+    return this.adminService.getAlertasStock(filters);
+  }
+
+  @Get('inventory/alertas/estadisticas')
+  async getEstadisticasAlertas() {
+    return this.adminService.getEstadisticasAlertas();
+  }
+
   // ==================== PROVEEDORES ====================
 
   @Get('suppliers')

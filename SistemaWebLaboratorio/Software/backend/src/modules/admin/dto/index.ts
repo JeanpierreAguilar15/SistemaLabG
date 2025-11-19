@@ -30,3 +30,6 @@ export * from './supplier.dto';
 
 // Movimiento DTOs
 export * from './movimiento.dto';
+
+// Alerta Stock DTOs
+export * from './alerta-stock.dto';

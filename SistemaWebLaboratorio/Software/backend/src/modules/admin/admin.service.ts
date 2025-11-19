@@ -1579,6 +1579,217 @@ export class AdminService {
     };
   }
 
+  // ==================== ALERTAS DE STOCK ====================
+
+  /**
+   * Obtener todas las alertas de stock activas
+   * Incluye: stock bajo, stock crítico, próximos a vencer, vencidos
+   */
+  async getAlertasStock(filters?: {
+    tipo?: string;
+    codigo_item?: number;
+    activo?: string;
+  }) {
+    const alertas: any[] = [];
+
+    // Condiciones de filtro
+    const whereItem: any = {};
+    if (filters?.codigo_item) {
+      whereItem.codigo_item = filters.codigo_item;
+    }
+    if (filters?.activo !== undefined) {
+      whereItem.activo = filters.activo === 'true';
+    }
+
+    // 1. ALERTAS DE STOCK BAJO Y CRÍTICO
+    if (
+      !filters?.tipo ||
+      filters.tipo === 'STOCK_BAJO' ||
+      filters.tipo === 'STOCK_CRITICO'
+    ) {
+      const items = await this.prisma.item.findMany({
+        where: {
+          ...whereItem,
+          activo: true,
+        },
+        select: {
+          codigo_item: true,
+          codigo_interno: true,
+          nombre: true,
+          stock_actual: true,
+          stock_minimo: true,
+          stock_maximo: true,
+          unidad_medida: true,
+        },
+      });
+
+      items.forEach((item) => {
+        // Stock crítico (0)
+        if (item.stock_actual === 0) {
+          alertas.push({
+            codigo_item: item.codigo_item,
+            codigo_interno: item.codigo_interno,
+            nombre: item.nombre,
+            stock_actual: item.stock_actual,
+            stock_minimo: item.stock_minimo,
+            stock_maximo: item.stock_maximo,
+            unidad_medida: item.unidad_medida,
+            tipo_alerta: 'STOCK_CRITICO',
+            mensaje: `Sin stock disponible`,
+            prioridad: 'CRITICA',
+          });
+        }
+        // Stock bajo (menor al mínimo pero no 0)
+        else if (item.stock_actual <= item.stock_minimo) {
+          const diferencia = item.stock_minimo - item.stock_actual;
+          alertas.push({
+            codigo_item: item.codigo_item,
+            codigo_interno: item.codigo_interno,
+            nombre: item.nombre,
+            stock_actual: item.stock_actual,
+            stock_minimo: item.stock_minimo,
+            stock_maximo: item.stock_maximo,
+            unidad_medida: item.unidad_medida,
+            tipo_alerta: 'STOCK_BAJO',
+            mensaje: `Stock bajo: ${item.stock_actual} ${item.unidad_medida} (mínimo: ${item.stock_minimo})`,
+            prioridad: diferencia >= 50 ? 'ALTA' : 'MEDIA',
+          });
+        }
+      });
+    }
+
+    // 2. ALERTAS DE PRODUCTOS PRÓXIMOS A VENCER O VENCIDOS
+    if (
+      !filters?.tipo ||
+      filters.tipo === 'PROXIMO_VENCER' ||
+      filters.tipo === 'VENCIDO'
+    ) {
+      const hoy = new Date();
+      const en30Dias = new Date();
+      en30Dias.setDate(en30Dias.getDate() + 30);
+
+      const whereLote: any = {
+        cantidad_actual: { gt: 0 }, // Solo lotes con stock
+      };
+
+      if (filters?.codigo_item) {
+        whereLote.codigo_item = filters.codigo_item;
+      }
+
+      const lotes = await this.prisma.lote.findMany({
+        where: whereLote,
+        include: {
+          item: {
+            select: {
+              codigo_item: true,
+              codigo_interno: true,
+              nombre: true,
+              stock_actual: true,
+              stock_minimo: true,
+              stock_maximo: true,
+              unidad_medida: true,
+              activo: true,
+            },
+          },
+        },
+      });
+
+      lotes.forEach((lote) => {
+        if (!lote.item.activo) return; // Skip inactive items
+
+        if (lote.fecha_vencimiento) {
+          const fechaVencimiento = new Date(lote.fecha_vencimiento);
+          const diasHastaVencimiento = Math.ceil(
+            (fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24),
+          );
+
+          // Vencido
+          if (fechaVencimiento < hoy) {
+            alertas.push({
+              codigo_item: lote.item.codigo_item,
+              codigo_interno: lote.item.codigo_interno,
+              nombre: lote.item.nombre,
+              stock_actual: lote.cantidad_actual,
+              stock_minimo: lote.item.stock_minimo,
+              stock_maximo: lote.item.stock_maximo,
+              unidad_medida: lote.item.unidad_medida,
+              tipo_alerta: 'VENCIDO',
+              mensaje: `Lote ${lote.numero_lote} vencido hace ${Math.abs(diasHastaVencimiento)} días`,
+              prioridad: 'CRITICA',
+              codigo_lote: lote.codigo_lote,
+              numero_lote: lote.numero_lote,
+              fecha_vencimiento: lote.fecha_vencimiento,
+              dias_hasta_vencimiento: diasHastaVencimiento,
+            });
+          }
+          // Próximo a vencer (30 días)
+          else if (fechaVencimiento <= en30Dias) {
+            alertas.push({
+              codigo_item: lote.item.codigo_item,
+              codigo_interno: lote.item.codigo_interno,
+              nombre: lote.item.nombre,
+              stock_actual: lote.cantidad_actual,
+              stock_minimo: lote.item.stock_minimo,
+              stock_maximo: lote.item.stock_maximo,
+              unidad_medida: lote.item.unidad_medida,
+              tipo_alerta: 'PROXIMO_VENCER',
+              mensaje: `Lote ${lote.numero_lote} vence en ${diasHastaVencimiento} días`,
+              prioridad: diasHastaVencimiento <= 7 ? 'ALTA' : diasHastaVencimiento <= 15 ? 'MEDIA' : 'BAJA',
+              codigo_lote: lote.codigo_lote,
+              numero_lote: lote.numero_lote,
+              fecha_vencimiento: lote.fecha_vencimiento,
+              dias_hasta_vencimiento: diasHastaVencimiento,
+            });
+          }
+        }
+      });
+    }
+
+    // Ordenar por prioridad y luego por nombre
+    const prioridadOrden = {
+      CRITICA: 1,
+      ALTA: 2,
+      MEDIA: 3,
+      BAJA: 4,
+    };
+
+    alertas.sort((a, b) => {
+      if (prioridadOrden[a.prioridad] !== prioridadOrden[b.prioridad]) {
+        return prioridadOrden[a.prioridad] - prioridadOrden[b.prioridad];
+      }
+      return a.nombre.localeCompare(b.nombre);
+    });
+
+    return alertas;
+  }
+
+  /**
+   * Obtener estadísticas de alertas
+   */
+  async getEstadisticasAlertas() {
+    const alertas = await this.getAlertasStock();
+
+    const stats = {
+      total: alertas.length,
+      criticas: alertas.filter((a) => a.prioridad === 'CRITICA').length,
+      altas: alertas.filter((a) => a.prioridad === 'ALTA').length,
+      medias: alertas.filter((a) => a.prioridad === 'MEDIA').length,
+      bajas: alertas.filter((a) => a.prioridad === 'BAJA').length,
+      por_tipo: {
+        stock_critico: alertas.filter((a) => a.tipo_alerta === 'STOCK_CRITICO')
+          .length,
+        stock_bajo: alertas.filter((a) => a.tipo_alerta === 'STOCK_BAJO')
+          .length,
+        vencidos: alertas.filter((a) => a.tipo_alerta === 'VENCIDO').length,
+        proximos_vencer: alertas.filter(
+          (a) => a.tipo_alerta === 'PROXIMO_VENCER',
+        ).length,
+      },
+    };
+
+    return stats;
+  }
+
   // ==================== PROVEEDORES ====================
 
   async getAllSuppliers() {
