@@ -57,6 +57,7 @@ export default function ResultadosAdminPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [showPdfPreview, setShowPdfPreview] = useState(false)
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null)
+  const [isEditingPdf, setIsEditingPdf] = useState(false)
 
   useEffect(() => {
     loadResultados()
@@ -115,9 +116,10 @@ export default function ResultadosAdminPage() {
     }
   }
 
-  const handleOpenUploadModal = (codigo_resultado: number) => {
+  const handleOpenUploadModal = (codigo_resultado: number, isEditing: boolean = false) => {
     setUploadResultadoId(codigo_resultado)
     setSelectedFile(null)
+    setIsEditingPdf(isEditing)
     setShowUploadModal(true)
   }
 
@@ -125,6 +127,7 @@ export default function ResultadosAdminPage() {
     setShowUploadModal(false)
     setUploadResultadoId(null)
     setSelectedFile(null)
+    setIsEditingPdf(false)
   }
 
   const handlePreviewPDF = async (codigo_resultado: number) => {
@@ -200,7 +203,10 @@ export default function ResultadosAdminPage() {
       )
 
       if (response.ok) {
-        setMessage({ type: 'success', text: '✅ PDF subido y resultado validado correctamente' })
+        const successMessage = isEditingPdf
+          ? '✅ PDF reemplazado correctamente'
+          : '✅ PDF subido y resultado validado correctamente'
+        setMessage({ type: 'success', text: successMessage })
         handleCloseUploadModal()
         loadResultados()
       } else {
@@ -522,7 +528,7 @@ export default function ResultadosAdminPage() {
                           </Button>
                         )}
 
-                        {/* Con PDF: Mostrar botones de vista previa y descarga */}
+                        {/* Con PDF: Mostrar botones de vista previa, descarga y editar */}
                         {resultado.url_pdf && (
                           <>
                             <Button
@@ -549,6 +555,18 @@ export default function ResultadosAdminPage() {
                               </svg>
                               Descargar
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenUploadModal(resultado.codigo_resultado, true)}
+                              className="text-lab-warning-600 hover:text-lab-warning-700 hover:bg-lab-warning-50"
+                              title="Reemplazar PDF"
+                            >
+                              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Editar
+                            </Button>
                           </>
                         )}
                       </div>
@@ -573,10 +591,12 @@ export default function ResultadosAdminPage() {
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6 border-b border-lab-neutral-200">
               <h2 className="text-2xl font-bold text-lab-neutral-900">
-                Subir PDF de Resultado
+                {isEditingPdf ? 'Reemplazar PDF de Resultado' : 'Subir PDF de Resultado'}
               </h2>
               <p className="text-sm text-lab-neutral-600 mt-2">
-                Sube un archivo PDF procesado externamente. Esto validará automáticamente el resultado.
+                {isEditingPdf
+                  ? 'Selecciona un nuevo archivo PDF para reemplazar el actual. El PDF anterior será eliminado.'
+                  : 'Sube un archivo PDF procesado externamente. Esto validará automáticamente el resultado.'}
               </p>
             </div>
 
@@ -633,7 +653,7 @@ export default function ResultadosAdminPage() {
                   <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
-                  Subir y Validar
+                  {isEditingPdf ? 'Reemplazar PDF' : 'Subir y Validar'}
                 </Button>
               </div>
             </div>
