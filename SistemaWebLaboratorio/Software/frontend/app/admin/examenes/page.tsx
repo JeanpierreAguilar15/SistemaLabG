@@ -254,8 +254,9 @@ export default function ExamenesPage() {
     setShowModal(true)
   }
 
-  const handleDelete = async (codigo_examen: number) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar este examen?')) return
+  const handleToggleActive = async (codigo_examen: number, isActive: boolean) => {
+    const action = isActive ? 'desactivar' : 'activar'
+    if (!confirm(`¿Estás seguro de que deseas ${action} este examen?`)) return
 
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exams/${codigo_examen}`, {
@@ -264,11 +265,11 @@ export default function ExamenesPage() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Examen eliminado correctamente' })
+        setMessage({ type: 'success', text: `Examen ${isActive ? 'desactivado' : 'activado'} correctamente` })
         loadExamenes()
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error al eliminar examen' })
+      setMessage({ type: 'error', text: `Error al ${action} examen` })
     }
   }
 
@@ -410,10 +411,14 @@ export default function ExamenesPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-lab-danger-600 hover:text-lab-danger-700"
-                        onClick={() => handleDelete(examen.codigo_examen)}
+                        className={
+                          examen.activo
+                            ? 'text-lab-danger-600 hover:text-lab-danger-700'
+                            : 'text-lab-success-600 hover:text-lab-success-700'
+                        }
+                        onClick={() => handleToggleActive(examen.codigo_examen, examen.activo)}
                       >
-                        Eliminar
+                        {examen.activo ? 'Desactivar' : 'Activar'}
                       </Button>
                     </td>
                   </tr>

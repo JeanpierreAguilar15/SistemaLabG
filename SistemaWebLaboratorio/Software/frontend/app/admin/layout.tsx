@@ -193,7 +193,7 @@ export default function AdminLayout({
           <div className="px-3 mt-6">
             <Button
               variant="outline"
-              className="w-full justify-start text-white border-lab-primary-700 hover:bg-lab-primary-800"
+              className="w-full justify-start text-white bg-lab-primary-800 border-lab-primary-700 hover:bg-lab-primary-700"
               onClick={handleLogout}
             >
               <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -302,7 +302,7 @@ export default function AdminLayout({
                 <div className="px-3 mt-6">
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-white border-lab-primary-700 hover:bg-lab-primary-800"
+                    className="w-full justify-start text-white bg-lab-primary-800 border-lab-primary-700 hover:bg-lab-primary-700"
                     onClick={handleLogout}
                   >
                     <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

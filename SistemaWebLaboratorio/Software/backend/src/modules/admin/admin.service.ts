@@ -2290,130 +2290,149 @@ export class AdminService {
   // ==================== ESTADÍSTICAS ====================
 
   async getDashboardStats() {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    try {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const [
-      userStats,
-      totalExams,
-      appointmentStats,
-      pendingResults,
-      lowStockItems,
-      revenueStats,
-      quotationStats,
-      recentExams,
-    ] = await Promise.all([
-      // Usuarios (combinado en 1 query)
-      this.prisma.$queryRaw<[{ total: number; active: number }]>`
-        SELECT
-          COUNT(*)::int as total,
-          COUNT(*) FILTER (WHERE activo = true)::int as active
-        FROM usuarios.usuario
-      `.then(result => result[0] || { total: 0, active: 0 }),
+      const [
+        totalUsers,
+        activeUsers,
+        totalExams,
+        totalAppointments,
+        todayAppointments,
+        completedAppointments,
+        pendingResults,
+        lowStockItems,
+        monthlyRevenue,
+        totalRevenue,
+        totalQuotations,
+        approvedQuotations,
+        pendingQuotations,
+        recentExams,
+      ] = await Promise.all([
+        // Usuarios
+        this.prisma.usuario.count(),
+        this.prisma.usuario.count({ where: { activo: true } }),
 
-      // Exámenes activos
-      this.prisma.examen.count({ where: { activo: true } }),
+        // Exámenes
+        this.prisma.examen.count({ where: { activo: true } }),
 
-      // Citas (combinado en 1 query)
-      this.prisma.$queryRaw<[{ total: number; today: number; completed: number }]>`
-        SELECT
-          COUNT(*)::int as total,
-          COUNT(*) FILTER (WHERE s.fecha >= ${startOfDay} AND s.fecha < ${endOfDay})::int as today,
-          COUNT(*) FILTER (WHERE c.estado = 'COMPLETADA')::int as completed
-        FROM agenda.cita c
-        LEFT JOIN agenda.slot s ON c.codigo_slot = s.codigo_slot
-      `.then(result => result[0] || { total: 0, today: 0, completed: 0 }),
+        // Citas
+        this.prisma.cita.count(),
+        this.prisma.cita.count({
+          where: {
+            slot: {
+              fecha: {
+                gte: today,
+                lt: new Date(today.getTime() + 24 * 60 * 60 * 1000),
+              },
+            },
+          },
+        }),
+        this.prisma.cita.count({
+          where: { estado: 'COMPLETADA' },
+        }),
 
-      // Resultados pendientes
-      this.prisma.resultado.count({
-        where: { estado: 'EN_PROCESO' },
-      }),
+        // Resultados pendientes
+        this.prisma.resultado.count({
+          where: { estado: 'EN_PROCESO' },
+        }),
 
-      // Inventario bajo stock
-      this.prisma.$queryRaw<[{ count: number }]>`
-        SELECT COUNT(*)::int as count
-        FROM inventario.item
-        WHERE stock_actual <= stock_minimo AND activo = true
-      `.then(result => result[0]?.count || 0),
+        // Inventario bajo stock (usando raw query porque necesitamos comparar columnas)
+        this.prisma.$queryRaw<[{ count: bigint }]>`
+          SELECT COUNT(*)::int as count
+          FROM inventario.item
+          WHERE activo = true AND stock_actual <= stock_minimo
+        `.then(result => Number(result[0]?.count || 0)).catch(() => 0)
 
-      // Ingresos (combinado en 1 query)
-      this.prisma.$queryRaw<[{ monthly: string; total: string }]>`
-        SELECT
-          COALESCE(SUM(monto) FILTER (WHERE fecha_pago >= ${startOfMonth}), 0)::numeric as monthly,
-          COALESCE(SUM(monto), 0)::numeric as total
-        FROM pagos.pago
-        WHERE estado = 'COMPLETADO'
-      `.then(result => ({
-        monthly: Number(result[0]?.monthly || 0),
-        total: Number(result[0]?.total || 0),
-      })),
+        // Ingresos
+        this.prisma.pago.aggregate({
+          where: {
+            estado: 'COMPLETADO',
+            fecha_pago: { gte: startOfMonth },
+          },
+          _sum: { monto: true },
+        }).then(r => Number(r._sum.monto || 0)),
 
-      // Estadísticas de cotizaciones (combinado en 1 query)
-      this.prisma.$queryRaw<[{ total: number; approved: number; pending: number }]>`
-        SELECT
-          COUNT(*)::int as total,
-          COUNT(*) FILTER (WHERE estado = 'APROBADA')::int as approved,
-          COUNT(*) FILTER (WHERE estado = 'PENDIENTE')::int as pending
-        FROM pagos.cotizacion
-      `.then(result => {
-        const r = result[0] || { total: 0, approved: 0, pending: 0 };
-        return {
-          total: r.total,
-          approved: r.approved,
-          pending: r.pending,
-          conversionRate: r.total > 0 ? Math.round((r.approved / r.total) * 100) : 0,
-        };
-      }),
+        this.prisma.pago.aggregate({
+          where: { estado: 'COMPLETADO' },
+          _sum: { monto: true },
+        }).then(r => Number(r._sum.monto || 0)),
 
-      // Últimos 5 exámenes creados (más simple y rápido)
-      this.prisma.examen.findMany({
-        where: { activo: true },
-        select: {
-          codigo_examen: true,
-          nombre: true,
-          codigo_interno: true,
-          fecha_creacion: true,
+        // Cotizaciones
+        this.prisma.cotizacion.count(),
+        this.prisma.cotizacion.count({ where: { estado: 'APROBADA' } }),
+        this.prisma.cotizacion.count({ where: { estado: 'PENDIENTE' } }),
+
+        // Últimos exámenes
+        this.prisma.examen.findMany({
+          where: { activo: true },
+          select: {
+            codigo_examen: true,
+            nombre: true,
+            codigo_interno: true,
+            fecha_creacion: true,
+          },
+          orderBy: { fecha_creacion: 'desc' },
+          take: 5,
+        }),
+      ]);
+
+      return {
+        users: {
+          total: totalUsers,
+          active: activeUsers,
         },
-        orderBy: { fecha_creacion: 'desc' },
-        take: 5,
-      }),
-    ]);
-
-    return {
-      users: {
-        total: userStats.total,
-        active: userStats.active,
-      },
-      exams: {
-        total: totalExams,
-      },
-      appointments: {
-        total: appointmentStats.total,
-        today: appointmentStats.today,
-        completed: appointmentStats.completed,
-        completionRate: appointmentStats.total > 0
-          ? Math.round((appointmentStats.completed / appointmentStats.total) * 100)
-          : 0,
-      },
-      results: {
-        pending: pendingResults,
-      },
-      inventory: {
-        lowStock: lowStockItems,
-      },
-      revenue: {
-        monthly: revenueStats.monthly,
-        total: revenueStats.total,
-      },
-      quotations: quotationStats,
-      recentExams: recentExams.map(exam => ({
-        code: exam.codigo_interno,
-        name: exam.nombre,
-        date: exam.fecha_creacion,
-      })),
-    };
+        exams: {
+          total: totalExams,
+        },
+        appointments: {
+          total: totalAppointments,
+          today: todayAppointments,
+          completed: completedAppointments,
+          completionRate: totalAppointments > 0
+            ? Math.round((completedAppointments / totalAppointments) * 100)
+            : 0,
+        },
+        results: {
+          pending: pendingResults,
+        },
+        inventory: {
+          lowStock: lowStockItems,
+        },
+        revenue: {
+          monthly: monthlyRevenue,
+          total: totalRevenue,
+        },
+        quotations: {
+          total: totalQuotations,
+          approved: approvedQuotations,
+          pending: pendingQuotations,
+          conversionRate: totalQuotations > 0
+            ? Math.round((approvedQuotations / totalQuotations) * 100)
+            : 0,
+        },
+        recentExams: recentExams.map(exam => ({
+          code: exam.codigo_interno,
+          name: exam.nombre,
+          date: exam.fecha_creacion,
+        })),
+      };
+    } catch (error) {
+      this.logger.error('Error getting dashboard stats:', error);
+      // Retornar estructura vacía en caso de error
+      return {
+        users: { total: 0, active: 0 },
+        exams: { total: 0 },
+        appointments: { total: 0, today: 0, completed: 0, completionRate: 0 },
+        results: { pending: 0 },
+        inventory: { lowStock: 0 },
+        revenue: { monthly: 0, total: 0 },
+        quotations: { total: 0, approved: 0, pending: 0, conversionRate: 0 },
+        recentExams: [],
+      };
+    }
   }
 
   // =====================================================
