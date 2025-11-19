@@ -13,12 +13,14 @@ import {
   HttpStatus,
   ValidationPipe,
   UsePipes,
+  NotFoundException,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { getAllRoleLevels, getPermissionsForLevel } from './constants/role-permissions';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -115,6 +117,20 @@ export class AdminController {
 
   // ==================== ROLES ====================
 
+  @Get('roles/permissions')
+  async getRolePermissions() {
+    return getAllRoleLevels();
+  }
+
+  @Get('roles/permissions/:nivel')
+  async getPermissionsByLevel(@Param('nivel', ParseIntPipe) nivel: number) {
+    const permissions = getPermissionsForLevel(nivel);
+    if (!permissions) {
+      throw new NotFoundException(`No se encontraron permisos para el nivel ${nivel}`);
+    }
+    return permissions;
+  }
+
   @Get('roles')
   async getAllRoles() {
     return this.adminService.getAllRoles();
@@ -144,7 +160,6 @@ export class AdminController {
   }
 
   @Delete('roles/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteRole(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -183,7 +198,6 @@ export class AdminController {
   }
 
   @Delete('services/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteService(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -222,7 +236,6 @@ export class AdminController {
   }
 
   @Delete('locations/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteLocation(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
