@@ -43,6 +43,7 @@ export default function CitasPage() {
   const [citas, setCitas] = useState<Cita[]>([])
   const [showAgendarModal, setShowAgendarModal] = useState(false)
   const [showCancelarModal, setShowCancelarModal] = useState(false)
+  const [showReprogramarModal, setShowReprogramarModal] = useState(false)
   const [selectedCita, setSelectedCita] = useState<Cita | null>(null)
 
   // Para agendar nueva cita
@@ -52,6 +53,11 @@ export default function CitasPage() {
   const [selectedFecha, setSelectedFecha] = useState('')
   const [selectedSlot, setSelectedSlot] = useState('')
   const [observaciones, setObservaciones] = useState('')
+
+  // Para reprogramar
+  const [reprogramarFecha, setReprogramarFecha] = useState('')
+  const [reprogramarSlot, setReprogramarSlot] = useState('')
+  const [slotsReprogramar, setSlotsReprogramar] = useState<Slot[]>([])
 
   // Para cancelar
   const [motivoCancelacion, setMotivoCancelacion] = useState('')
@@ -128,6 +134,37 @@ export default function CitasPage() {
     }
   }, [selectedServicio, selectedFecha])
 
+  useEffect(() => {
+    if (showReprogramarModal && selectedCita && reprogramarFecha) {
+      loadSlotsReprogramar(reprogramarFecha)
+    }
+  }, [reprogramarFecha, showReprogramarModal])
+
+  const loadSlotsReprogramar = async (fecha: string) => {
+    if (!selectedCita) return
+
+    try {
+      // Necesitamos el codigo_servicio de la cita actual
+      // Lo obtendremos del servicio (asumiendo que podemos inferirlo del nombre)
+      // Por ahora usaremos el mismo endpoint pero sin filtrar por servicio
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/agenda/slots/available?fecha=${fecha}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setSlotsReprogramar(data)
+      }
+    } catch (error) {
+      console.error('Error loading slots:', error)
+    }
+  }
+
   const handleAgendarCita = async () => {
     if (!selectedSlot) {
       setMessage({ type: 'error', text: 'Debes seleccionar un horario' })
@@ -175,7 +212,7 @@ export default function CitasPage() {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          motivo: motivoCancelacion,
+          motivo_cancelacion: motivoCancelacion,
         }),
       })
 
@@ -188,6 +225,41 @@ export default function CitasPage() {
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.message || 'Error al cancelar la cita' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleReprogramarCita = async () => {
+    if (!selectedCita || !reprogramarSlot) {
+      setMessage({ type: 'error', text: 'Debes seleccionar un nuevo horario' })
+      return
+    }
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/citas/${selectedCita.codigo_cita}/reschedule`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          codigo_slot: parseInt(reprogramarSlot),
+        }),
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cita reprogramada correctamente' })
+        setShowReprogramarModal(false)
+        setReprogramarFecha('')
+        setReprogramarSlot('')
+        setSlotsReprogramar([])
+        setSelectedCita(null)
+        loadCitas()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al reprogramar la cita' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
@@ -322,17 +394,29 @@ export default function CitasPage() {
                         </Button>
                       )}
                       {cita.estado === 'AGENDADA' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-lab-danger-600 hover:bg-lab-danger-50"
-                          onClick={() => {
-                            setSelectedCita(cita)
-                            setShowCancelarModal(true)
-                          }}
-                        >
-                          Cancelar
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedCita(cita)
+                              setShowReprogramarModal(true)
+                            }}
+                          >
+                            Reprogramar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-lab-danger-600 hover:bg-lab-danger-50"
+                            onClick={() => {
+                              setSelectedCita(cita)
+                              setShowCancelarModal(true)
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -566,6 +650,102 @@ export default function CitasPage() {
                     className="bg-lab-danger-600 hover:bg-lab-danger-700"
                   >
                     Cancelar Cita
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Reprogramar Cita */}
+      {showReprogramarModal && selectedCita && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-lab-neutral-900">Reprogramar Cita</h2>
+                <button
+                  onClick={() => {
+                    setShowReprogramarModal(false)
+                    setReprogramarFecha('')
+                    setReprogramarSlot('')
+                    setSlotsReprogramar([])
+                    setSelectedCita(null)
+                  }}
+                  className="text-lab-neutral-400 hover:text-lab-neutral-600"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="p-4 bg-lab-neutral-50 rounded-lg">
+                  <h4 className="font-semibold text-lab-neutral-900">{selectedCita.servicio}</h4>
+                  <p className="text-sm text-lab-neutral-600 mt-1">
+                    Cita actual: {formatDate(new Date(selectedCita.fecha))} • {selectedCita.hora_inicio} - {selectedCita.hora_fin}
+                  </p>
+                  <p className="text-sm text-lab-neutral-500 mt-1">{selectedCita.sede}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="nueva_fecha">Nueva Fecha *</Label>
+                  <Input
+                    id="nueva_fecha"
+                    type="date"
+                    value={reprogramarFecha}
+                    onChange={(e) => setReprogramarFecha(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+
+                {reprogramarFecha && slotsReprogramar.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Nuevo Horario *</Label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {slotsReprogramar.map((slot) => (
+                        <button
+                          key={slot.codigo_slot}
+                          onClick={() => setReprogramarSlot(slot.codigo_slot.toString())}
+                          className={`p-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                            reprogramarSlot === slot.codigo_slot.toString()
+                              ? 'border-lab-primary-500 bg-lab-primary-50 text-lab-primary-700'
+                              : 'border-lab-neutral-200 hover:border-lab-primary-300'
+                          }`}
+                        >
+                          {slot.hora_inicio}
+                          <span className="block text-xs text-lab-neutral-500 mt-1">
+                            {slot.cupos_disponibles} cupos
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {reprogramarFecha && slotsReprogramar.length === 0 && (
+                  <div className="text-center py-4 text-lab-neutral-500">
+                    No hay horarios disponibles para esta fecha
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowReprogramarModal(false)
+                      setReprogramarFecha('')
+                      setReprogramarSlot('')
+                      setSlotsReprogramar([])
+                      setSelectedCita(null)
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleReprogramarCita} disabled={!reprogramarSlot}>
+                    Confirmar Reprogramación
                   </Button>
                 </div>
               </div>

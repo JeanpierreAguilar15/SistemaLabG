@@ -122,8 +122,8 @@ export default function PackagesManagement() {
       setFormData({
         nombre: pkg.nombre,
         descripcion: pkg.descripcion || '',
-        precio_paquete: pkg.precio_paquete,
-        descuento: pkg.descuento,
+        precio_paquete: String(pkg.precio_paquete || ''),
+        descuento: String(pkg.descuento || '0'),
         activo: pkg.activo,
         examenes: pkg.examenes?.map(e => e.codigo_examen) || [],
       })

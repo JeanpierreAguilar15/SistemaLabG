@@ -25,6 +25,18 @@ interface ExamenSeleccionado extends Examen {
   subtotal: number
 }
 
+interface DetalleCotizacion {
+  codigo_detalle_cotizacion: number
+  cantidad: number
+  precio_unitario: number
+  total_linea: number
+  examen: {
+    codigo_examen: number
+    nombre: string
+    codigo_interno: string
+  }
+}
+
 interface Cotizacion {
   codigo_cotizacion: number
   numero_cotizacion: string
@@ -33,12 +45,7 @@ interface Cotizacion {
   descuento: number
   total: number
   estado: string
-  items: {
-    examen: string
-    cantidad: number
-    precio_unitario: number
-    total_linea: number
-  }[]
+  detalles: DetalleCotizacion[]
 }
 
 export default function CotizacionesPage() {
@@ -545,7 +552,7 @@ export default function CotizacionesPage() {
                     </div>
 
                     <div className="text-sm text-lab-neutral-700 mb-3">
-                      <strong>{cotizacion.items.length}</strong> examen{cotizacion.items.length !== 1 && 'es'}
+                      <strong>{cotizacion.detalles?.length || 0}</strong> examen{(cotizacion.detalles?.length || 0) !== 1 && 'es'}
                     </div>
 
                     <div className="flex items-center justify-between">
@@ -601,7 +608,7 @@ export default function CotizacionesPage() {
                 <div className="p-4 bg-lab-neutral-50 rounded-lg">
                   <h4 className="font-semibold text-lab-neutral-900">{selectedCotizacion.numero_cotizacion}</h4>
                   <p className="text-sm text-lab-neutral-600 mt-1">
-                    {selectedCotizacion.items.length} examen{selectedCotizacion.items.length !== 1 && 'es'} •
+                    {selectedCotizacion.detalles?.length || 0} examen{(selectedCotizacion.detalles?.length || 0) !== 1 && 'es'} •
                     Total: ${(Number(selectedCotizacion.total) || 0).toFixed(2)}
                   </p>
                 </div>
