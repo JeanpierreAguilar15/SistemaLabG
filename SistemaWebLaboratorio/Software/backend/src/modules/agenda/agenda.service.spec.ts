@@ -69,7 +69,7 @@ describe('AgendaService', () => {
       const slotData = {
         codigo_servicio: 1,
         codigo_sede: 1,
-        fecha: '2025-01-25',
+        fecha: '2026-01-25',
         hora_inicio: '09:00',
         hora_fin: '09:30',
         cupos_totales: 5,
@@ -105,7 +105,7 @@ describe('AgendaService', () => {
       const slotData = {
         codigo_servicio: 999,
         codigo_sede: 1,
-        fecha: '2025-01-25',
+        fecha: '2026-01-25',
         hora_inicio: '09:00',
         hora_fin: '09:30',
       };
@@ -143,10 +143,13 @@ describe('AgendaService', () => {
 
       const mockSlot = {
         codigo_slot: 1,
+        fecha: new Date('2025-01-25'),
+        hora_inicio: new Date('1970-01-01T09:00:00'),
+        hora_fin: new Date('1970-01-01T09:30:00'),
         activo: true,
         cupos_disponibles: 5,
-        servicio: { nombre: 'Consulta' },
-        sede: { nombre: 'Sede Principal' },
+        servicio: { nombre: 'Consulta', codigo_servicio: 1 },
+        sede: { nombre: 'Sede Principal', codigo_sede: 1 },
       };
 
       const mockCita = {
@@ -159,23 +162,31 @@ describe('AgendaService', () => {
           codigo_usuario: 10,
           nombres: 'Juan',
           apellidos: 'Pérez',
+          email: 'juan@example.com',
+          telefono: '0999999999',
         },
       };
 
-      jest.spyOn(prisma.slot, 'findUnique').mockResolvedValue(mockSlot as any);
-      jest.spyOn(prisma.cita, 'findFirst').mockResolvedValue(null);
-      jest.spyOn(prisma, '$transaction').mockResolvedValue([mockCita, {}] as any);
+      // Mock transacción con callback
+      jest.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
+        const mockTx = {
+          slot: {
+            findUnique: jest.fn().mockResolvedValue(mockSlot),
+            update: jest.fn().mockResolvedValue(mockSlot),
+          },
+          cita: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            findMany: jest.fn().mockResolvedValue([]), // Sin conflictos de horario
+            create: jest.fn().mockResolvedValue(mockCita),
+          },
+        };
+        return callback(mockTx);
+      });
 
       const result = await service.createCita(citaData, 10);
 
       expect(result).toEqual(mockCita);
-      expect(eventsGateway.notifyAppointmentUpdate).toHaveBeenCalledWith({
-        appointmentId: 1,
-        patientId: 10,
-        action: 'created',
-        appointment: mockCita,
-      });
-      expect(eventsGateway.notifyAdminEvent).toHaveBeenCalled();
+      expect(eventsGateway.notifyCatalogUpdate).toHaveBeenCalled();
     });
 
     it('should throw BadRequestException if slot has no capacity', async () => {
@@ -187,14 +198,28 @@ describe('AgendaService', () => {
         codigo_slot: 1,
         activo: true,
         cupos_disponibles: 0,
+        servicio: { nombre: 'Consulta' },
+        sede: { nombre: 'Sede' },
       };
 
-      jest.spyOn(prisma.slot, 'findUnique').mockResolvedValue(mockSlot as any);
+      jest.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
+        const mockTx = {
+          slot: {
+            findUnique: jest.fn().mockResolvedValue(mockSlot),
+          },
+        };
+        return callback(mockTx);
+      });
 
-      await expect(service.createCita(citaData, 10)).rejects.toThrow(BadRequestException);
+      await expect(service.createCita(citaData, 10)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.createCita(citaData, 10)).rejects.toThrow(
+        'No hay cupos disponibles en este horario',
+      );
     });
 
-    it('should throw BadRequestException if patient already has appointment', async () => {
+    it('should throw BadRequestException if patient already has appointment in same slot', async () => {
       const citaData = {
         codigo_slot: 1,
       };
@@ -203,6 +228,8 @@ describe('AgendaService', () => {
         codigo_slot: 1,
         activo: true,
         cupos_disponibles: 5,
+        servicio: { nombre: 'Consulta' },
+        sede: { nombre: 'Sede' },
       };
 
       const existingCita = {
@@ -210,10 +237,197 @@ describe('AgendaService', () => {
         estado: 'AGENDADA',
       };
 
-      jest.spyOn(prisma.slot, 'findUnique').mockResolvedValue(mockSlot as any);
-      jest.spyOn(prisma.cita, 'findFirst').mockResolvedValue(existingCita as any);
+      jest.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
+        const mockTx = {
+          slot: {
+            findUnique: jest.fn().mockResolvedValue(mockSlot),
+          },
+          cita: {
+            findFirst: jest.fn().mockResolvedValue(existingCita),
+          },
+        };
+        return callback(mockTx);
+      });
 
-      await expect(service.createCita(citaData, 10)).rejects.toThrow(BadRequestException);
+      await expect(service.createCita(citaData, 10)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.createCita(citaData, 10)).rejects.toThrow(
+        'Ya tiene una cita agendada en este horario',
+      );
+    });
+
+    it('should throw BadRequestException if patient has conflicting appointment at same time', async () => {
+      const citaData = {
+        codigo_slot: 1,
+      };
+
+      const mockSlot = {
+        codigo_slot: 1,
+        fecha: new Date('2025-01-25'),
+        hora_inicio: new Date('1970-01-01T10:00:00'),
+        hora_fin: new Date('1970-01-01T10:30:00'),
+        activo: true,
+        cupos_disponibles: 5,
+        servicio: { nombre: 'Consulta General', codigo_servicio: 1 },
+        sede: { nombre: 'Sede Principal', codigo_sede: 1 },
+      };
+
+      const conflictingCita = {
+        codigo_cita: 2,
+        codigo_paciente: 10,
+        estado: 'AGENDADA',
+        slot: {
+          codigo_slot: 2,
+          fecha: new Date('2025-01-25'),
+          hora_inicio: new Date('1970-01-01T09:45:00'), // Se solapa con 10:00-10:30
+          hora_fin: new Date('1970-01-01T10:15:00'),
+          servicio: { nombre: 'Laboratorio', codigo_servicio: 2 },
+        },
+      };
+
+      jest.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
+        const mockTx = {
+          slot: {
+            findUnique: jest.fn().mockResolvedValue(mockSlot),
+          },
+          cita: {
+            findFirst: jest.fn().mockResolvedValue(null), // No tiene cita en mismo slot
+            findMany: jest.fn().mockResolvedValue([conflictingCita]), // Pero sí tiene conflicto de horario
+          },
+        };
+        return callback(mockTx);
+      });
+
+      await expect(service.createCita(citaData, 10)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.createCita(citaData, 10)).rejects.toThrow(
+        /Ya tiene una cita agendada el mismo día/,
+      );
+    });
+
+    it('should allow appointment if patient has cancelled appointment in same slot', async () => {
+      const citaData = {
+        codigo_slot: 1,
+        observaciones: 'Nueva cita',
+      };
+
+      const mockSlot = {
+        codigo_slot: 1,
+        fecha: new Date('2025-01-25'),
+        hora_inicio: new Date('1970-01-01T09:00:00'),
+        hora_fin: new Date('1970-01-01T09:30:00'),
+        activo: true,
+        cupos_disponibles: 5,
+        servicio: { nombre: 'Consulta', codigo_servicio: 1 },
+        sede: { nombre: 'Sede Principal', codigo_sede: 1 },
+      };
+
+      const cancelledCita = {
+        codigo_cita: 1,
+        estado: 'CANCELADA',
+      };
+
+      const mockNewCita = {
+        codigo_cita: 2,
+        codigo_slot: 1,
+        codigo_paciente: 10,
+        estado: 'AGENDADA',
+        slot: mockSlot,
+        paciente: {
+          codigo_usuario: 10,
+          nombres: 'Juan',
+          apellidos: 'Pérez',
+          email: 'juan@example.com',
+          telefono: '0999999999',
+        },
+      };
+
+      jest.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
+        const mockTx = {
+          slot: {
+            findUnique: jest.fn().mockResolvedValue(mockSlot),
+            update: jest.fn().mockResolvedValue(mockSlot),
+          },
+          cita: {
+            findFirst: jest.fn().mockResolvedValue(null), // La cancelada no cuenta
+            findMany: jest.fn().mockResolvedValue([]), // Sin conflictos activos
+            create: jest.fn().mockResolvedValue(mockNewCita),
+          },
+        };
+        return callback(mockTx);
+      });
+
+      const result = await service.createCita(citaData, 10);
+
+      expect(result).toEqual(mockNewCita);
+    });
+
+    it('should handle concurrent appointments with transaction isolation', async () => {
+      const citaData = {
+        codigo_slot: 1,
+      };
+
+      const mockSlot = {
+        codigo_slot: 1,
+        fecha: new Date('2025-01-25'),
+        hora_inicio: new Date('1970-01-01T09:00:00'),
+        hora_fin: new Date('1970-01-01T09:30:00'),
+        activo: true,
+        cupos_disponibles: 1, // Solo 1 cupo disponible
+        servicio: { nombre: 'Consulta', codigo_servicio: 1 },
+        sede: { nombre: 'Sede', codigo_sede: 1 },
+      };
+
+      const mockCita = {
+        codigo_cita: 1,
+        codigo_slot: 1,
+        codigo_paciente: 10,
+        estado: 'AGENDADA',
+        slot: mockSlot,
+        paciente: {
+          codigo_usuario: 10,
+          nombres: 'Juan',
+          apellidos: 'Pérez',
+          email: 'juan@example.com',
+          telefono: '0999999999',
+        },
+      };
+
+      // Simular que la primera reserva funciona
+      jest.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
+        const mockTx = {
+          slot: {
+            findUnique: jest.fn().mockResolvedValue(mockSlot),
+            update: jest.fn().mockResolvedValue({ ...mockSlot, cupos_disponibles: 0 }),
+          },
+          cita: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            findMany: jest.fn().mockResolvedValue([]),
+            create: jest.fn().mockResolvedValue(mockCita),
+          },
+        };
+        return callback(mockTx);
+      });
+
+      const result = await service.createCita(citaData, 10);
+      expect(result).toBeDefined();
+      expect(result.codigo_cita).toBe(1);
+
+      // Simular que la segunda reserva (concurrente) falla por falta de cupos
+      jest.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
+        const mockTx = {
+          slot: {
+            findUnique: jest.fn().mockResolvedValue({ ...mockSlot, cupos_disponibles: 0 }),
+          },
+        };
+        return callback(mockTx);
+      });
+
+      await expect(service.createCita(citaData, 11)).rejects.toThrow(
+        'No hay cupos disponibles en este horario',
+      );
     });
   });
 

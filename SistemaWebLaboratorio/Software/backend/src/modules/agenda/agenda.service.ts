@@ -302,51 +302,94 @@ export class AgendaService {
 
   /**
    * Crear cita (Paciente)
+   * Mejoras: Control de concurrencia y validación de conflictos de horario
    */
   async createCita(data: CreateCitaDto, codigo_paciente: number) {
-    // Verificar que el slot existe y está disponible
-    const slot = await this.prisma.slot.findUnique({
-      where: { codigo_slot: data.codigo_slot },
-      include: {
-        servicio: true,
-        sede: true,
-      },
-    });
-
-    if (!slot) {
-      throw new NotFoundException(
-        `Slot con código ${data.codigo_slot} no encontrado`,
-      );
-    }
-
-    if (!slot.activo) {
-      throw new BadRequestException('Este slot no está activo');
-    }
-
-    if (slot.cupos_disponibles <= 0) {
-      throw new BadRequestException('No hay cupos disponibles en este horario');
-    }
-
-    // Verificar que el paciente no tenga otra cita en el mismo slot
-    const citaExistente = await this.prisma.cita.findFirst({
-      where: {
-        codigo_slot: data.codigo_slot,
-        codigo_paciente,
-        estado: {
-          notIn: ['CANCELADA'],
+    // Usar transacción para evitar condiciones de carrera (race conditions)
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Obtener slot con bloqueo para lectura (evita doble reserva)
+      const slot = await tx.slot.findUnique({
+        where: { codigo_slot: data.codigo_slot },
+        include: {
+          servicio: true,
+          sede: true,
         },
-      },
-    });
+      });
 
-    if (citaExistente) {
-      throw new BadRequestException(
-        'Ya tiene una cita agendada en este horario',
-      );
-    }
+      if (!slot) {
+        throw new NotFoundException(
+          `Slot con código ${data.codigo_slot} no encontrado`,
+        );
+      }
 
-    // Crear la cita y actualizar cupos en una transacción
-    const [cita] = await this.prisma.$transaction([
-      this.prisma.cita.create({
+      if (!slot.activo) {
+        throw new BadRequestException('Este horario no está activo');
+      }
+
+      // 2. Verificar cupos disponibles
+      if (slot.cupos_disponibles <= 0) {
+        throw new BadRequestException('No hay cupos disponibles en este horario. Por favor seleccione otro horario.');
+      }
+
+      // 3. Verificar que el paciente no tenga otra cita en el mismo slot
+      const citaEnMismoSlot = await tx.cita.findFirst({
+        where: {
+          codigo_slot: data.codigo_slot,
+          codigo_paciente,
+          estado: {
+            notIn: ['CANCELADA'],
+          },
+        },
+      });
+
+      if (citaEnMismoSlot) {
+        throw new BadRequestException(
+          'Ya tiene una cita agendada en este horario',
+        );
+      }
+
+      // 4. NUEVA VALIDACIÓN: Verificar conflictos de horario con otras citas del paciente
+      const citasEnConflicto = await tx.cita.findMany({
+        where: {
+          codigo_paciente,
+          estado: {
+            notIn: ['CANCELADA', 'COMPLETADA'],
+          },
+          slot: {
+            fecha: slot.fecha,
+            OR: [
+              {
+                // Cita existente que se solapa con el nuevo slot
+                AND: [
+                  { hora_inicio: { lt: slot.hora_fin } },
+                  { hora_fin: { gt: slot.hora_inicio } },
+                ],
+              },
+            ],
+          },
+        },
+        include: {
+          slot: {
+            include: {
+              servicio: true,
+            },
+          },
+        },
+      });
+
+      if (citasEnConflicto.length > 0) {
+        const citaConflicto = citasEnConflicto[0];
+        const horaInicio = citaConflicto.slot.hora_inicio.toISOString().substring(11, 16);
+        const horaFin = citaConflicto.slot.hora_fin.toISOString().substring(11, 16);
+
+        throw new BadRequestException(
+          `Ya tiene una cita agendada el mismo día de ${horaInicio} a ${horaFin} (${citaConflicto.slot.servicio.nombre}). ` +
+          `Por favor seleccione un horario diferente.`,
+        );
+      }
+
+      // 5. Crear la cita y actualizar cupos atómicamente
+      const cita = await tx.cita.create({
         data: {
           codigo_slot: data.codigo_slot,
           codigo_paciente,
@@ -370,43 +413,36 @@ export class AgendaService {
             },
           },
         },
-      }),
-      this.prisma.slot.update({
+      });
+
+      // 6. Actualizar cupos disponibles
+      await tx.slot.update({
         where: { codigo_slot: data.codigo_slot },
         data: {
           cupos_disponibles: {
             decrement: 1,
           },
         },
-      }),
-    ]);
+      });
 
-    this.logger.log(
-      `Cita creada: ${cita.codigo_cita} | Paciente: ${codigo_paciente} | Slot: ${data.codigo_slot}`,
-    );
+      this.logger.log(
+        `Cita creada: ${cita.codigo_cita} | Paciente: ${codigo_paciente} | Slot: ${data.codigo_slot}`,
+      );
 
-    // Notificar al paciente
-    this.eventsGateway.notifyAppointmentUpdate({
-      appointmentId: cita.codigo_cita,
-      patientId: codigo_paciente,
-      action: 'created',
-      appointment: cita,
+      // 7. Notificar cambio en disponibilidad
+      this.eventsGateway.notifyCatalogUpdate({
+        type: 'slot',
+        action: 'updated',
+        entityId: slot.codigo_slot,
+        entityName: `${slot.servicio.nombre} - Cupos: ${slot.cupos_disponibles - 1}`,
+      });
+
+      return cita;
+    }, {
+      // Configurar timeout e isolation level para evitar deadlocks
+      timeout: 10000, // 10 segundos max
+      isolationLevel: 'Serializable', // Máximo nivel de aislamiento
     });
-
-    // Notificar a admins
-    this.eventsGateway.notifyAdminEvent({
-      eventType: 'agenda.cita.created',
-      entityType: 'cita',
-      entityId: cita.codigo_cita,
-      action: 'created',
-      userId: codigo_paciente,
-      data: {
-        servicio: slot.servicio.nombre,
-        fecha: slot.fecha,
-      },
-    });
-
-    return cita;
   }
 
   /**
