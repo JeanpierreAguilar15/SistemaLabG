@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { validatePositiveNumber, validateRange, validateReferenceRange } from '@/lib/utils'
 
 interface Categoria {
   codigo_categoria: number
@@ -99,19 +100,71 @@ export default function ExamenesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Validaciones críticas antes de enviar
+
+    // 1. Validar precio (si está presente, debe ser positivo)
+    if (formData.precio) {
+      const precio = parseFloat(formData.precio)
+      if (!validatePositiveNumber(precio)) {
+        setMessage({ type: 'error', text: '❌ El precio debe ser un número positivo.' })
+        return
+      }
+      if (precio === 0) {
+        setMessage({ type: 'error', text: '❌ El precio debe ser mayor a 0.' })
+        return
+      }
+    }
+
+    // 2. Validar horas de ayuno (0-24 horas)
+    if (formData.requiere_ayuno && formData.horas_ayuno) {
+      const horasAyuno = parseInt(formData.horas_ayuno)
+      if (!validateRange(horasAyuno, 0, 24)) {
+        setMessage({ type: 'error', text: '❌ Las horas de ayuno deben estar entre 0 y 24 horas.' })
+        return
+      }
+    }
+
+    // 3. Validar tiempo de entrega (1-720 horas = 30 días)
+    const tiempoEntrega = parseInt(formData.tiempo_entrega_horas)
+    if (!validateRange(tiempoEntrega, 1, 720)) {
+      setMessage({ type: 'error', text: '❌ El tiempo de entrega debe estar entre 1 y 720 horas (30 días).' })
+      return
+    }
+
+    // 4. Validar valores de referencia (min < max)
+    const valorRefMin = formData.valor_referencia_min ? parseFloat(formData.valor_referencia_min) : undefined
+    const valorRefMax = formData.valor_referencia_max ? parseFloat(formData.valor_referencia_max) : undefined
+
+    if (!validateReferenceRange(valorRefMin, valorRefMax)) {
+      setMessage({
+        type: 'error',
+        text: `❌ El valor de referencia mínimo (${valorRefMin}) debe ser menor que el máximo (${valorRefMax}).`
+      })
+      return
+    }
+
+    // 5. Validar que si hay valores de referencia, también haya unidad de medida
+    if ((valorRefMin !== undefined || valorRefMax !== undefined) && !formData.unidad_medida) {
+      setMessage({
+        type: 'error',
+        text: '❌ Si ingresa valores de referencia, debe especificar la unidad de medida.'
+      })
+      return
+    }
+
     const examenData = {
-      codigo_interno: formData.codigo_interno,
-      nombre: formData.nombre,
-      descripcion: formData.descripcion || null,
+      codigo_interno: formData.codigo_interno.trim(),
+      nombre: formData.nombre.trim(),
+      descripcion: formData.descripcion ? formData.descripcion.trim() : null,
       codigo_categoria: parseInt(formData.codigo_categoria),
       requiere_ayuno: formData.requiere_ayuno,
       horas_ayuno: formData.requiere_ayuno && formData.horas_ayuno ? parseInt(formData.horas_ayuno) : null,
-      instrucciones_preparacion: formData.instrucciones_preparacion || null,
-      tiempo_entrega_horas: parseInt(formData.tiempo_entrega_horas),
+      instrucciones_preparacion: formData.instrucciones_preparacion ? formData.instrucciones_preparacion.trim() : null,
+      tiempo_entrega_horas: tiempoEntrega,
       tipo_muestra: formData.tipo_muestra,
-      valor_referencia_min: formData.valor_referencia_min ? parseFloat(formData.valor_referencia_min) : null,
-      valor_referencia_max: formData.valor_referencia_max ? parseFloat(formData.valor_referencia_max) : null,
-      unidad_medida: formData.unidad_medida || null,
+      valor_referencia_min: valorRefMin !== undefined ? valorRefMin : null,
+      valor_referencia_max: valorRefMax !== undefined ? valorRefMax : null,
+      unidad_medida: formData.unidad_medida ? formData.unidad_medida.trim() : null,
       activo: true,
     }
 

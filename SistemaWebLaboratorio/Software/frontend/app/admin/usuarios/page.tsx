@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { validateCedulaEcuador, validateEmail, validatePhoneEcuador, validateDateNotFuture } from '@/lib/utils'
 
 interface Role {
   codigo_rol: number
@@ -117,21 +118,79 @@ export default function UsersManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Validaciones críticas antes de enviar
+
+    // 1. Validar cédula ecuatoriana
+    if (!validateCedulaEcuador(formData.cedula)) {
+      setMessage({ type: 'error', text: '❌ La cédula ingresada no es válida. Verifique que sea una cédula ecuatoriana correcta.' })
+      return
+    }
+
+    // 2. Validar email
+    if (!validateEmail(formData.email)) {
+      setMessage({ type: 'error', text: '❌ El email ingresado no es válido.' })
+      return
+    }
+
+    // 3. Validar teléfono (si está presente)
+    if (formData.telefono && !validatePhoneEcuador(formData.telefono)) {
+      setMessage({
+        type: 'error',
+        text: '❌ El teléfono debe ser un número ecuatoriano válido (Ej: 0999999999 o +593999999999)'
+      })
+      return
+    }
+
+    // 4. Validar fecha de nacimiento no sea futura
+    if (formData.fecha_nacimiento && !validateDateNotFuture(formData.fecha_nacimiento)) {
+      setMessage({ type: 'error', text: '❌ La fecha de nacimiento no puede ser una fecha futura.' })
+      return
+    }
+
+    // 5. Validar que nombres y apellidos tengan al menos 2 caracteres
+    if (formData.nombres.trim().length < 2) {
+      setMessage({ type: 'error', text: '❌ Los nombres deben tener al menos 2 caracteres.' })
+      return
+    }
+
+    if (formData.apellidos.trim().length < 2) {
+      setMessage({ type: 'error', text: '❌ Los apellidos deben tener al menos 2 caracteres.' })
+      return
+    }
+
+    // 6. Validar contacto de emergencia (si nombre presente, teléfono requerido)
+    if (formData.contacto_emergencia_nombre && !formData.contacto_emergencia_telefono) {
+      setMessage({
+        type: 'error',
+        text: '❌ Si ingresa un contacto de emergencia, debe proporcionar el teléfono.'
+      })
+      return
+    }
+
+    // 7. Validar teléfono de emergencia (si está presente)
+    if (formData.contacto_emergencia_telefono && !validatePhoneEcuador(formData.contacto_emergencia_telefono)) {
+      setMessage({
+        type: 'error',
+        text: '❌ El teléfono de emergencia debe ser un número ecuatoriano válido.'
+      })
+      return
+    }
+
     const userData = {
-      cedula: formData.cedula,
-      nombres: formData.nombres,
-      apellidos: formData.apellidos,
-      email: formData.email,
-      telefono: formData.telefono || null,
+      cedula: formData.cedula.trim(),
+      nombres: formData.nombres.trim(),
+      apellidos: formData.apellidos.trim(),
+      email: formData.email.trim().toLowerCase(),
+      telefono: formData.telefono ? formData.telefono.trim() : null,
       fecha_nacimiento: formData.fecha_nacimiento || null,
       genero: formData.genero || null,
-      direccion: formData.direccion || null,
+      direccion: formData.direccion ? formData.direccion.trim() : null,
       codigo_rol: parseInt(formData.codigo_rol),
       ...(formData.contacto_emergencia_nombre && {
-        contacto_emergencia_nombre: formData.contacto_emergencia_nombre,
+        contacto_emergencia_nombre: formData.contacto_emergencia_nombre.trim(),
       }),
       ...(formData.contacto_emergencia_telefono && {
-        contacto_emergencia_telefono: formData.contacto_emergencia_telefono,
+        contacto_emergencia_telefono: formData.contacto_emergencia_telefono.trim(),
       }),
       ...(!editingUser && { password: formData.password }), // Solo en crear
     }

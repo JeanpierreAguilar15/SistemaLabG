@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { validateEmail, validatePhoneEcuador, validateTimeRange } from '@/lib/utils'
 
 interface LabConfig {
   nombre: string
@@ -82,6 +83,74 @@ export default function ConfigurationPage() {
   const handleSaveSection = (section: string) => {
     setIsLoading(true)
     try {
+      // Validaciones según la sección
+
+      if (section === 'general') {
+        // Validar nombre (mínimo 3 caracteres)
+        if (tempConfig.nombre.trim().length < 3) {
+          setMessage({ type: 'error', text: '❌ El nombre del laboratorio debe tener al menos 3 caracteres.' })
+          setIsLoading(false)
+          return
+        }
+
+        // Validar email
+        if (!validateEmail(tempConfig.email)) {
+          setMessage({ type: 'error', text: '❌ El email ingresado no es válido.' })
+          setIsLoading(false)
+          return
+        }
+
+        // Validar teléfono
+        if (!validatePhoneEcuador(tempConfig.telefono)) {
+          setMessage({
+            type: 'error',
+            text: '❌ El teléfono debe ser un número ecuatoriano válido (Ej: 0999999999 o +593999999999)'
+          })
+          setIsLoading(false)
+          return
+        }
+
+        // Validar dirección (mínimo 10 caracteres)
+        if (tempConfig.direccion.trim().length < 10) {
+          setMessage({ type: 'error', text: '❌ La dirección debe tener al menos 10 caracteres.' })
+          setIsLoading(false)
+          return
+        }
+      }
+
+      if (section === 'appointments') {
+        // Validar rango de horas (horaInicio < horaFin)
+        if (!validateTimeRange(tempConfig.horaInicio, tempConfig.horaFin)) {
+          setMessage({
+            type: 'error',
+            text: `❌ La hora de inicio (${tempConfig.horaInicio}) debe ser menor que la hora de fin (${tempConfig.horaFin}).`
+          })
+          setIsLoading(false)
+          return
+        }
+
+        // Validar duración de slot (15, 30, 45, 60)
+        const slotsValidos = [15, 30, 45, 60]
+        if (!slotsValidos.includes(tempConfig.duracionSlot)) {
+          setMessage({
+            type: 'error',
+            text: '❌ La duración del slot debe ser 15, 30, 45 o 60 minutos.'
+          })
+          setIsLoading(false)
+          return
+        }
+
+        // Validar capacidad por defecto (1-20)
+        if (tempConfig.capacidadDefecto < 1 || tempConfig.capacidadDefecto > 20) {
+          setMessage({
+            type: 'error',
+            text: '❌ La capacidad por defecto debe estar entre 1 y 20 cupos.'
+          })
+          setIsLoading(false)
+          return
+        }
+      }
+
       // Save to localStorage
       localStorage.setItem('labConfig', JSON.stringify(tempConfig))
       setConfig(tempConfig)

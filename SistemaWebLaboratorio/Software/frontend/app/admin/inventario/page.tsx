@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { validateStockRanges, validatePriceRelation } from '@/lib/utils'
 
 interface ItemInventario {
   codigo_item: number
@@ -152,31 +153,65 @@ export default function InventarioPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Validaciones críticas antes de enviar
+    const stockActual = parseInt(formData.stock_actual)
+    const stockMinimo = parseInt(formData.stock_minimo)
+    const stockMaximo = formData.stock_maximo ? parseInt(formData.stock_maximo) : undefined
+    const costoUnitario = formData.costo_unitario ? parseFloat(formData.costo_unitario) : undefined
+    const precioVenta = formData.precio_venta ? parseFloat(formData.precio_venta) : undefined
+
+    // 1. Validar rangos de stock
+    const stockValidation = validateStockRanges(stockActual, stockMinimo, stockMaximo)
+    if (!stockValidation.valid) {
+      setMessage({
+        type: 'error',
+        text: `❌ Error de validación:\n${stockValidation.errors.join('\n')}`
+      })
+      return
+    }
+
+    // 2. Validar relación de precios (si ambos están presentes)
+    if (costoUnitario !== undefined && precioVenta !== undefined) {
+      if (!validatePriceRelation(precioVenta, costoUnitario)) {
+        setMessage({
+          type: 'error',
+          text: `❌ El precio de venta ($${precioVenta.toFixed(2)}) debe ser mayor o igual al costo unitario ($${costoUnitario.toFixed(2)})`
+        })
+        return
+      }
+    }
+
+    // 3. Validar código interno no esté vacío
+    if (!formData.codigo_interno.trim()) {
+      setMessage({ type: 'error', text: '❌ El código interno es requerido' })
+      return
+    }
+
     try {
       const url = editingItem
         ? `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items/${editingItem.codigo_item}`
         : `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items`
 
       const payload: any = {
-        codigo_interno: formData.codigo_interno,
-        nombre: formData.nombre,
-        descripcion: formData.descripcion || null,
+        codigo_interno: formData.codigo_interno.trim(),
+        nombre: formData.nombre.trim(),
+        descripcion: formData.descripcion?.trim() || null,
         unidad_medida: formData.unidad_medida,
-        stock_actual: parseInt(formData.stock_actual),
-        stock_minimo: parseInt(formData.stock_minimo),
+        stock_actual: stockActual,
+        stock_minimo: stockMinimo,
         activo: formData.activo,
       }
 
-      if (formData.stock_maximo) {
-        payload.stock_maximo = parseInt(formData.stock_maximo)
+      if (stockMaximo !== undefined) {
+        payload.stock_maximo = stockMaximo
       }
 
-      if (formData.costo_unitario) {
-        payload.costo_unitario = parseFloat(formData.costo_unitario)
+      if (costoUnitario !== undefined) {
+        payload.costo_unitario = costoUnitario
       }
 
-      if (formData.precio_venta) {
-        payload.precio_venta = parseFloat(formData.precio_venta)
+      if (precioVenta !== undefined) {
+        payload.precio_venta = precioVenta
       }
 
       const response = await fetch(url, {
