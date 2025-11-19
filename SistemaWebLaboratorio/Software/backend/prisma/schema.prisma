@@ -267,6 +267,7 @@ model Examen {
   detalles_pago                 PagoDetalle[]
   resultados                    Resultado[]
   examenes_en_paquetes          PaqueteExamen[]
+  insumos                       ExamenInsumo[]
 
   @@map("examen")
   @@schema("catalogo")
@@ -310,6 +311,23 @@ model PaqueteExamen {
   examen                  Examen    @relation(fields: [codigo_examen], references: [codigo_examen])
 
   @@map("paquete_examen")
+  @@schema("catalogo")
+}
+
+// Tabla de relación entre Exámenes e Insumos de Inventario
+model ExamenInsumo {
+  codigo_examen_insumo  Int       @id @default(autoincrement())
+  codigo_examen         Int
+  codigo_item           Int
+  cantidad_necesaria    Int       // Cantidad de insumo necesaria por examen
+  es_critico            Boolean   @default(true) // Si no hay stock, no se puede realizar el examen
+  fecha_creacion        DateTime  @default(now())
+
+  examen                Examen    @relation(fields: [codigo_examen], references: [codigo_examen], onDelete: Cascade)
+  item                  Item      @relation(fields: [codigo_item], references: [codigo_item])
+
+  @@unique([codigo_examen, codigo_item]) // Un examen no puede tener el mismo insumo duplicado
+  @@map("examen_insumo")
   @@schema("catalogo")
 }
 
@@ -513,6 +531,7 @@ model Item {
   lotes             Lote[]
   movimientos       Movimiento[]
   detalles_orden    OrdenCompraDetalle[]
+  examenes_que_usan ExamenInsumo[]
 
   @@map("item")
   @@schema("inventario")

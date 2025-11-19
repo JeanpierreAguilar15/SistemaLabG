@@ -388,6 +388,80 @@ export class AdminController {
     return this.adminService.deletePackage(id, adminId);
   }
 
+  // ==================== EXAMEN INSUMOS ====================
+
+  @Get('exams/:examId/supplies')
+  @ApiOperation({ summary: 'Obtener insumos de un examen' })
+  async getExamSupplies(@Param('examId', ParseIntPipe) examId: number) {
+    return this.adminService.getExamSupplies(examId);
+  }
+
+  @Post('exams/supplies')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Agregar un insumo a un examen' })
+  async addSupplyToExam(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: any, // CreateExamenInsumoDto
+  ) {
+    return this.adminService.addSupplyToExam(data, adminId);
+  }
+
+  @Post('exams/supplies/multiple')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Agregar múltiples insumos a un examen' })
+  async addMultipleSupplies(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: any, // AddMultipleInsumosDto
+  ) {
+    return this.adminService.addMultipleSupplies(data, adminId);
+  }
+
+  @Put('exams/supplies/:id')
+  @ApiOperation({ summary: 'Actualizar cantidad o criticidad de un insumo' })
+  async updateExamSupply(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: any, // UpdateExamenInsumoDto
+  ) {
+    return this.adminService.updateExamSupply(id, data, adminId);
+  }
+
+  @Delete('exams/supplies/:id')
+  @ApiOperation({ summary: 'Eliminar insumo de un examen' })
+  async removeSupplyFromExam(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.removeSupplyFromExam(id, adminId);
+  }
+
+  @Get('exams/:examId/stock-verification')
+  @ApiOperation({ summary: 'Verificar stock disponible para realizar un examen' })
+  async verificarStockExamen(
+    @Param('examId', ParseIntPipe) examId: number,
+    @Query('cantidad') cantidad?: string,
+  ) {
+    return this.adminService.verificarStockExamen(
+      examId,
+      cantidad ? parseInt(cantidad) : 1,
+    );
+  }
+
+  @Post('exams/:examId/consume-supplies')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Consumir insumos al realizar un examen' })
+  async consumirInsumosExamen(
+    @CurrentUser('codigo_usuario') userId: number,
+    @Param('examId', ParseIntPipe) examId: number,
+    @Body() data: { cantidad_examenes?: number },
+  ) {
+    return this.adminService.consumirInsumosExamen(
+      examId,
+      data.cantidad_examenes || 1,
+      userId,
+    );
+  }
+
   // ==================== INVENTARIO ====================
 
   @Get('inventory/items')

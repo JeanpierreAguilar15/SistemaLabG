@@ -33,3 +33,9 @@ export * from './movimiento.dto';
 
 // Alerta Stock DTOs
 export * from './alerta-stock.dto';
+
+// Examen Insumo DTOs
+export * from './examen-insumo.dto';
+
+// Orden Compra DTOs
+export * from './orden-compra.dto';

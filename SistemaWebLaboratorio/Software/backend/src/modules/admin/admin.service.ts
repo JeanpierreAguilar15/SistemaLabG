@@ -338,6 +338,7 @@ export class AdminService {
 
   async getAllRoles() {
     return this.prisma.rol.findMany({
+      where: { activo: true },
       include: {
         _count: {
           select: { usuarios: true },
@@ -435,6 +436,7 @@ export class AdminService {
 
   async getAllServices() {
     return this.prisma.servicio.findMany({
+      where: { activo: true },
       include: {
         _count: {
           select: { slots: true, horarios: true },
@@ -527,6 +529,7 @@ export class AdminService {
 
   async getAllLocations() {
     return this.prisma.sede.findMany({
+      where: { activo: true },
       include: {
         _count: {
           select: { slots: true, horarios: true },
@@ -620,7 +623,9 @@ export class AdminService {
   async getAllExams(page: number = 1, limit: number = 50, filters?: any) {
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ExamenWhereInput = {};
+    const where: Prisma.ExamenWhereInput = {
+      activo: true, // Filtrar solo activos por defecto
+    };
 
     if (filters?.search) {
       where.OR = [
@@ -633,6 +638,7 @@ export class AdminService {
       where.codigo_categoria = parseInt(filters.codigo_categoria);
     }
 
+    // Permitir override del filtro activo
     if (filters?.activo !== undefined) {
       where.activo = filters.activo === 'true';
     }
@@ -842,6 +848,7 @@ export class AdminService {
 
   async getAllExamCategories() {
     return this.prisma.categoriaExamen.findMany({
+      where: { activo: true },
       include: {
         _count: {
           select: { examenes: true },
@@ -922,6 +929,7 @@ export class AdminService {
 
   async getAllPackages() {
     return this.prisma.paquete.findMany({
+      where: { activo: true },
       include: {
         examenes: {
           include: {
@@ -1061,6 +1069,306 @@ export class AdminService {
     return result;
   }
 
+  // ==================== EXAMEN INSUMOS ====================
+
+  /**
+   * Obtener todos los insumos de un examen específico
+   */
+  async getExamSupplies(codigo_examen: number) {
+    const exam = await this.prisma.examen.findUnique({
+      where: { codigo_examen },
+    });
+
+    if (!exam) {
+      throw new NotFoundException('Examen no encontrado');
+    }
+
+    return this.prisma.examenInsumo.findMany({
+      where: { codigo_examen },
+      include: {
+        item: {
+          include: {
+            categoria: true,
+          },
+        },
+      },
+      orderBy: {
+        es_critico: 'desc', // Críticos primero
+      },
+    });
+  }
+
+  /**
+   * Agregar un insumo a un examen
+   */
+  async addSupplyToExam(data: any, adminId: number) {
+    // Verificar que el examen existe
+    const exam = await this.prisma.examen.findUnique({
+      where: { codigo_examen: data.codigo_examen },
+    });
+
+    if (!exam) {
+      throw new NotFoundException('Examen no encontrado');
+    }
+
+    // Verificar que el item existe
+    const item = await this.prisma.item.findUnique({
+      where: { codigo_item: data.codigo_item },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Item de inventario no encontrado');
+    }
+
+    // Verificar que no exista ya esta relación
+    const existing = await this.prisma.examenInsumo.findFirst({
+      where: {
+        codigo_examen: data.codigo_examen,
+        codigo_item: data.codigo_item,
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Este insumo ya está asociado al examen');
+    }
+
+    // Crear la relación
+    const examenInsumo = await this.prisma.examenInsumo.create({
+      data: {
+        codigo_examen: data.codigo_examen,
+        codigo_item: data.codigo_item,
+        cantidad_necesaria: data.cantidad_necesaria,
+        es_critico: data.es_critico ?? true,
+      },
+      include: {
+        item: true,
+        examen: true,
+      },
+    });
+
+    this.logger.log(
+      `✅ Insumo ${item.nombre} agregado al examen ${exam.nombre} (cantidad: ${data.cantidad_necesaria})`,
+    );
+
+    return examenInsumo;
+  }
+
+  /**
+   * Agregar múltiples insumos a un examen
+   */
+  async addMultipleSupplies(data: any, adminId: number) {
+    const { codigo_examen, insumos } = data;
+
+    // Verificar que el examen existe
+    const exam = await this.prisma.examen.findUnique({
+      where: { codigo_examen },
+    });
+
+    if (!exam) {
+      throw new NotFoundException('Examen no encontrado');
+    }
+
+    const created = [];
+    const errors = [];
+
+    for (const insumo of insumos) {
+      try {
+        const result = await this.addSupplyToExam(
+          {
+            codigo_examen,
+            codigo_item: insumo.codigo_item,
+            cantidad_necesaria: insumo.cantidad_necesaria,
+            es_critico: insumo.es_critico,
+          },
+          adminId,
+        );
+        created.push(result);
+      } catch (error) {
+        errors.push({
+          codigo_item: insumo.codigo_item,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      success: created.length,
+      failed: errors.length,
+      created,
+      errors,
+    };
+  }
+
+  /**
+   * Actualizar cantidad o criticidad de un insumo de examen
+   */
+  async updateExamSupply(codigo_examen_insumo: number, data: any, adminId: number) {
+    const examenInsumo = await this.prisma.examenInsumo.findUnique({
+      where: { codigo_examen_insumo },
+    });
+
+    if (!examenInsumo) {
+      throw new NotFoundException('Relación examen-insumo no encontrada');
+    }
+
+    return this.prisma.examenInsumo.update({
+      where: { codigo_examen_insumo },
+      data: {
+        cantidad_necesaria: data.cantidad_necesaria,
+        es_critico: data.es_critico,
+      },
+      include: {
+        item: true,
+        examen: true,
+      },
+    });
+  }
+
+  /**
+   * Eliminar un insumo de un examen
+   */
+  async removeSupplyFromExam(codigo_examen_insumo: number, adminId: number) {
+    const examenInsumo = await this.prisma.examenInsumo.findUnique({
+      where: { codigo_examen_insumo },
+      include: {
+        item: true,
+        examen: true,
+      },
+    });
+
+    if (!examenInsumo) {
+      throw new NotFoundException('Relación examen-insumo no encontrada');
+    }
+
+    await this.prisma.examenInsumo.delete({
+      where: { codigo_examen_insumo },
+    });
+
+    this.logger.log(
+      `🗑️  Insumo ${examenInsumo.item.nombre} removido del examen ${examenInsumo.examen.nombre}`,
+    );
+
+    return { message: 'Insumo removido del examen exitosamente' };
+  }
+
+  /**
+   * Verificar disponibilidad de stock para realizar un examen
+   */
+  async verificarStockExamen(codigo_examen: number, cantidad_examenes: number = 1) {
+    const insumos = await this.prisma.examenInsumo.findMany({
+      where: { codigo_examen },
+      include: {
+        item: true,
+      },
+    });
+
+    if (insumos.length === 0) {
+      return {
+        tiene_stock_suficiente: true,
+        insumos: [],
+        insumos_faltantes: [],
+        mensaje: 'Este examen no requiere insumos',
+      };
+    }
+
+    const detalles = insumos.map((insumo) => {
+      const cantidad_total_necesaria = insumo.cantidad_necesaria * cantidad_examenes;
+      const tiene_stock = insumo.item.stock_actual >= cantidad_total_necesaria;
+
+      return {
+        codigo_item: insumo.item.codigo_item,
+        nombre_item: insumo.item.nombre,
+        cantidad_necesaria: cantidad_total_necesaria,
+        stock_actual: insumo.item.stock_actual,
+        es_critico: insumo.es_critico,
+        tiene_stock,
+      };
+    });
+
+    const insumos_faltantes = detalles
+      .filter((d) => !d.tiene_stock)
+      .map((d) => ({
+        codigo_item: d.codigo_item,
+        nombre_item: d.nombre_item,
+        cantidad_faltante: d.cantidad_necesaria - d.stock_actual,
+        es_critico: d.es_critico,
+      }));
+
+    // Solo considerar insumos críticos para determinar si se puede realizar el examen
+    const faltantes_criticos = insumos_faltantes.filter((i) => i.es_critico);
+
+    return {
+      tiene_stock_suficiente: faltantes_criticos.length === 0,
+      insumos: detalles,
+      insumos_faltantes,
+      mensaje:
+        faltantes_criticos.length > 0
+          ? `Faltan ${faltantes_criticos.length} insumos críticos`
+          : insumos_faltantes.length > 0
+            ? `Hay ${insumos_faltantes.length} insumos no críticos con stock bajo`
+            : 'Stock suficiente para realizar el examen',
+    };
+  }
+
+  /**
+   * Consumir insumos al realizar un examen (descontar del stock)
+   */
+  async consumirInsumosExamen(codigo_examen: number, cantidad_examenes: number = 1, usuario_id: number) {
+    const verificacion = await this.verificarStockExamen(codigo_examen, cantidad_examenes);
+
+    if (!verificacion.tiene_stock_suficiente) {
+      throw new BadRequestException(
+        `No hay stock suficiente para realizar el examen: ${verificacion.mensaje}`,
+      );
+    }
+
+    const insumos = await this.prisma.examenInsumo.findMany({
+      where: { codigo_examen },
+      include: {
+        item: true,
+        examen: true,
+      },
+    });
+
+    const movimientos = [];
+
+    for (const insumo of insumos) {
+      const cantidad_total = insumo.cantidad_necesaria * cantidad_examenes;
+      const stock_anterior = insumo.item.stock_actual;
+      const stock_nuevo = stock_anterior - cantidad_total;
+
+      // Crear movimiento de salida
+      const movimiento = await this.prisma.movimiento.create({
+        data: {
+          codigo_item: insumo.item.codigo_item,
+          tipo_movimiento: 'SALIDA',
+          cantidad: cantidad_total,
+          motivo: `Consumo automático para examen: ${insumo.examen.nombre}`,
+          stock_anterior,
+          stock_nuevo,
+          realizado_por: usuario_id,
+        },
+      });
+
+      // Actualizar stock del item
+      await this.prisma.item.update({
+        where: { codigo_item: insumo.item.codigo_item },
+        data: { stock_actual: stock_nuevo },
+      });
+
+      movimientos.push(movimiento);
+
+      this.logger.log(
+        `📊 Consumido ${cantidad_total} unidades de ${insumo.item.nombre} para examen ${insumo.examen.nombre}`,
+      );
+    }
+
+    return {
+      mensaje: `Consumidos ${movimientos.length} insumos para ${cantidad_examenes} examen(es)`,
+      movimientos,
+    };
+  }
+
   // ==================== INVENTARIO ====================
 
   async getAllInventoryItems(page: number = 1, limit: number = 50, filters?: any) {
@@ -1120,7 +1428,9 @@ export class AdminService {
     }
 
     // Consulta normal sin filtro de stock bajo
-    const where: Prisma.ItemWhereInput = {};
+    const where: Prisma.ItemWhereInput = {
+      activo: true, // Filtrar solo items activos por defecto
+    };
 
     if (filters?.search) {
       where.OR = [
@@ -1131,6 +1441,11 @@ export class AdminService {
 
     if (filters?.codigo_categoria) {
       where.codigo_categoria = parseInt(filters.codigo_categoria);
+    }
+
+    // Permitir override del filtro activo
+    if (filters?.activo !== undefined) {
+      where.activo = filters.activo === 'true';
     }
 
     const [items, total] = await Promise.all([
@@ -1797,6 +2112,7 @@ export class AdminService {
 
   async getAllSuppliers() {
     return this.prisma.proveedor.findMany({
+      where: { activo: true },
       include: {
         _count: {
           select: { ordenes_compra: true },
