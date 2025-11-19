@@ -201,6 +201,46 @@ export class ResultadosController {
     return this.resultadosService.getEstadisticas(filters);
   }
 
+  @Get('admin/:id/descargar')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'PERSONAL_LAB')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Descargar PDF del resultado (Admin)' })
+  @ApiResponse({ status: 200, description: 'PDF del resultado' })
+  @ApiResponse({ status: 404, description: 'Resultado no encontrado' })
+  async downloadResultadoAdmin(
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const resultado = await this.resultadosService.getAllResultados({ codigo_resultado: id });
+
+    if (!resultado || resultado.length === 0) {
+      throw new NotFoundException('Resultado no encontrado');
+    }
+
+    const url_pdf = resultado[0].url_pdf;
+
+    if (!url_pdf) {
+      throw new NotFoundException('PDF no disponible');
+    }
+
+    // Construir path del archivo
+    const filepath = join(process.cwd(), url_pdf);
+
+    if (!existsSync(filepath)) {
+      throw new Error('Archivo PDF no encontrado');
+    }
+
+    const file = createReadStream(filepath);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=resultado-${id}.pdf`,
+    });
+
+    return new StreamableFile(file);
+  }
+
   // ==================== RESULTADOS (Paciente) ====================
 
   @Get('my')

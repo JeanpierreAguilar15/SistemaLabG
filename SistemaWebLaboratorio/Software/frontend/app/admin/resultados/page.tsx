@@ -91,7 +91,7 @@ export default function ResultadosAdminPage() {
 
   const handleDownloadPDF = async (codigo_resultado: number) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/${codigo_resultado}/descargar`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/admin/${codigo_resultado}/descargar`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -129,7 +129,7 @@ export default function ResultadosAdminPage() {
 
   const handlePreviewPDF = async (codigo_resultado: number) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/${codigo_resultado}/descargar`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/admin/${codigo_resultado}/descargar`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },

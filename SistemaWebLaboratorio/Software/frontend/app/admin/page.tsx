@@ -33,13 +33,10 @@ interface DashboardStats {
     pending: number
     conversionRate: number
   }
-  topExams: Array<{
+  recentExams: Array<{
+    code: string
     name: string
-    count: number
-  }>
-  weeklyTrend: Array<{
     date: Date
-    appointments: number
   }>
 }
 
@@ -208,52 +205,37 @@ export default function AdminDashboard() {
 
       {/* Business Insights Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Exámenes */}
+        {/* Últimos Exámenes */}
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200">
           <div className="px-6 py-4 border-b border-lab-neutral-200">
-            <h2 className="text-lg font-semibold text-lab-neutral-900">Exámenes Más Solicitados</h2>
-            <p className="text-sm text-lab-neutral-600 mt-1">Top 5 exámenes del período</p>
+            <h2 className="text-lg font-semibold text-lab-neutral-900">Últimos Exámenes Agregados</h2>
+            <p className="text-sm text-lab-neutral-600 mt-1">5 exámenes más recientes del catálogo</p>
           </div>
           <div className="p-6">
-            {stats?.topExams && stats.topExams.length > 0 ? (
-              <div className="space-y-4">
-                {stats.topExams.map((exam, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
-                        index === 0 ? 'bg-lab-success-100 text-lab-success-700' :
-                        index === 1 ? 'bg-lab-info-100 text-lab-info-700' :
-                        'bg-lab-neutral-100 text-lab-neutral-600'
-                      }`}>
-                        {index + 1}
+            {stats?.recentExams && stats.recentExams.length > 0 ? (
+              <div className="space-y-3">
+                {stats.recentExams.map((exam, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-lab-neutral-50 rounded-lg hover:bg-lab-neutral-100 transition-colors">
+                    <div className="flex items-center space-x-3 flex-1">
+                      <div className="w-10 h-10 bg-lab-primary-100 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-lab-neutral-900">{exam.name}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-lab-neutral-900 truncate">{exam.name}</p>
+                        <p className="text-xs text-lab-neutral-600 font-mono">{exam.code}</p>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-24 bg-lab-neutral-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            index === 0 ? 'bg-lab-success-500' :
-                            index === 1 ? 'bg-lab-info-500' :
-                            'bg-lab-neutral-400'
-                          }`}
-                          style={{
-                            width: `${Math.min((exam.count / (stats.topExams[0]?.count || 1)) * 100, 100)}%`
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm font-semibold text-lab-neutral-900 w-12 text-right">
-                        {exam.count}
-                      </span>
+                    <div className="text-xs text-lab-neutral-500 ml-2">
+                      {new Date(exam.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="text-center py-8 text-lab-neutral-500">
-                <p>No hay datos disponibles</p>
+                <p>No hay exámenes disponibles</p>
               </div>
             )}
           </div>

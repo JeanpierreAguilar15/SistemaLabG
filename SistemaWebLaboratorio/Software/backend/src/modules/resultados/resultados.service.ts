@@ -532,6 +532,7 @@ export class ResultadosService {
    * Obtener todos los resultados (Admin)
    */
   async getAllResultados(filters?: {
+    codigo_resultado?: number;
     codigo_paciente?: number;
     codigo_examen?: number;
     estado?: string;
@@ -539,6 +540,10 @@ export class ResultadosService {
     fecha_hasta?: string;
   }) {
     const where: any = {};
+
+    if (filters?.codigo_resultado) {
+      where.codigo_resultado = filters.codigo_resultado;
+    }
 
     if (filters?.estado) {
       where.estado = filters.estado;
