@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -13,6 +14,8 @@ import { AdminEventsService } from './admin-events.service';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private prisma: PrismaService,
     private eventsService: AdminEventsService,
@@ -2344,7 +2347,7 @@ export class AdminService {
           SELECT COUNT(*)::int as count
           FROM inventario.item
           WHERE activo = true AND stock_actual <= stock_minimo
-        `.then(result => Number(result[0]?.count || 0)).catch(() => 0)
+        `.then(result => Number(result[0]?.count || 0)).catch(() => 0),
 
         // Ingresos
         this.prisma.pago.aggregate({
@@ -2352,13 +2355,13 @@ export class AdminService {
             estado: 'COMPLETADO',
             fecha_pago: { gte: startOfMonth },
           },
-          _sum: { monto: true },
-        }).then(r => Number(r._sum.monto || 0)),
+          _sum: { monto_total: true },
+        }).then(r => Number(r._sum.monto_total || 0)),
 
         this.prisma.pago.aggregate({
           where: { estado: 'COMPLETADO' },
-          _sum: { monto: true },
-        }).then(r => Number(r._sum.monto || 0)),
+          _sum: { monto_total: true },
+        }).then(r => Number(r._sum.monto_total || 0)),
 
         // Cotizaciones
         this.prisma.cotizacion.count(),
