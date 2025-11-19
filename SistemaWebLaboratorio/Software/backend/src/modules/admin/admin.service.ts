@@ -2290,19 +2290,34 @@ export class AdminService {
   // ==================== ESTADÍSTICAS ====================
 
   async getDashboardStats() {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+
     const [
       totalUsers,
       activeUsers,
       totalExams,
       totalAppointments,
       todayAppointments,
+      completedAppointments,
       pendingResults,
       lowStockItems,
-      recentActivities,
+      monthlyRevenue,
+      totalRevenue,
+      quotationStats,
+      topExams,
+      weeklyTrend,
     ] = await Promise.all([
+      // Usuarios
       this.prisma.usuario.count(),
       this.prisma.usuario.count({ where: { activo: true } }),
+
+      // Exámenes
       this.prisma.examen.count({ where: { activo: true } }),
+
+      // Citas
       this.prisma.cita.count(),
       this.prisma.cita.count({
         where: {
@@ -2311,27 +2326,82 @@ export class AdminService {
           },
         },
       }),
+      this.prisma.cita.count({
+        where: {
+          estado: 'COMPLETADA',
+        },
+      }),
+
+      // Resultados pendientes
       this.prisma.resultado.count({
         where: { estado: 'EN_PROCESO' },
       }),
-      // Usar consulta SQL cruda para comparar columnas
+
+      // Inventario bajo stock
       this.prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(*)::int as count
         FROM inventario.item
         WHERE stock_actual <= stock_minimo
       `.then(result => Number(result[0].count)),
-      this.prisma.logActividad.findMany({
-        take: 10,
-        orderBy: { fecha_accion: 'desc' },
-        include: {
-          usuario: {
-            select: {
-              nombres: true,
-              apellidos: true,
-            },
+
+      // Ingresos del mes
+      this.prisma.pago.aggregate({
+        where: {
+          fecha_pago: {
+            gte: startOfMonth,
           },
+          estado: 'COMPLETADO',
         },
-      }),
+        _sum: {
+          monto: true,
+        },
+      }).then(result => Number(result._sum.monto || 0)),
+
+      // Ingresos totales
+      this.prisma.pago.aggregate({
+        where: {
+          estado: 'COMPLETADO',
+        },
+        _sum: {
+          monto: true,
+        },
+      }).then(result => Number(result._sum.monto || 0)),
+
+      // Estadísticas de cotizaciones
+      Promise.all([
+        this.prisma.cotizacion.count(),
+        this.prisma.cotizacion.count({ where: { estado: 'APROBADA' } }),
+        this.prisma.cotizacion.count({ where: { estado: 'PENDIENTE' } }),
+      ]).then(([total, approved, pending]) => ({
+        total,
+        approved,
+        pending,
+        conversionRate: total > 0 ? Math.round((approved / total) * 100) : 0,
+      })),
+
+      // Top 5 exámenes más solicitados
+      this.prisma.$queryRaw<Array<{ nombre: string; total: number }>>`
+        SELECT
+          e.nombre,
+          COUNT(ic.codigo_item_cotizacion)::int as total
+        FROM pagos.item_cotizacion ic
+        JOIN catalogo.examen e ON ic.codigo_examen = e.codigo_examen
+        GROUP BY e.codigo_examen, e.nombre
+        ORDER BY total DESC
+        LIMIT 5
+      `,
+
+      // Tendencia de citas de la semana
+      this.prisma.$queryRaw<Array<{ fecha: Date; total: number }>>`
+        SELECT
+          DATE(s.fecha) as fecha,
+          COUNT(c.codigo_cita)::int as total
+        FROM agenda.cita c
+        JOIN agenda.slot s ON c.codigo_slot = s.codigo_slot
+        WHERE s.fecha >= ${startOfWeek}
+        GROUP BY DATE(s.fecha)
+        ORDER BY fecha
+      `,
     ]);
 
     return {
@@ -2345,6 +2415,10 @@ export class AdminService {
       appointments: {
         total: totalAppointments,
         today: todayAppointments,
+        completed: completedAppointments,
+        completionRate: totalAppointments > 0
+          ? Math.round((completedAppointments / totalAppointments) * 100)
+          : 0,
       },
       results: {
         pending: pendingResults,
@@ -2352,7 +2426,19 @@ export class AdminService {
       inventory: {
         lowStock: lowStockItems,
       },
-      recentActivities,
+      revenue: {
+        monthly: monthlyRevenue,
+        total: totalRevenue,
+      },
+      quotations: quotationStats,
+      topExams: topExams.map(exam => ({
+        name: exam.nombre,
+        count: Number(exam.total),
+      })),
+      weeklyTrend: weeklyTrend.map(day => ({
+        date: day.fecha,
+        appointments: Number(day.total),
+      })),
     };
   }
 

@@ -39,23 +39,6 @@ interface Resultado {
   valores_referencia_texto: string | null
 }
 
-interface Muestra {
-  codigo_muestra: number
-  id_muestra: string
-  codigo_paciente: number
-  paciente: {
-    nombres: string
-    apellidos: string
-    cedula: string
-  }
-}
-
-interface Examen {
-  codigo_examen: number
-  nombre: string
-  codigo_interno: string
-}
-
 interface Message {
   type: 'success' | 'error'
   text: string
@@ -64,35 +47,19 @@ interface Message {
 export default function ResultadosAdminPage() {
   const { accessToken } = useAuthStore()
   const [resultados, setResultados] = useState<Resultado[]>([])
-  const [muestras, setMuestras] = useState<Muestra[]>([])
-  const [examenes, setExamenes] = useState<Examen[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showForm, setShowForm] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedResultado, setSelectedResultado] = useState<Resultado | null>(null)
-  const [editingResultado, setEditingResultado] = useState<Resultado | null>(null)
   const [message, setMessage] = useState<Message | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [uploadResultadoId, setUploadResultadoId] = useState<number | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [formData, setFormData] = useState({
-    codigo_muestra: '',
-    codigo_examen: '',
-    valor_numerico: '',
-    valor_texto: '',
-    unidad_medida: '',
-    valor_referencia_min: '',
-    valor_referencia_max: '',
-    valores_referencia_texto: '',
-    observaciones_tecnicas: '',
-    nivel: 'NORMAL',
-  })
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null)
 
   useEffect(() => {
     loadResultados()
-    loadMuestras()
-    loadExamenes()
   }, [])
 
   useEffect(() => {
@@ -116,151 +83,9 @@ export default function ResultadosAdminPage() {
       }
     } catch (error) {
       console.error('Error loading resultados:', error)
+      setMessage({ type: 'error', text: 'Error al cargar resultados' })
     } finally {
       setLoading(false)
-    }
-  }
-
-  const loadMuestras = async () => {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/muestras`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setMuestras(data.data || data)
-      }
-    } catch (error) {
-      console.error('Error loading muestras:', error)
-    }
-  }
-
-  const loadExamenes = async () => {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exams`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setExamenes(data.data || data)
-      }
-    } catch (error) {
-      console.error('Error loading examenes:', error)
-    }
-  }
-
-  const handleOpenForm = (resultado?: Resultado) => {
-    if (resultado) {
-      setEditingResultado(resultado)
-      setFormData({
-        codigo_muestra: resultado.codigo_muestra.toString(),
-        codigo_examen: resultado.codigo_examen.toString(),
-        valor_numerico: resultado.valor_numerico?.toString() || '',
-        valor_texto: resultado.valor_texto || '',
-        unidad_medida: resultado.unidad_medida || '',
-        valor_referencia_min: resultado.valor_referencia_min?.toString() || '',
-        valor_referencia_max: resultado.valor_referencia_max?.toString() || '',
-        valores_referencia_texto: resultado.valores_referencia_texto || '',
-        observaciones_tecnicas: resultado.observaciones_tecnicas || '',
-        nivel: resultado.nivel || 'NORMAL',
-      })
-    } else {
-      setEditingResultado(null)
-      setFormData({
-        codigo_muestra: '',
-        codigo_examen: '',
-        valor_numerico: '',
-        valor_texto: '',
-        unidad_medida: '',
-        valor_referencia_min: '',
-        valor_referencia_max: '',
-        valores_referencia_texto: '',
-        observaciones_tecnicas: '',
-        nivel: 'NORMAL',
-      })
-    }
-    setShowForm(true)
-  }
-
-  const handleCloseForm = () => {
-    setShowForm(false)
-    setEditingResultado(null)
-  }
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    try {
-      const payload: any = {
-        codigo_muestra: parseInt(formData.codigo_muestra),
-        codigo_examen: parseInt(formData.codigo_examen),
-        nivel: formData.nivel,
-      }
-
-      if (formData.valor_numerico) payload.valor_numerico = parseFloat(formData.valor_numerico)
-      if (formData.valor_texto) payload.valor_texto = formData.valor_texto
-      if (formData.unidad_medida) payload.unidad_medida = formData.unidad_medida
-      if (formData.valor_referencia_min) payload.valor_referencia_min = parseFloat(formData.valor_referencia_min)
-      if (formData.valor_referencia_max) payload.valor_referencia_max = parseFloat(formData.valor_referencia_max)
-      if (formData.valores_referencia_texto) payload.valores_referencia_texto = formData.valores_referencia_texto
-      if (formData.observaciones_tecnicas) payload.observaciones_tecnicas = formData.observaciones_tecnicas
-
-      const url = editingResultado
-        ? `${process.env.NEXT_PUBLIC_API_URL}/resultados/admin/${editingResultado.codigo_resultado}`
-        : `${process.env.NEXT_PUBLIC_API_URL}/resultados`
-
-      const response = await fetch(url, {
-        method: editingResultado ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload),
-      })
-
-      if (response.ok) {
-        setMessage({
-          type: 'success',
-          text: editingResultado ? '✅ Resultado actualizado correctamente' : '✅ Resultado creado correctamente',
-        })
-        handleCloseForm()
-        loadResultados()
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al guardar resultado' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
-    }
-  }
-
-  const handleValidar = async (codigo_resultado: number) => {
-    if (!confirm('¿Está seguro de validar este resultado? Esto generará el PDF automáticamente.')) return
-
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/${codigo_resultado}/validar`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: '✅ Resultado validado y PDF generado correctamente' })
-        loadResultados()
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al validar resultado' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
 
@@ -300,6 +125,35 @@ export default function ResultadosAdminPage() {
     setShowUploadModal(false)
     setUploadResultadoId(null)
     setSelectedFile(null)
+  }
+
+  const handlePreviewPDF = async (codigo_resultado: number) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/${codigo_resultado}/descargar`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        setPdfPreviewUrl(url)
+        setShowPdfPreview(true)
+      } else {
+        setMessage({ type: 'error', text: 'Error al cargar vista previa del PDF' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleClosePdfPreview = () => {
+    if (pdfPreviewUrl) {
+      window.URL.revokeObjectURL(pdfPreviewUrl)
+    }
+    setPdfPreviewUrl(null)
+    setShowPdfPreview(false)
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -423,19 +277,19 @@ export default function ResultadosAdminPage() {
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Resultados</h1>
-          <p className="text-lab-neutral-600 mt-2">
-            Administra los resultados de exámenes de laboratorio
+      <div>
+        <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Resultados</h1>
+        <p className="text-lab-neutral-600 mt-2">
+          Aquí aparecen los pacientes con citas y toma de muestra completadas. Sube los PDFs de resultados procesados externamente.
+        </p>
+        <div className="mt-3 bg-lab-info-50 border border-lab-info-200 rounded-lg p-3">
+          <p className="text-sm text-lab-info-800">
+            <svg className="w-4 h-4 inline mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Sube PDFs de resultados ya procesados, descarga los existentes o visualízalos directamente en el navegador.
           </p>
         </div>
-        <Button onClick={() => handleOpenForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
-          <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nuevo Resultado
-        </Button>
       </div>
 
       {/* Search */}
@@ -450,198 +304,6 @@ export default function ResultadosAdminPage() {
         </CardContent>
       </Card>
 
-      {/* Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full my-8">
-            <div className="p-6 border-b border-lab-neutral-200">
-              <h2 className="text-2xl font-bold text-lab-neutral-900">
-                {editingResultado ? 'Editar Resultado' : 'Nuevo Resultado'}
-              </h2>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="codigo_muestra" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Muestra *
-                  </label>
-                  <select
-                    id="codigo_muestra"
-                    name="codigo_muestra"
-                    value={formData.codigo_muestra}
-                    onChange={handleInputChange}
-                    required
-                    disabled={!!editingResultado}
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500 disabled:bg-lab-neutral-100"
-                  >
-                    <option value="">Seleccionar muestra...</option>
-                    {muestras.map((muestra) => (
-                      <option key={muestra.codigo_muestra} value={muestra.codigo_muestra}>
-                        {muestra.id_muestra} - {muestra.paciente.nombres} {muestra.paciente.apellidos}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="codigo_examen" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Examen *
-                  </label>
-                  <select
-                    id="codigo_examen"
-                    name="codigo_examen"
-                    value={formData.codigo_examen}
-                    onChange={handleInputChange}
-                    required
-                    disabled={!!editingResultado}
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500 disabled:bg-lab-neutral-100"
-                  >
-                    <option value="">Seleccionar examen...</option>
-                    {examenes.map((examen) => (
-                      <option key={examen.codigo_examen} value={examen.codigo_examen}>
-                        {examen.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="valor_numerico" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Valor Numérico
-                  </label>
-                  <input
-                    type="number"
-                    id="valor_numerico"
-                    name="valor_numerico"
-                    value={formData.valor_numerico}
-                    onChange={handleInputChange}
-                    step="0.01"
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="unidad_medida" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Unidad de Medida
-                  </label>
-                  <input
-                    type="text"
-                    id="unidad_medida"
-                    name="unidad_medida"
-                    value={formData.unidad_medida}
-                    onChange={handleInputChange}
-                    placeholder="mg/dL, U/L, etc."
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label htmlFor="valor_texto" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Valor de Texto
-                  </label>
-                  <input
-                    type="text"
-                    id="valor_texto"
-                    name="valor_texto"
-                    value={formData.valor_texto}
-                    onChange={handleInputChange}
-                    placeholder="Positivo, Negativo, Reactivo, etc."
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="valor_referencia_min" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Valor Referencia Mínimo
-                  </label>
-                  <input
-                    type="number"
-                    id="valor_referencia_min"
-                    name="valor_referencia_min"
-                    value={formData.valor_referencia_min}
-                    onChange={handleInputChange}
-                    step="0.01"
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="valor_referencia_max" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Valor Referencia Máximo
-                  </label>
-                  <input
-                    type="number"
-                    id="valor_referencia_max"
-                    name="valor_referencia_max"
-                    value={formData.valor_referencia_max}
-                    onChange={handleInputChange}
-                    step="0.01"
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label htmlFor="valores_referencia_texto" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Valores de Referencia (Texto)
-                  </label>
-                  <input
-                    type="text"
-                    id="valores_referencia_texto"
-                    name="valores_referencia_texto"
-                    value={formData.valores_referencia_texto}
-                    onChange={handleInputChange}
-                    placeholder="Normal: Negativo, Adultos: 70-100 mg/dL"
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="nivel" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Nivel *
-                  </label>
-                  <select
-                    id="nivel"
-                    name="nivel"
-                    value={formData.nivel}
-                    onChange={handleInputChange}
-                    required
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                  >
-                    <option value="NORMAL">Normal</option>
-                    <option value="BAJO">Bajo</option>
-                    <option value="ALTO">Alto</option>
-                    <option value="CRITICO">Crítico</option>
-                  </select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label htmlFor="observaciones_tecnicas" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Observaciones Técnicas
-                  </label>
-                  <textarea
-                    id="observaciones_tecnicas"
-                    name="observaciones_tecnicas"
-                    value={formData.observaciones_tecnicas}
-                    onChange={handleInputChange}
-                    rows={3}
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-lab-neutral-200">
-                <Button type="button" onClick={handleCloseForm} variant="outline">
-                  Cancelar
-                </Button>
-                <Button type="submit" className="bg-lab-primary-600 hover:bg-lab-primary-700">
-                  {editingResultado ? 'Actualizar' : 'Crear'} Resultado
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Detail Modal */}
       {showDetailModal && selectedResultado && (
@@ -830,49 +492,66 @@ export default function ResultadosAdminPage() {
                         {resultado.estado}
                       </span>
                     </td>
-                    <td className="p-4 text-right space-x-2">
-                      <Button size="sm" variant="outline" onClick={() => handleViewDetails(resultado)}>
-                        Ver
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleOpenForm(resultado)}>
-                        Editar
-                      </Button>
-                      {resultado.estado === 'EN_PROCESO' && !resultado.url_pdf && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleValidar(resultado.codigo_resultado)}
-                            className="text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50"
-                          >
-                            Validar
-                          </Button>
+                    <td className="p-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewDetails(resultado)}
+                          title="Ver detalles del resultado"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </Button>
+
+                        {/* Sin PDF: Mostrar botón de subir */}
+                        {!resultado.url_pdf && (
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => handleOpenUploadModal(resultado.codigo_resultado)}
                             className="text-lab-primary-600 hover:text-lab-primary-700 hover:bg-lab-primary-50"
+                            title="Subir PDF de resultado"
                           >
                             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                             </svg>
-                            Subir PDF
+                            Subir
                           </Button>
-                        </>
-                      )}
-                      {(resultado.estado === 'VALIDADO' || resultado.estado === 'LISTO') && resultado.url_pdf && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDownloadPDF(resultado.codigo_resultado)}
-                          className="text-lab-primary-600 hover:text-lab-primary-700 hover:bg-lab-primary-50"
-                        >
-                          <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                          </svg>
-                          PDF
-                        </Button>
-                      )}
+                        )}
+
+                        {/* Con PDF: Mostrar botones de vista previa y descarga */}
+                        {resultado.url_pdf && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handlePreviewPDF(resultado.codigo_resultado)}
+                              className="text-lab-info-600 hover:text-lab-info-700 hover:bg-lab-info-50"
+                              title="Vista previa del PDF"
+                            >
+                              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Ver
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDownloadPDF(resultado.codigo_resultado)}
+                              className="text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50"
+                              title="Descargar PDF"
+                            >
+                              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                              </svg>
+                              Descargar
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -957,6 +636,38 @@ export default function ResultadosAdminPage() {
                   Subir y Validar
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Preview Modal */}
+      {showPdfPreview && pdfPreviewUrl && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-lab-neutral-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-lab-neutral-900">Vista Previa del Resultado</h2>
+              <button
+                onClick={handleClosePdfPreview}
+                className="text-lab-neutral-400 hover:text-lab-neutral-600 transition-colors"
+                title="Cerrar"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                src={pdfPreviewUrl}
+                className="w-full h-full border-0"
+                title="Vista previa del PDF"
+              />
+            </div>
+            <div className="p-4 border-t border-lab-neutral-200 flex justify-end">
+              <Button onClick={handleClosePdfPreview} variant="outline">
+                Cerrar
+              </Button>
             </div>
           </div>
         </div>
