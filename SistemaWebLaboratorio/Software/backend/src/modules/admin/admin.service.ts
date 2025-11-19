@@ -2020,7 +2020,7 @@ export class AdminService {
     try {
       // Importación dinámica de PDFKit
       const PDFKit = await import('pdfkit');
-      const PDFDocument = PDFKit.default || PDFKit;
+      const PDFDocument = (PDFKit.default as any) || PDFKit;
 
       // Construir filtros para query
       const where: Prisma.LogActividadWhereInput = {};
