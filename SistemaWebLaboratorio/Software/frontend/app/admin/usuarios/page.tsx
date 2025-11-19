@@ -204,7 +204,7 @@ export default function UsersManagement() {
   }
 
   const handleDelete = async (codigo_usuario: number) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar este usuario?')) return
+    if (!confirm('¿Estás seguro de que deseas desactivar este usuario?\n\nNOTA: No se puede desactivar si tiene citas activas o cotizaciones pendientes.')) return
 
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/users/${codigo_usuario}`, {
@@ -215,11 +215,22 @@ export default function UsersManagement() {
       })
 
       if (response.ok || response.status === 204) {
-        setMessage({ type: 'success', text: 'Usuario eliminado correctamente' })
+        const data = await response.json()
+
+        // Mostrar advertencias si las hay
+        if (data.warnings && data.warnings.length > 0) {
+          setMessage({
+            type: 'success',
+            text: `✅ ${data.message || 'Usuario desactivado correctamente'}`
+          })
+        } else {
+          setMessage({ type: 'success', text: '✅ Usuario desactivado correctamente' })
+        }
+
         loadUsers()
       } else {
         const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al eliminar usuario' })
+        setMessage({ type: 'error', text: error.message || 'Error al desactivar usuario' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
