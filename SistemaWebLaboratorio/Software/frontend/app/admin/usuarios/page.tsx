@@ -203,40 +203,6 @@ export default function UsersManagement() {
     setShowModal(true)
   }
 
-  const handleDelete = async (codigo_usuario: number) => {
-    if (!confirm('¿Estás seguro de que deseas desactivar este usuario?\n\nNOTA: No se puede desactivar si tiene citas activas o cotizaciones pendientes.')) return
-
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/users/${codigo_usuario}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-
-      if (response.ok || response.status === 204) {
-        const data = await response.json()
-
-        // Mostrar advertencias si las hay
-        if (data.warnings && data.warnings.length > 0) {
-          setMessage({
-            type: 'success',
-            text: `✅ ${data.message || 'Usuario desactivado correctamente'}`
-          })
-        } else {
-          setMessage({ type: 'success', text: '✅ Usuario desactivado correctamente' })
-        }
-
-        loadUsers()
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al desactivar usuario' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
-    }
-  }
-
   const toggleUserStatus = async (codigo_usuario: number) => {
     try {
       const response = await fetch(
@@ -457,19 +423,11 @@ export default function UsersManagement() {
                               onClick={() => toggleUserStatus(user.codigo_usuario)}
                               className={
                                 user.activo
-                                  ? 'text-lab-danger-600 hover:text-lab-danger-700'
-                                  : 'text-lab-success-600 hover:text-lab-success-700'
+                                  ? 'text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50'
+                                  : 'text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50'
                               }
                             >
                               {user.activo ? 'Desactivar' : 'Activar'}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-lab-danger-600 hover:text-lab-danger-700"
-                              onClick={() => handleDelete(user.codigo_usuario)}
-                            >
-                              Eliminar
                             </Button>
                           </div>
                         </td>

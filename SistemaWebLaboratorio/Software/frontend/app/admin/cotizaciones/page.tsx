@@ -218,7 +218,7 @@ export default function CotizacionesAdminPage() {
                     <td className="p-4 text-sm text-lab-neutral-700">
                       {formatDate(new Date(cotizacion.fecha_cotizacion))}
                     </td>
-                    <td className="p-4 text-sm text-lab-neutral-700">{cotizacion.items.length} examen(es)</td>
+                    <td className="p-4 text-sm text-lab-neutral-700">{cotizacion.items?.length || 0} examen(es)</td>
                     <td className="p-4 font-semibold text-lab-neutral-900">${Number(cotizacion.total).toFixed(2)}</td>
                     <td className="p-4">
                       <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(cotizacion.estado)}`}>
