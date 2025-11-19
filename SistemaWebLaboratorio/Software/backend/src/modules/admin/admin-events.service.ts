@@ -47,6 +47,9 @@ export enum AdminEventType {
   INVENTORY_ITEM_UPDATED = 'admin.inventory.updated',
   INVENTORY_ITEM_DELETED = 'admin.inventory.deleted',
 
+  // Movimientos de Stock
+  STOCK_MOVEMENT_CREATED = 'admin.stock.movement.created',
+
   // Proveedores
   SUPPLIER_CREATED = 'admin.supplier.created',
   SUPPLIER_UPDATED = 'admin.supplier.updated',
@@ -366,6 +369,25 @@ export class AdminEventsService {
       entityId: itemId,
       action: 'deleted',
       userId: adminId,
+      timestamp: new Date(),
+    });
+  }
+
+  // Movimientos de Stock
+  emitStockMovementCreated(movimiento: any, adminId: number) {
+    this.emitEvent(AdminEventType.STOCK_MOVEMENT_CREATED, {
+      entityType: 'stock_movement',
+      entityId: movimiento.codigo_movimiento,
+      action: 'created',
+      userId: adminId,
+      data: {
+        codigo_item: movimiento.codigo_item,
+        tipo_movimiento: movimiento.tipo_movimiento,
+        cantidad: movimiento.cantidad,
+        stock_anterior: movimiento.stock_anterior,
+        stock_nuevo: movimiento.stock_nuevo,
+        motivo: movimiento.motivo,
+      },
       timestamp: new Date(),
     });
   }

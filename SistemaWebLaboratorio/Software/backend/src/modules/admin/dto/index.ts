@@ -27,3 +27,6 @@ export * from './inventory.dto';
 
 // Supplier DTOs
 export * from './supplier.dto';
+
+// Movimiento DTOs
+export * from './movimiento.dto';

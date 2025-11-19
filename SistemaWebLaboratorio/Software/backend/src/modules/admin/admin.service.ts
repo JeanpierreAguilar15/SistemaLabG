@@ -1259,6 +1259,326 @@ export class AdminService {
     return result;
   }
 
+  // ==================== MOVIMIENTOS DE STOCK ====================
+
+  /**
+   * Registrar movimiento de stock (ENTRADA, SALIDA, AJUSTE)
+   * Actualiza automáticamente el stock_actual del item
+   */
+  async createMovimiento(data: any, adminId: number) {
+    const { codigo_item, codigo_lote, tipo_movimiento, cantidad, motivo } = data;
+
+    // Validar que el item existe
+    const item = await this.prisma.item.findUnique({
+      where: { codigo_item },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Item no encontrado');
+    }
+
+    // Validar que el item esté activo
+    if (!item.activo) {
+      throw new BadRequestException('No se pueden registrar movimientos en items inactivos');
+    }
+
+    // Validar que el lote existe (si se especificó)
+    if (codigo_lote) {
+      const lote = await this.prisma.lote.findUnique({
+        where: { codigo_lote },
+      });
+
+      if (!lote) {
+        throw new NotFoundException('Lote no encontrado');
+      }
+
+      if (lote.codigo_item !== codigo_item) {
+        throw new BadRequestException('El lote no pertenece a este item');
+      }
+    }
+
+    // Calcular nuevo stock según tipo de movimiento
+    let stock_nuevo = item.stock_actual;
+    const stock_anterior = item.stock_actual;
+
+    switch (tipo_movimiento) {
+      case 'ENTRADA':
+      case 'AJUSTE_POSITIVO':
+        stock_nuevo = stock_anterior + cantidad;
+        break;
+
+      case 'SALIDA':
+      case 'AJUSTE_NEGATIVO':
+        stock_nuevo = stock_anterior - cantidad;
+        break;
+
+      case 'TRANSFERENCIA':
+        // Para transferencias, se puede implementar lógica adicional
+        stock_nuevo = stock_anterior - cantidad;
+        break;
+
+      default:
+        throw new BadRequestException('Tipo de movimiento no válido');
+    }
+
+    // Validar que el stock no quede negativo
+    if (stock_nuevo < 0) {
+      throw new BadRequestException(
+        `Stock insuficiente. Stock actual: ${stock_anterior}, Cantidad solicitada: ${cantidad}`,
+      );
+    }
+
+    // Usar transacción para garantizar consistencia
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Crear el movimiento
+      const movimiento = await tx.movimiento.create({
+        data: {
+          codigo_item,
+          codigo_lote,
+          tipo_movimiento,
+          cantidad,
+          motivo: motivo || null,
+          stock_anterior,
+          stock_nuevo,
+          realizado_por: adminId,
+        },
+        include: {
+          item: {
+            select: {
+              codigo_interno: true,
+              nombre: true,
+              unidad_medida: true,
+            },
+          },
+          usuario: {
+            select: {
+              nombres: true,
+              apellidos: true,
+            },
+          },
+          lote: {
+            select: {
+              numero_lote: true,
+            },
+          },
+        },
+      });
+
+      // 2. Actualizar el stock del item
+      await tx.item.update({
+        where: { codigo_item },
+        data: { stock_actual: stock_nuevo },
+      });
+
+      // 3. Si hay lote, actualizar cantidad_actual del lote
+      if (codigo_lote) {
+        const lote = await tx.lote.findUnique({
+          where: { codigo_lote },
+        });
+
+        let cantidad_nueva_lote = lote.cantidad_actual;
+
+        if (tipo_movimiento === 'ENTRADA' || tipo_movimiento === 'AJUSTE_POSITIVO') {
+          cantidad_nueva_lote += cantidad;
+        } else {
+          cantidad_nueva_lote -= cantidad;
+        }
+
+        if (cantidad_nueva_lote < 0) {
+          throw new BadRequestException(
+            `Stock insuficiente en lote ${lote.numero_lote}`,
+          );
+        }
+
+        await tx.lote.update({
+          where: { codigo_lote },
+          data: { cantidad_actual: cantidad_nueva_lote },
+        });
+      }
+
+      return movimiento;
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+
+    // Emitir evento de movimiento creado
+    this.eventsService.emitStockMovementCreated(result, adminId);
+
+    return result;
+  }
+
+  /**
+   * Obtener todos los movimientos con filtros
+   */
+  async getAllMovimientos(page: number = 1, limit: number = 50, filters?: any) {
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.MovimientoWhereInput = {};
+
+    // Filtrar por item
+    if (filters?.codigo_item) {
+      where.codigo_item = parseInt(filters.codigo_item);
+    }
+
+    // Filtrar por tipo de movimiento
+    if (filters?.tipo_movimiento) {
+      where.tipo_movimiento = filters.tipo_movimiento;
+    }
+
+    // Filtrar por rango de fechas
+    if (filters?.fecha_desde || filters?.fecha_hasta) {
+      where.fecha_movimiento = {};
+
+      if (filters.fecha_desde) {
+        where.fecha_movimiento.gte = new Date(filters.fecha_desde);
+      }
+
+      if (filters.fecha_hasta) {
+        const fechaHasta = new Date(filters.fecha_hasta);
+        fechaHasta.setHours(23, 59, 59, 999); // Incluir todo el día
+        where.fecha_movimiento.lte = fechaHasta;
+      }
+    }
+
+    // Filtrar por usuario que realizó el movimiento
+    if (filters?.realizado_por) {
+      where.realizado_por = parseInt(filters.realizado_por);
+    }
+
+    const [movimientos, total] = await Promise.all([
+      this.prisma.movimiento.findMany({
+        where,
+        include: {
+          item: {
+            select: {
+              codigo_interno: true,
+              nombre: true,
+              unidad_medida: true,
+            },
+          },
+          usuario: {
+            select: {
+              nombres: true,
+              apellidos: true,
+            },
+          },
+          lote: {
+            select: {
+              numero_lote: true,
+              fecha_vencimiento: true,
+            },
+          },
+        },
+        orderBy: { fecha_movimiento: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.movimiento.count({ where }),
+    ]);
+
+    return {
+      data: movimientos,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Obtener kardex (historial de movimientos) de un item específico
+   */
+  async getKardexByItem(codigo_item: number, fecha_desde?: string, fecha_hasta?: string) {
+    // Verificar que el item existe
+    const item = await this.prisma.item.findUnique({
+      where: { codigo_item },
+      select: {
+        codigo_item: true,
+        codigo_interno: true,
+        nombre: true,
+        unidad_medida: true,
+        stock_actual: true,
+        stock_minimo: true,
+        stock_maximo: true,
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Item no encontrado');
+    }
+
+    // Construir filtros de fecha
+    const where: Prisma.MovimientoWhereInput = {
+      codigo_item,
+    };
+
+    if (fecha_desde || fecha_hasta) {
+      where.fecha_movimiento = {};
+
+      if (fecha_desde) {
+        where.fecha_movimiento.gte = new Date(fecha_desde);
+      }
+
+      if (fecha_hasta) {
+        const fechaHasta = new Date(fecha_hasta);
+        fechaHasta.setHours(23, 59, 59, 999);
+        where.fecha_movimiento.lte = fechaHasta;
+      }
+    }
+
+    // Obtener movimientos
+    const movimientos = await this.prisma.movimiento.findMany({
+      where,
+      include: {
+        usuario: {
+          select: {
+            nombres: true,
+            apellidos: true,
+          },
+        },
+        lote: {
+          select: {
+            numero_lote: true,
+          },
+        },
+      },
+      orderBy: { fecha_movimiento: 'asc' },
+    });
+
+    // Calcular totales
+    const totales = {
+      total_entradas: 0,
+      total_salidas: 0,
+      total_ajustes_positivos: 0,
+      total_ajustes_negativos: 0,
+    };
+
+    movimientos.forEach((mov) => {
+      switch (mov.tipo_movimiento) {
+        case 'ENTRADA':
+          totales.total_entradas += mov.cantidad;
+          break;
+        case 'SALIDA':
+          totales.total_salidas += mov.cantidad;
+          break;
+        case 'AJUSTE_POSITIVO':
+          totales.total_ajustes_positivos += mov.cantidad;
+          break;
+        case 'AJUSTE_NEGATIVO':
+          totales.total_ajustes_negativos += mov.cantidad;
+          break;
+      }
+    });
+
+    return {
+      item,
+      movimientos,
+      totales,
+    };
+  }
+
   // ==================== PROVEEDORES ====================
 
   async getAllSuppliers() {

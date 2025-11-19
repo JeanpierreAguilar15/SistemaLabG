@@ -43,6 +43,8 @@ import {
   UpdateInventoryItemDto,
   CreateSupplierDto,
   UpdateSupplierDto,
+  CreateMovimientoDto,
+  FilterMovimientosDto,
 } from './dto';
 
 @Controller('admin')
@@ -426,6 +428,39 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.adminService.deleteInventoryItem(id, adminId);
+  }
+
+  // ==================== MOVIMIENTOS DE STOCK ====================
+
+  @Post('inventory/movements')
+  @HttpCode(HttpStatus.CREATED)
+  async createMovimiento(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateMovimientoDto,
+  ) {
+    return this.adminService.createMovimiento(data, adminId);
+  }
+
+  @Get('inventory/movements')
+  async getAllMovimientos(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query() filters?: any,
+  ) {
+    return this.adminService.getAllMovimientos(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+      filters,
+    );
+  }
+
+  @Get('inventory/kardex/:itemId')
+  async getKardexByItem(
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Query('fecha_desde') fecha_desde?: string,
+    @Query('fecha_hasta') fecha_hasta?: string,
+  ) {
+    return this.adminService.getKardexByItem(itemId, fecha_desde, fecha_hasta);
   }
 
   // ==================== PROVEEDORES ====================
