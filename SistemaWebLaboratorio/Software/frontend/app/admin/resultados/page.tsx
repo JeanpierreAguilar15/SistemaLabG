@@ -73,6 +73,9 @@ export default function ResultadosAdminPage() {
   const [selectedResultado, setSelectedResultado] = useState<Resultado | null>(null)
   const [editingResultado, setEditingResultado] = useState<Resultado | null>(null)
   const [message, setMessage] = useState<Message | null>(null)
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [uploadResultadoId, setUploadResultadoId] = useState<number | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [formData, setFormData] = useState({
     codigo_muestra: '',
     codigo_examen: '',
@@ -281,6 +284,74 @@ export default function ResultadosAdminPage() {
         document.body.removeChild(a)
       } else {
         setMessage({ type: 'error', text: 'Error al descargar PDF' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleOpenUploadModal = (codigo_resultado: number) => {
+    setUploadResultadoId(codigo_resultado)
+    setSelectedFile(null)
+    setShowUploadModal(true)
+  }
+
+  const handleCloseUploadModal = () => {
+    setShowUploadModal(false)
+    setUploadResultadoId(null)
+    setSelectedFile(null)
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validar que sea PDF
+      if (file.type !== 'application/pdf') {
+        setMessage({ type: 'error', text: '❌ Solo se permiten archivos PDF' })
+        e.target.value = ''
+        return
+      }
+
+      // Validar tamaño (10MB máximo)
+      const maxSize = 10 * 1024 * 1024 // 10MB
+      if (file.size > maxSize) {
+        setMessage({ type: 'error', text: '❌ El archivo no debe superar los 10MB' })
+        e.target.value = ''
+        return
+      }
+
+      setSelectedFile(file)
+    }
+  }
+
+  const handleUploadPDF = async () => {
+    if (!selectedFile || !uploadResultadoId) {
+      setMessage({ type: 'error', text: '❌ Debe seleccionar un archivo PDF' })
+      return
+    }
+
+    try {
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/resultados/${uploadResultadoId}/upload-pdf`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: formData,
+        }
+      )
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: '✅ PDF subido y resultado validado correctamente' })
+        handleCloseUploadModal()
+        loadResultados()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al subir PDF' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
@@ -766,23 +837,39 @@ export default function ResultadosAdminPage() {
                       <Button size="sm" variant="outline" onClick={() => handleOpenForm(resultado)}>
                         Editar
                       </Button>
-                      {resultado.estado === 'EN_PROCESO' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleValidar(resultado.codigo_resultado)}
-                          className="text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50"
-                        >
-                          Validar
-                        </Button>
+                      {resultado.estado === 'EN_PROCESO' && !resultado.url_pdf && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleValidar(resultado.codigo_resultado)}
+                            className="text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50"
+                          >
+                            Validar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenUploadModal(resultado.codigo_resultado)}
+                            className="text-lab-primary-600 hover:text-lab-primary-700 hover:bg-lab-primary-50"
+                          >
+                            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            Subir PDF
+                          </Button>
+                        </>
                       )}
-                      {resultado.estado === 'VALIDADO' && resultado.url_pdf && (
+                      {(resultado.estado === 'VALIDADO' || resultado.estado === 'LISTO') && resultado.url_pdf && (
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleDownloadPDF(resultado.codigo_resultado)}
                           className="text-lab-primary-600 hover:text-lab-primary-700 hover:bg-lab-primary-50"
                         >
+                          <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                          </svg>
                           PDF
                         </Button>
                       )}
@@ -800,6 +887,80 @@ export default function ResultadosAdminPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Upload PDF Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-lab-neutral-200">
+              <h2 className="text-2xl font-bold text-lab-neutral-900">
+                Subir PDF de Resultado
+              </h2>
+              <p className="text-sm text-lab-neutral-600 mt-2">
+                Sube un archivo PDF procesado externamente. Esto validará automáticamente el resultado.
+              </p>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="pdf-file" className="block text-sm font-medium text-lab-neutral-700 mb-2">
+                    Seleccionar archivo PDF *
+                  </label>
+                  <input
+                    type="file"
+                    id="pdf-file"
+                    accept="application/pdf"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-lab-neutral-600
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-md file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-lab-primary-50 file:text-lab-primary-700
+                      hover:file:bg-lab-primary-100
+                      cursor-pointer"
+                  />
+                  <p className="text-xs text-lab-neutral-500 mt-1">
+                    Tamaño máximo: 10MB. Solo archivos PDF
+                  </p>
+                </div>
+
+                {selectedFile && (
+                  <div className="bg-lab-success-50 border border-lab-success-200 rounded-lg p-3">
+                    <div className="flex items-center">
+                      <svg className="w-5 h-5 text-lab-success-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-lab-success-800">{selectedFile.name}</p>
+                        <p className="text-xs text-lab-success-600">
+                          {(selectedFile.size / 1024).toFixed(2)} KB
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-lab-neutral-200">
+                <Button type="button" onClick={handleCloseUploadModal} variant="outline">
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleUploadPDF}
+                  disabled={!selectedFile}
+                  className="bg-lab-primary-600 hover:bg-lab-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Subir y Validar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

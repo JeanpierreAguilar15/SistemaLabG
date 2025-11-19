@@ -10,7 +10,13 @@ import {
   ParseIntPipe,
   Res,
   StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -93,6 +99,51 @@ export class ResultadosController {
     @CurrentUser('codigo_usuario') validado_por: number,
   ) {
     return this.resultadosService.validarResultado(id, validado_por);
+  }
+
+  @Post(':id/upload-pdf')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrador', 'Tecnico')
+  @ApiBearerAuth()
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: join(process.cwd(), 'uploads', 'resultados'),
+        filename: (req, file, callback) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          const filename = `resultado_${req.params.id}_${uniqueSuffix}${ext}`;
+          callback(null, filename);
+        },
+      }),
+      fileFilter: (req, file, callback) => {
+        if (file.mimetype !== 'application/pdf') {
+          return callback(
+            new BadRequestException('Solo se permiten archivos PDF'),
+            false,
+          );
+        }
+        callback(null, true);
+      },
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB máximo
+      },
+    }),
+  )
+  @ApiOperation({ summary: 'Subir PDF de resultado manualmente (Admin/Técnico)' })
+  @ApiResponse({ status: 200, description: 'PDF subido correctamente' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido' })
+  @ApiResponse({ status: 404, description: 'Resultado no encontrado' })
+  async uploadPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser('codigo_usuario') validado_por: number,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    return this.resultadosService.uploadPdfManually(id, file.filename, validado_por);
   }
 
   @Get('admin/all')

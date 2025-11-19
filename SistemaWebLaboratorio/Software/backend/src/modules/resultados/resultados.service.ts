@@ -337,6 +337,107 @@ export class ResultadosService {
   }
 
   /**
+   * Subir PDF de resultado manualmente (para resultados procesados externamente)
+   */
+  async uploadPdfManually(
+    codigo_resultado: number,
+    filename: string,
+    validado_por: number,
+  ) {
+    // Verificar que el resultado existe
+    const resultado = await this.prisma.resultado.findUnique({
+      where: { codigo_resultado },
+      include: {
+        muestra: {
+          include: {
+            paciente: {
+              select: {
+                codigo_usuario: true,
+                nombres: true,
+                apellidos: true,
+                email: true,
+              },
+            },
+          },
+        },
+        examen: true,
+      },
+    });
+
+    if (!resultado) {
+      throw new NotFoundException('Resultado no encontrado');
+    }
+
+    // Generar código de verificación si no existe
+    let codigo_verificacion = resultado.codigo_verificacion;
+    if (!codigo_verificacion) {
+      codigo_verificacion = this.generarCodigoVerificacion();
+    }
+
+    // Construir URL relativa del PDF
+    const url_pdf = `/uploads/resultados/${filename}`;
+
+    // Actualizar resultado con el PDF subido y marcarlo como validado
+    const resultadoActualizado = await this.prisma.resultado.update({
+      where: { codigo_resultado },
+      data: {
+        estado: 'LISTO',
+        validado_por,
+        fecha_validacion: new Date(),
+        codigo_verificacion,
+        url_pdf,
+      },
+      include: {
+        muestra: {
+          include: {
+            paciente: {
+              select: {
+                codigo_usuario: true,
+                nombres: true,
+                apellidos: true,
+                email: true,
+              },
+            },
+          },
+        },
+        examen: true,
+      },
+    });
+
+    this.logger.log(
+      `PDF subido manualmente para resultado ${codigo_resultado} por usuario ${validado_por}`,
+    );
+
+    // Notificar al paciente que su resultado está listo
+    this.eventsGateway.notifyUser(resultado.muestra.codigo_paciente, {
+      eventType: 'resultados.resultado.listo',
+      title: 'Resultado disponible',
+      message: `Tu resultado de ${resultado.examen.nombre} ya está disponible para descargar`,
+      data: {
+        codigo_resultado,
+        codigo_verificacion,
+      },
+      status: 'ready',
+    });
+
+    // Notificar a admins
+    this.eventsGateway.notifyAdminEvent({
+      eventType: 'resultados.resultado.uploaded',
+      entityType: 'resultado',
+      entityId: codigo_resultado,
+      action: 'pdf_uploaded',
+      userId: validado_por,
+      data: {
+        paciente: `${resultado.muestra.paciente.nombres} ${resultado.muestra.paciente.apellidos}`,
+        examen: resultado.examen.nombre,
+        filename,
+      },
+    });
+
+    return resultadoActualizado;
+  }
+
+  /**
    * Obtener resultados del paciente autenticado
    */
   async getMyResultados(codigo_paciente: number) {
