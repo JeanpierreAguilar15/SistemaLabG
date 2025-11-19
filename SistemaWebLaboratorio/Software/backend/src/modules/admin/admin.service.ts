@@ -194,16 +194,67 @@ export class AdminService {
   }
 
   async deleteUser(codigo_usuario: number, adminId?: number) {
-    // Verificar que el usuario existe
+    // Verificar que el usuario existe y obtener sus relaciones activas
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
+      include: {
+        citas_como_paciente: {
+          where: {
+            estado: {
+              in: ['PENDIENTE', 'CONFIRMADA', 'EN_PROCESO'],
+            },
+          },
+        },
+        cotizaciones: {
+          where: {
+            estado: {
+              in: ['PENDIENTE', 'APROBADA'],
+            },
+          },
+        },
+        _count: {
+          select: {
+            citas_como_paciente: true,
+            cotizaciones: true,
+            resultados_procesados: true,
+          },
+        },
+      },
     });
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    // En lugar de eliminar, desactivar el usuario
+    // Verificar si tiene citas activas (pendientes, confirmadas o en proceso)
+    if (user.citas_como_paciente.length > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar el usuario porque tiene ${user.citas_como_paciente.length} cita(s) activa(s). ` +
+        'Por favor, cancele o complete las citas primero.'
+      );
+    }
+
+    // Verificar si tiene cotizaciones pendientes o aprobadas
+    if (user.cotizaciones.length > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar el usuario porque tiene ${user.cotizaciones.length} cotización(es) pendiente(s). ` +
+        'Por favor, complete o cancele las cotizaciones primero.'
+      );
+    }
+
+    // Generar advertencias sobre historial (permitir desactivación pero informar)
+    const warnings = [];
+    if (user._count.citas_como_paciente > 0) {
+      warnings.push(`${user._count.citas_como_paciente} cita(s) en historial`);
+    }
+    if (user._count.cotizaciones > 0) {
+      warnings.push(`${user._count.cotizaciones} cotización(es) en historial`);
+    }
+    if (user._count.resultados_procesados > 0) {
+      warnings.push(`${user._count.resultados_procesados} resultado(s) procesado(s)`);
+    }
+
+    // En lugar de eliminar, desactivar el usuario (soft delete)
     const updatedUser = await this.prisma.usuario.update({
       where: { codigo_usuario },
       data: { activo: false },
@@ -213,7 +264,15 @@ export class AdminService {
     this.eventsService.emitUserDeleted(codigo_usuario, adminId);
 
     const { password_hash, salt, ...sanitizedUser } = updatedUser;
-    return sanitizedUser;
+
+    // Retornar con advertencias si las hay
+    return {
+      ...sanitizedUser,
+      ...(warnings.length > 0 && {
+        warnings,
+        message: `Usuario desactivado. Mantiene historial: ${warnings.join(', ')}`
+      }),
+    };
   }
 
   async toggleUserStatus(codigo_usuario: number, adminId?: number) {
