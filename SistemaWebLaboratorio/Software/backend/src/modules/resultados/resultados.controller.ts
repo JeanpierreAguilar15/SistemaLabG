@@ -136,7 +136,7 @@ export class ResultadosController {
   @ApiResponse({ status: 404, description: 'Resultado no encontrado' })
   async uploadPdf(
     @Param('id', ParseIntPipe) id: number,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: any,
     @CurrentUser('codigo_usuario') validado_por: number,
   ) {
     if (!file) {

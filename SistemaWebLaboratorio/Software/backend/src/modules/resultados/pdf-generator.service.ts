@@ -101,7 +101,7 @@ export class PdfGeneratorService {
   private async importPDFKit() {
     try {
       const PDFKit = await import('pdfkit');
-      return PDFKit.default || PDFKit;
+      return (PDFKit.default as any) || PDFKit;
     } catch (error) {
       throw new Error(
         'PDFKit is not installed. Please run: npm install pdfkit @types/pdfkit',
