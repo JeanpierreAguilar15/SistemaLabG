@@ -20,12 +20,22 @@ interface RoleFormData {
   activo: boolean
 }
 
+interface RolePermissions {
+  nivel: number
+  nombre_sugerido: string
+  descripcion: string
+  permisos: string[]
+}
+
 export default function RolesManagement() {
   const { accessToken } = useAuthStore()
   const [roles, setRoles] = useState<Role[]>([])
+  const [permissions, setPermissions] = useState<RolePermissions[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingRole, setEditingRole] = useState<Role | null>(null)
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false)
+  const [selectedPermissions, setSelectedPermissions] = useState<RolePermissions | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [formData, setFormData] = useState<RoleFormData>({
     nombre: '',
@@ -36,6 +46,7 @@ export default function RolesManagement() {
 
   useEffect(() => {
     loadRoles()
+    loadPermissions()
   }, [])
 
   useEffect(() => {
@@ -64,6 +75,27 @@ export default function RolesManagement() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadPermissions = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/roles/permissions`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setPermissions(data)
+      }
+    } catch (error) {
+      console.error('Error loading permissions:', error)
+    }
+  }
+
+  const getPermissionsForLevel = (nivel: number): RolePermissions | undefined => {
+    return permissions.find(p => p.nivel === nivel)
   }
 
   const handleOpenModal = (role?: Role) => {
@@ -98,6 +130,14 @@ export default function RolesManagement() {
     })
   }
 
+  const handleShowPermissions = (nivel: number) => {
+    const perms = getPermissionsForLevel(nivel)
+    if (perms) {
+      setSelectedPermissions(perms)
+      setShowPermissionsModal(true)
+    }
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
     setFormData((prev) => ({
@@ -121,8 +161,8 @@ export default function RolesManagement() {
     }
 
     const nivel = parseInt(formData.nivel_acceso)
-    if (isNaN(nivel) || nivel < 1) {
-      setMessage({ type: 'error', text: 'El nivel de acceso debe ser al menos 1' })
+    if (isNaN(nivel) || nivel < 1 || nivel > 10) {
+      setMessage({ type: 'error', text: 'El nivel de acceso debe estar entre 1 y 10' })
       return
     }
 
@@ -189,7 +229,7 @@ export default function RolesManagement() {
   }
 
   const handleDelete = async (roleId: number, roleName: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar el rol "${roleName}"?`)) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar el rol "${roleName}"?\n\nNOTA: No se puede eliminar un rol que tenga usuarios asignados.`)) {
       return
     }
 
@@ -351,71 +391,92 @@ export default function RolesManagement() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-lab-neutral-200">
-              {roles.map((role) => (
-                <tr key={role.codigo_rol} className="hover:bg-lab-neutral-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 rounded-full bg-lab-primary-100 flex items-center justify-center">
-                        <span className="text-lab-primary-700 font-semibold text-sm">
-                          {role.nombre.substring(0, 2).toUpperCase()}
+              {roles.map((role) => {
+                const rolePerms = getPermissionsForLevel(role.nivel_acceso)
+                return (
+                  <tr key={role.codigo_rol} className="hover:bg-lab-neutral-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 rounded-full bg-lab-primary-100 flex items-center justify-center">
+                          <span className="text-lab-primary-700 font-semibold text-sm">
+                            {role.nombre.substring(0, 2).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-lab-neutral-900">{role.nombre}</div>
+                          {rolePerms && (
+                            <div className="text-xs text-lab-neutral-500">
+                              Sugerido: {rolePerms.nombre_sugerido}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-lab-neutral-600">
+                        {role.descripcion || '-'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-lab-info-100 text-lab-info-800">
+                          Nivel {role.nivel_acceso}
                         </span>
+                        {rolePerms && (
+                          <button
+                            onClick={() => handleShowPermissions(role.nivel_acceso)}
+                            className="text-lab-info-600 hover:text-lab-info-800"
+                            title="Ver permisos"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-lab-neutral-900">{role.nombre}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          role.activo
+                            ? 'bg-lab-success-100 text-lab-success-800'
+                            : 'bg-lab-neutral-100 text-lab-neutral-800'
+                        }`}
+                      >
+                        {role.activo ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-lab-neutral-600">
+                      {new Date(role.fecha_creacion).toLocaleDateString('es-ES')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenModal(role)}
+                          title="Editar rol"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(role.codigo_rol, role.nombre)}
+                          className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                          title="Eliminar rol"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </Button>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-lab-neutral-600">
-                      {role.descripcion || '-'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-lab-info-100 text-lab-info-800">
-                      Nivel {role.nivel_acceso}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        role.activo
-                          ? 'bg-lab-success-100 text-lab-success-800'
-                          : 'bg-lab-neutral-100 text-lab-neutral-800'
-                      }`}
-                    >
-                      {role.activo ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-lab-neutral-600">
-                    {new Date(role.fecha_creacion).toLocaleDateString('es-ES')}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenModal(role)}
-                        title="Editar rol"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(role.codigo_rol, role.nombre)}
-                        className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
-                        title="Eliminar rol"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -432,7 +493,7 @@ export default function RolesManagement() {
             ></div>
 
             {/* Modal panel */}
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
               <form onSubmit={handleSubmit}>
                 <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                   <div className="flex items-center justify-between mb-4">
@@ -451,6 +512,37 @@ export default function RolesManagement() {
                   </div>
 
                   <div className="space-y-4">
+                    {/* Nivel de Acceso - Primero para que el usuario vea las sugerencias */}
+                    <div>
+                      <label htmlFor="nivel_acceso" className="block text-sm font-medium text-lab-neutral-700 mb-2">
+                        Nivel de Acceso <span className="text-lab-danger-600">*</span>
+                      </label>
+                      <select
+                        id="nivel_acceso"
+                        name="nivel_acceso"
+                        value={formData.nivel_acceso}
+                        onChange={handleInputChange}
+                        required
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:outline-none focus:ring-1 focus:ring-lab-primary-500"
+                      >
+                        {permissions.map((perm) => (
+                          <option key={perm.nivel} value={perm.nivel}>
+                            Nivel {perm.nivel} - {perm.nombre_sugerido} ({perm.permisos.length} permisos)
+                          </option>
+                        ))}
+                      </select>
+                      {parseInt(formData.nivel_acceso) && getPermissionsForLevel(parseInt(formData.nivel_acceso)) && (
+                        <div className="mt-2 p-3 bg-lab-info-50 border border-lab-info-200 rounded-md">
+                          <p className="text-xs font-medium text-lab-info-800 mb-1">
+                            {getPermissionsForLevel(parseInt(formData.nivel_acceso))?.nombre_sugerido}
+                          </p>
+                          <p className="text-xs text-lab-info-700">
+                            {getPermissionsForLevel(parseInt(formData.nivel_acceso))?.descripcion}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Nombre */}
                     <div>
                       <label htmlFor="nombre" className="block text-sm font-medium text-lab-neutral-700">
@@ -466,7 +558,7 @@ export default function RolesManagement() {
                         minLength={2}
                         maxLength={50}
                         className="mt-1 block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:outline-none focus:ring-1 focus:ring-lab-primary-500"
-                        placeholder="Ej: Administrador, Recepcionista, etc."
+                        placeholder={getPermissionsForLevel(parseInt(formData.nivel_acceso))?.nombre_sugerido || 'Ej: Administrador, Recepcionista, etc.'}
                       />
                     </div>
 
@@ -485,27 +577,6 @@ export default function RolesManagement() {
                         className="mt-1 block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:outline-none focus:ring-1 focus:ring-lab-primary-500"
                         placeholder="Descripción del rol y sus responsabilidades"
                       />
-                    </div>
-
-                    {/* Nivel de Acceso */}
-                    <div>
-                      <label htmlFor="nivel_acceso" className="block text-sm font-medium text-lab-neutral-700">
-                        Nivel de Acceso <span className="text-lab-danger-600">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        id="nivel_acceso"
-                        name="nivel_acceso"
-                        value={formData.nivel_acceso}
-                        onChange={handleInputChange}
-                        required
-                        min={1}
-                        max={10}
-                        className="mt-1 block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:outline-none focus:ring-1 focus:ring-lab-primary-500"
-                      />
-                      <p className="mt-1 text-xs text-lab-neutral-500">
-                        Nivel de 1 a 10 (mayor número = más privilegios)
-                      </p>
                     </div>
 
                     {/* Estado */}
@@ -542,6 +613,76 @@ export default function RolesManagement() {
                   </Button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Permissions Details */}
+      {showPermissionsModal && selectedPermissions && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              onClick={() => setShowPermissionsModal(false)}
+            ></div>
+
+            {/* Modal panel */}
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-lab-neutral-900">
+                    Permisos - Nivel {selectedPermissions.nivel}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowPermissionsModal(false)}
+                    className="text-lab-neutral-400 hover:text-lab-neutral-600"
+                  >
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-lab-info-50 border border-lab-info-200 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-lab-info-900 mb-1">
+                      {selectedPermissions.nombre_sugerido}
+                    </h4>
+                    <p className="text-sm text-lab-info-700">
+                      {selectedPermissions.descripcion}
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-medium text-lab-neutral-700 mb-3">
+                      Permisos incluidos ({selectedPermissions.permisos.length}):
+                    </h4>
+                    <ul className="space-y-2">
+                      {selectedPermissions.permisos.map((permiso, index) => (
+                        <li key={index} className="flex items-start space-x-2">
+                          <svg className="w-5 h-5 text-lab-success-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                          <span className="text-sm text-lab-neutral-700">{permiso}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-lab-neutral-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <Button
+                  type="button"
+                  onClick={() => setShowPermissionsModal(false)}
+                  className="w-full sm:w-auto bg-lab-primary-600 hover:bg-lab-primary-700"
+                >
+                  Cerrar
+                </Button>
+              </div>
             </div>
           </div>
         </div>
