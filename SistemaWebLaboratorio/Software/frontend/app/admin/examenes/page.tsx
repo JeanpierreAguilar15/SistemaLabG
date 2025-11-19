@@ -265,8 +265,15 @@ export default function ExamenesPage() {
       })
 
       if (response.ok) {
+        // Update local state immediately for instant feedback
+        setExamenes((prevExamenes) =>
+          prevExamenes.map((examen) =>
+            examen.codigo_examen === codigo_examen
+              ? { ...examen, activo: !isActive }
+              : examen
+          )
+        )
         setMessage({ type: 'success', text: `Examen ${isActive ? 'desactivado' : 'activado'} correctamente` })
-        loadExamenes()
       }
     } catch (error) {
       setMessage({ type: 'error', text: `Error al ${action} examen` })

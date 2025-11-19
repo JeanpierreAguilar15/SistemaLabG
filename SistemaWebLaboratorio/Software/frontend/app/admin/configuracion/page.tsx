@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuthStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,6 +26,7 @@ interface SystemStats {
 }
 
 export default function ConfigurationPage() {
+  const { accessToken } = useAuthStore()
   const [config, setConfig] = useState<LabConfig>({
     nombre: 'Laboratorio Clínico Franz',
     email: 'contacto@labfranz.com',
@@ -46,6 +48,7 @@ export default function ConfigurationPage() {
   const [editingSection, setEditingSection] = useState<string | null>(null)
   const [tempConfig, setTempConfig] = useState<LabConfig>(config)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingStats, setLoadingStats] = useState(true)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   useEffect(() => {
@@ -67,16 +70,24 @@ export default function ConfigurationPage() {
 
   const loadSystemStats = async () => {
     try {
-      // In a real implementation, these would be API calls
-      // For now, using mock data
-      setStats({
-        totalUsuarios: 150,
-        totalCitas: 1250,
-        totalExamenes: 45,
-        totalResultados: 980,
+      setLoadingStats(true)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/dashboard/stats`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
       })
+
+      if (response.ok) {
+        const data = await response.json()
+        setStats({
+          totalUsuarios: data.users.total,
+          totalCitas: data.appointments.total,
+          totalExamenes: data.exams.total,
+          totalResultados: data.results.pending + data.appointments.completed,
+        })
+      }
     } catch (error) {
       console.error('Error loading stats:', error)
+    } finally {
+      setLoadingStats(false)
     }
   }
 
@@ -464,24 +475,30 @@ export default function ConfigurationPage() {
       {/* Statistics Dashboard */}
       <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
         <h2 className="text-lg font-semibold text-lab-neutral-900 mb-4">Estadísticas del Sistema</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="text-center p-4 bg-lab-primary-50 rounded-lg">
-            <p className="text-3xl font-bold text-lab-primary-600">{stats.totalUsuarios}</p>
-            <p className="text-sm text-lab-neutral-600 mt-1">Usuarios Registrados</p>
+        {loadingStats ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>
           </div>
-          <div className="text-center p-4 bg-lab-info-50 rounded-lg">
-            <p className="text-3xl font-bold text-lab-info-600">{stats.totalCitas}</p>
-            <p className="text-sm text-lab-neutral-600 mt-1">Citas Totales</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="text-center p-4 bg-lab-primary-50 rounded-lg">
+              <p className="text-3xl font-bold text-lab-primary-600">{stats.totalUsuarios}</p>
+              <p className="text-sm text-lab-neutral-600 mt-1">Usuarios Registrados</p>
+            </div>
+            <div className="text-center p-4 bg-lab-info-50 rounded-lg">
+              <p className="text-3xl font-bold text-lab-info-600">{stats.totalCitas}</p>
+              <p className="text-sm text-lab-neutral-600 mt-1">Citas Totales</p>
+            </div>
+            <div className="text-center p-4 bg-lab-success-50 rounded-lg">
+              <p className="text-3xl font-bold text-lab-success-600">{stats.totalExamenes}</p>
+              <p className="text-sm text-lab-neutral-600 mt-1">Exámenes en Catálogo</p>
+            </div>
+            <div className="text-center p-4 bg-lab-secondary-50 rounded-lg">
+              <p className="text-3xl font-bold text-lab-secondary-600">{stats.totalResultados}</p>
+              <p className="text-sm text-lab-neutral-600 mt-1">Resultados Procesados</p>
+            </div>
           </div>
-          <div className="text-center p-4 bg-lab-success-50 rounded-lg">
-            <p className="text-3xl font-bold text-lab-success-600">{stats.totalExamenes}</p>
-            <p className="text-sm text-lab-neutral-600 mt-1">Exámenes en Catálogo</p>
-          </div>
-          <div className="text-center p-4 bg-lab-secondary-50 rounded-lg">
-            <p className="text-3xl font-bold text-lab-secondary-600">{stats.totalResultados}</p>
-            <p className="text-sm text-lab-neutral-600 mt-1">Resultados Procesados</p>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* System Information */}

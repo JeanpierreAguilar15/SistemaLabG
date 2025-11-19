@@ -34,6 +34,10 @@ export default function AuditoriaPage() {
   const [fechaHasta, setFechaHasta] = useState('')
   const [generatingPdf, setGeneratingPdf] = useState(false)
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
+
   useEffect(() => {
     loadLogs()
   }, [limit])
@@ -76,6 +80,21 @@ export default function AuditoriaPage() {
 
     return matchSearch && matchEntidad && matchFechaDesde && matchFechaHasta
   })
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentLogs = filteredLogs.slice(startIndex, endIndex)
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, entidadFilter, fechaDesde, fechaHasta])
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
 
   const handleGeneratePdf = async () => {
     setGeneratingPdf(true)
@@ -291,7 +310,7 @@ export default function AuditoriaPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.map((log) => (
+                {currentLogs.map((log) => (
                   <tr key={log.codigo_log} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
                     <td className="p-4 text-sm text-lab-neutral-700">
                       <div>{formatDate(new Date(log.fecha_accion))}</div>
@@ -328,6 +347,48 @@ export default function AuditoriaPage() {
               <div className="text-center py-12 text-lab-neutral-500">No se encontraron registros</div>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 mt-4 border-t border-lab-neutral-200">
+              <div className="text-sm text-lab-neutral-600">
+                Mostrando {startIndex + 1} - {Math.min(endIndex, filteredLogs.length)} de {filteredLogs.length} registros
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => goToPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm rounded-md border border-lab-neutral-300 hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Primera
+                </button>
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm rounded-md border border-lab-neutral-300 hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <span className="px-3 py-1 text-sm text-lab-neutral-700">
+                  Página {currentPage} de {totalPages}
+                </span>
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm rounded-md border border-lab-neutral-300 hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+                <button
+                  onClick={() => goToPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm rounded-md border border-lab-neutral-300 hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Última
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
