@@ -30,6 +30,9 @@ export default function AuditoriaPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [entidadFilter, setEntidadFilter] = useState('TODAS')
   const [limit, setLimit] = useState(50)
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
+  const [generatingPdf, setGeneratingPdf] = useState(false)
 
   useEffect(() => {
     loadLogs()
@@ -67,8 +70,47 @@ export default function AuditoriaPage() {
 
     const matchEntidad = entidadFilter === 'TODAS' || log.entidad === entidadFilter
 
-    return matchSearch && matchEntidad
+    const logDate = new Date(log.fecha_accion)
+    const matchFechaDesde = !fechaDesde || logDate >= new Date(fechaDesde)
+    const matchFechaHasta = !fechaHasta || logDate <= new Date(fechaHasta + 'T23:59:59')
+
+    return matchSearch && matchEntidad && matchFechaDesde && matchFechaHasta
   })
+
+  const handleGeneratePdf = async () => {
+    setGeneratingPdf(true)
+    try {
+      const params = new URLSearchParams()
+      if (fechaDesde) params.append('fecha_desde', fechaDesde)
+      if (fechaHasta) params.append('fecha_hasta', fechaHasta)
+      if (entidadFilter !== 'TODAS') params.append('entidad', entidadFilter)
+      if (searchTerm) params.append('search', searchTerm)
+      params.append('limit', limit.toString())
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/audit/activity-logs/pdf?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `reporte-auditoria-${new Date().toISOString().split('T')[0]}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      } else {
+        alert('Error al generar el PDF')
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      alert('Error de conexión al servidor')
+    } finally {
+      setGeneratingPdf(false)
+    }
+  }
 
   const entidades = Array.from(new Set(logs.map((log) => log.entidad).filter(Boolean)))
 
@@ -147,6 +189,49 @@ export default function AuditoriaPage() {
                 <option value="200">200</option>
                 <option value="500">500</option>
               </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fecha Desde</Label>
+              <Input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fecha Hasta</Label>
+              <Input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2 flex items-end">
+              <button
+                onClick={handleGeneratePdf}
+                disabled={generatingPdf}
+                className="w-full h-10 px-4 bg-lab-danger-600 hover:bg-lab-danger-700 text-white rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                {generatingPdf ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Generando...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <span>Generar PDF</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </CardContent>

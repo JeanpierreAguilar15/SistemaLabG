@@ -2013,6 +2013,280 @@ export class AdminService {
     };
   }
 
+  /**
+   * Generar PDF de auditoría con filtros
+   */
+  async generateAuditPdf(filters?: any): Promise<Buffer> {
+    try {
+      // Importación dinámica de PDFKit
+      const PDFKit = await import('pdfkit');
+      const PDFDocument = PDFKit.default || PDFKit;
+
+      // Construir filtros para query
+      const where: Prisma.LogActividadWhereInput = {};
+
+      if (filters?.search) {
+        where.OR = [
+          { accion: { contains: filters.search, mode: 'insensitive' } },
+          { entidad: { contains: filters.search, mode: 'insensitive' } },
+          { descripcion: { contains: filters.search, mode: 'insensitive' } },
+        ];
+      }
+
+      if (filters?.entidad) {
+        where.entidad = filters.entidad;
+      }
+
+      if (filters?.fecha_desde || filters?.fecha_hasta) {
+        where.fecha_accion = {};
+
+        if (filters.fecha_desde) {
+          where.fecha_accion.gte = new Date(filters.fecha_desde);
+        }
+
+        if (filters.fecha_hasta) {
+          const fechaHasta = new Date(filters.fecha_hasta);
+          fechaHasta.setHours(23, 59, 59, 999);
+          where.fecha_accion.lte = fechaHasta;
+        }
+      }
+
+      // Obtener logs con límite
+      const limit = filters?.limit ? parseInt(filters.limit) : 50;
+      const logs = await this.prisma.logActividad.findMany({
+        where,
+        include: {
+          usuario: {
+            select: {
+              nombres: true,
+              apellidos: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: { fecha_accion: 'desc' },
+        take: limit,
+      });
+
+      // Crear PDF en memoria
+      return new Promise((resolve, reject) => {
+        try {
+          const doc = new PDFDocument({
+            size: 'LETTER',
+            margins: {
+              top: 50,
+              bottom: 50,
+              left: 50,
+              right: 50,
+            },
+            info: {
+              Title: 'Reporte de Auditoría',
+              Author: 'Laboratorio Clínico Franz',
+              Subject: 'Registro de Actividades del Sistema',
+              Creator: 'Sistema de Gestión Laboratorio Franz',
+            },
+          });
+
+          const chunks: Buffer[] = [];
+
+          doc.on('data', (chunk) => chunks.push(chunk));
+          doc.on('end', () => resolve(Buffer.concat(chunks)));
+          doc.on('error', reject);
+
+          // Header
+          doc
+            .fontSize(20)
+            .fillColor('#2563EB')
+            .font('Helvetica-Bold')
+            .text('LABORATORIO CLÍNICO FRANZ', { align: 'center' });
+
+          doc
+            .fontSize(10)
+            .fillColor('#666666')
+            .font('Helvetica')
+            .text('Sistema de Auditoría', { align: 'center' })
+            .moveDown(0.5);
+
+          // Línea separadora
+          doc
+            .strokeColor('#2563EB')
+            .lineWidth(2)
+            .moveTo(50, doc.y)
+            .lineTo(562, doc.y)
+            .stroke()
+            .moveDown(1);
+
+          // Título del documento
+          doc
+            .fontSize(16)
+            .fillColor('#000000')
+            .font('Helvetica-Bold')
+            .text('REPORTE DE AUDITORÍA', { align: 'center' })
+            .moveDown(1);
+
+          // Información del reporte
+          const now = new Date();
+          doc
+            .fontSize(10)
+            .font('Helvetica')
+            .fillColor('#333333')
+            .text(`Fecha de generación: ${this.formatDate(now)}`, { align: 'left' })
+            .text(`Hora: ${this.formatTime(now)}`, { align: 'left' });
+
+          // Filtros aplicados
+          if (filters?.fecha_desde || filters?.fecha_hasta || filters?.entidad) {
+            doc.moveDown(0.5).font('Helvetica-Bold').text('Filtros aplicados:', { align: 'left' });
+            doc.font('Helvetica');
+
+            if (filters.fecha_desde) {
+              doc.text(`  • Desde: ${filters.fecha_desde}`, { align: 'left' });
+            }
+            if (filters.fecha_hasta) {
+              doc.text(`  • Hasta: ${filters.fecha_hasta}`, { align: 'left' });
+            }
+            if (filters.entidad) {
+              doc.text(`  • Entidad: ${filters.entidad}`, { align: 'left' });
+            }
+          }
+
+          doc.moveDown(0.5).text(`Total de registros: ${logs.length}`, { align: 'left' }).moveDown(1);
+
+          // Tabla de logs
+          const tableTop = doc.y;
+          const colWidths = {
+            fecha: 90,
+            usuario: 120,
+            accion: 120,
+            entidad: 80,
+            ip: 80,
+          };
+
+          // Headers de tabla
+          doc
+            .fontSize(9)
+            .font('Helvetica-Bold')
+            .fillColor('#FFFFFF');
+
+          // Fondo de headers
+          doc
+            .rect(50, doc.y, 512, 20)
+            .fill('#2563EB');
+
+          let currentY = doc.y + 5;
+          doc
+            .fillColor('#FFFFFF')
+            .text('Fecha/Hora', 55, currentY, { width: colWidths.fecha })
+            .text('Usuario', 145, currentY, { width: colWidths.usuario })
+            .text('Acción', 265, currentY, { width: colWidths.accion })
+            .text('Entidad', 385, currentY, { width: colWidths.entidad })
+            .text('IP', 465, currentY, { width: colWidths.ip });
+
+          doc.moveDown(1.5);
+
+          // Contenido de tabla
+          doc.fontSize(8).font('Helvetica').fillColor('#333333');
+
+          for (const log of logs) {
+            // Verificar si necesitamos nueva página
+            if (doc.y > 700) {
+              doc.addPage();
+              currentY = 50;
+              doc.y = currentY;
+            } else {
+              currentY = doc.y;
+            }
+
+            const fecha = new Date(log.fecha_accion);
+            const fechaStr = `${this.formatDate(fecha)}\n${this.formatTime(fecha)}`;
+            const usuarioStr = log.usuario
+              ? `${log.usuario.nombres} ${log.usuario.apellidos}\n${log.usuario.email}`
+              : 'Sistema';
+            const accionStr = log.accion || '-';
+            const entidadStr = log.entidad || '-';
+            const ipStr = log.ip_address || '-';
+
+            // Calcular altura de la fila
+            const rowHeight = Math.max(
+              this.calculateTextHeight(doc, fechaStr, colWidths.fecha),
+              this.calculateTextHeight(doc, usuarioStr, colWidths.usuario),
+              this.calculateTextHeight(doc, accionStr, colWidths.accion),
+              this.calculateTextHeight(doc, entidadStr, colWidths.entidad),
+              this.calculateTextHeight(doc, ipStr, colWidths.ip)
+            ) + 10;
+
+            // Fondo alternado
+            if (logs.indexOf(log) % 2 === 0) {
+              doc.rect(50, currentY, 512, rowHeight).fill('#F3F4F6');
+            }
+
+            doc.fillColor('#333333');
+            doc.text(fechaStr, 55, currentY + 5, { width: colWidths.fecha });
+            doc.text(usuarioStr, 145, currentY + 5, { width: colWidths.usuario });
+            doc.text(accionStr, 265, currentY + 5, { width: colWidths.accion });
+            doc.text(entidadStr, 385, currentY + 5, { width: colWidths.entidad });
+            doc.text(ipStr, 465, currentY + 5, { width: colWidths.ip });
+
+            doc.y = currentY + rowHeight;
+          }
+
+          // Footer
+          doc.moveDown(2);
+          doc
+            .fontSize(8)
+            .fillColor('#999999')
+            .text(
+              '─────────────────────────────────────────────────────────────────────────',
+              { align: 'center' }
+            )
+            .text('Documento generado automáticamente por el Sistema de Gestión Laboratorio Franz', {
+              align: 'center',
+            })
+            .text(`Página generada el ${this.formatDate(now)} a las ${this.formatTime(now)}`, {
+              align: 'center',
+            });
+
+          doc.end();
+        } catch (error) {
+          reject(error);
+        }
+      });
+    } catch (error) {
+      throw new Error(`Error al generar PDF de auditoría: ${error.message}`);
+    }
+  }
+
+  /**
+   * Formatear fecha en español
+   */
+  private formatDate(date: Date): string {
+    return date.toLocaleDateString('es-EC', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  }
+
+  /**
+   * Formatear hora
+   */
+  private formatTime(date: Date): string {
+    return date.toLocaleTimeString('es-EC', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  }
+
+  /**
+   * Calcular altura de texto para tabla
+   */
+  private calculateTextHeight(doc: any, text: string, width: number): number {
+    const fontSize = doc._fontSize || 8;
+    const lineHeight = fontSize * 1.2;
+    const lines = text.split('\n').length;
+    return lines * lineHeight;
+  }
+
   // ==================== ESTADÍSTICAS ====================
 
   async getDashboardStats() {

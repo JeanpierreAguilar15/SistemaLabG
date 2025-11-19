@@ -538,6 +538,21 @@ export class AdminController {
     );
   }
 
+  @Get('audit/activity-logs/pdf')
+  async getActivityLogsPdf(
+    @Query() filters: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const pdfBuffer = await this.adminService.generateAuditPdf(filters);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=reporte-auditoria-${new Date().toISOString().split('T')[0]}.pdf`,
+    });
+
+    return new StreamableFile(pdfBuffer);
+  }
+
   @Get('audit/error-logs')
   async getErrorLogs(
     @Query('page') page?: string,
