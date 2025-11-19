@@ -396,7 +396,8 @@ export default function InventarioPage() {
       item.codigo_interno.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.descripcion?.toLowerCase().includes(searchTerm.toLowerCase())
 
-    return matchSearch
+    // Solo mostrar items activos
+    return matchSearch && item.activo
   })
 
   const getStockStatus = (item: ItemInventario) => {

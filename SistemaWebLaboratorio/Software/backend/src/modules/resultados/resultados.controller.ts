@@ -37,7 +37,7 @@ export class ResultadosController {
 
   @Post('muestras')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador', 'Tecnico')
+  @Roles('ADMIN', 'PERSONAL_LAB')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear nueva muestra (Admin/Técnico)' })
   @ApiResponse({ status: 201, description: 'Muestra creada' })
@@ -51,7 +51,7 @@ export class ResultadosController {
 
   @Get('muestras')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador', 'Tecnico')
+  @Roles('ADMIN', 'PERSONAL_LAB')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener muestras con filtros (Admin/Técnico)' })
   @ApiResponse({ status: 200, description: 'Lista de muestras' })
@@ -75,7 +75,7 @@ export class ResultadosController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador', 'Tecnico')
+  @Roles('ADMIN', 'PERSONAL_LAB')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear resultado para muestra (Admin/Técnico)' })
   @ApiResponse({ status: 201, description: 'Resultado creado' })
@@ -89,7 +89,7 @@ export class ResultadosController {
 
   @Put(':id/validar')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador', 'Tecnico')
+  @Roles('ADMIN', 'PERSONAL_LAB')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Validar resultado y generar PDF (Admin/Técnico)' })
   @ApiResponse({ status: 200, description: 'Resultado validado y PDF generado' })
@@ -103,7 +103,7 @@ export class ResultadosController {
 
   @Post(':id/upload-pdf')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador', 'Tecnico')
+  @Roles('ADMIN', 'PERSONAL_LAB')
   @ApiBearerAuth()
   @UseInterceptors(
     FileInterceptor('file', {
@@ -148,7 +148,7 @@ export class ResultadosController {
 
   @Get('admin/all')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador', 'Tecnico')
+  @Roles('ADMIN', 'PERSONAL_LAB')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener todos los resultados (Admin)' })
   @ApiResponse({ status: 200, description: 'Lista de resultados' })
@@ -172,7 +172,7 @@ export class ResultadosController {
 
   @Put('admin/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrador', 'Tecnico')
+  @Roles('ADMIN', 'PERSONAL_LAB')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar resultado (Admin)' })
   @ApiResponse({ status: 200, description: 'Resultado actualizado' })
