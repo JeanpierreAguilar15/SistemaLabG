@@ -54,6 +54,14 @@ export enum AdminEventType {
   SUPPLIER_CREATED = 'admin.supplier.created',
   SUPPLIER_UPDATED = 'admin.supplier.updated',
   SUPPLIER_DELETED = 'admin.supplier.deleted',
+
+  // Órdenes de Compra
+  PURCHASE_ORDER_CREATED = 'admin.purchase_order.created',
+  PURCHASE_ORDER_UPDATED = 'admin.purchase_order.updated',
+  PURCHASE_ORDER_DELETED = 'admin.purchase_order.deleted',
+  PURCHASE_ORDER_EMITTED = 'admin.purchase_order.emitted',
+  PURCHASE_ORDER_RECEIVED = 'admin.purchase_order.received',
+  PURCHASE_ORDER_CANCELLED = 'admin.purchase_order.cancelled',
 }
 
 export interface AdminEventPayload {
@@ -421,6 +429,73 @@ export class AdminEventsService {
       entityId: supplierId,
       action: 'deleted',
       userId: adminId,
+      timestamp: new Date(),
+    });
+  }
+
+  // Órdenes de Compra
+  emitPurchaseOrderCreated(purchaseOrderId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.PURCHASE_ORDER_CREATED, {
+      entityType: 'purchase_order',
+      entityId: purchaseOrderId,
+      action: 'created',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitPurchaseOrderUpdated(purchaseOrderId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.PURCHASE_ORDER_UPDATED, {
+      entityType: 'purchase_order',
+      entityId: purchaseOrderId,
+      action: 'updated',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitPurchaseOrderDeleted(purchaseOrderId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.PURCHASE_ORDER_DELETED, {
+      entityType: 'purchase_order',
+      entityId: purchaseOrderId,
+      action: 'deleted',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitPurchaseOrderEmitted(purchaseOrderId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.PURCHASE_ORDER_EMITTED, {
+      entityType: 'purchase_order',
+      entityId: purchaseOrderId,
+      action: 'updated',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitPurchaseOrderReceived(purchaseOrderId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.PURCHASE_ORDER_RECEIVED, {
+      entityType: 'purchase_order',
+      entityId: purchaseOrderId,
+      action: 'updated',
+      userId: adminId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitPurchaseOrderCancelled(purchaseOrderId: number, adminId: number, data?: any) {
+    this.emitEvent(AdminEventType.PURCHASE_ORDER_CANCELLED, {
+      entityType: 'purchase_order',
+      entityId: purchaseOrderId,
+      action: 'updated',
+      userId: adminId,
+      data,
       timestamp: new Date(),
     });
   }

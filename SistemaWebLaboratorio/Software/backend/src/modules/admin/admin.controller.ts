@@ -15,6 +15,7 @@ import {
   UsePipes,
   NotFoundException,
 } from '@nestjs/common';
+import { ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -555,5 +556,83 @@ export class AdminController {
   @Get('dashboard/stats')
   async getDashboardStats() {
     return this.adminService.getDashboardStats();
+  }
+
+  // ==================== ÓRDENES DE COMPRA ====================
+
+  @Post('purchase-orders')
+  @ApiOperation({ summary: 'Crear orden de compra' })
+  async createPurchaseOrder(
+    @Body() data: any,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.createOrdenCompra(data, adminId);
+  }
+
+  @Get('purchase-orders')
+  @ApiOperation({ summary: 'Obtener todas las órdenes de compra' })
+  async getAllPurchaseOrders(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query() filters?: any,
+  ) {
+    return this.adminService.getAllOrdenesCompra(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+      filters,
+    );
+  }
+
+  @Get('purchase-orders/:id')
+  @ApiOperation({ summary: 'Obtener orden de compra por ID' })
+  async getPurchaseOrderById(@Param('id', ParseIntPipe) id: number) {
+    return this.adminService.getOrdenCompraById(id);
+  }
+
+  @Put('purchase-orders/:id')
+  @ApiOperation({ summary: 'Actualizar orden de compra' })
+  async updatePurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: any,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.updateOrdenCompra(id, data, adminId);
+  }
+
+  @Delete('purchase-orders/:id')
+  @ApiOperation({ summary: 'Eliminar orden de compra' })
+  async deletePurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.deleteOrdenCompra(id, adminId);
+  }
+
+  @Post('purchase-orders/:id/emit')
+  @ApiOperation({ summary: 'Emitir orden de compra' })
+  async emitPurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.emitirOrdenCompra(id, adminId);
+  }
+
+  @Post('purchase-orders/:id/receive')
+  @ApiOperation({ summary: 'Recibir orden de compra' })
+  async receivePurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: any,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.recibirOrdenCompra(id, data, adminId);
+  }
+
+  @Post('purchase-orders/:id/cancel')
+  @ApiOperation({ summary: 'Cancelar orden de compra' })
+  async cancelPurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.cancelarOrdenCompra(id, adminId);
   }
 }

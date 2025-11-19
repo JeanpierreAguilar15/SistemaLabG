@@ -2081,4 +2081,599 @@ export class AdminService {
       recentActivities,
     };
   }
+
+  // =====================================================
+  // ÓRDENES DE COMPRA
+  // =====================================================
+
+  /**
+   * Generar número de orden único
+   */
+  private async generarNumeroOrden(): Promise<string> {
+    const fecha = new Date();
+    const año = fecha.getFullYear();
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+
+    // Contar órdenes del mes actual
+    const inicioMes = new Date(fecha.getFullYear(), fecha.getMonth(), 1);
+    const finMes = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0, 23, 59, 59);
+
+    const count = await this.prisma.ordenCompra.count({
+      where: {
+        fecha_orden: {
+          gte: inicioMes,
+          lte: finMes,
+        },
+      },
+    });
+
+    const secuencial = String(count + 1).padStart(4, '0');
+    return `OC-${año}${mes}-${secuencial}`;
+  }
+
+  /**
+   * Crear orden de compra
+   */
+  async createOrdenCompra(data: any, creado_por: number) {
+    // Validar que el proveedor exista y esté activo
+    const proveedor = await this.prisma.proveedor.findUnique({
+      where: { codigo_proveedor: data.codigo_proveedor },
+    });
+
+    if (!proveedor) {
+      throw new NotFoundException('Proveedor no encontrado');
+    }
+
+    if (!proveedor.activo) {
+      throw new BadRequestException('El proveedor está inactivo');
+    }
+
+    // Validar que todos los items existan
+    for (const item of data.items) {
+      const itemDb = await this.prisma.item.findUnique({
+        where: { codigo_item: item.codigo_item },
+      });
+
+      if (!itemDb) {
+        throw new NotFoundException(`Item con código ${item.codigo_item} no encontrado`);
+      }
+
+      if (!itemDb.activo) {
+        throw new BadRequestException(`El item ${itemDb.nombre} está inactivo`);
+      }
+    }
+
+    // Calcular totales
+    let subtotal = 0;
+    const detalles = data.items.map((item: any) => {
+      const total_linea = item.cantidad * item.precio_unitario;
+      subtotal += total_linea;
+      return {
+        codigo_item: item.codigo_item,
+        cantidad: item.cantidad,
+        precio_unitario: item.precio_unitario,
+        total_linea,
+      };
+    });
+
+    const iva = subtotal * 0.15; // 15% IVA Ecuador
+    const total = subtotal + iva;
+
+    // Generar número de orden
+    const numero_orden = await this.generarNumeroOrden();
+
+    // Crear orden de compra con detalles
+    const ordenCompra = await this.prisma.ordenCompra.create({
+      data: {
+        numero_orden,
+        codigo_proveedor: data.codigo_proveedor,
+        subtotal,
+        iva,
+        total,
+        estado: 'BORRADOR',
+        observaciones: data.observaciones,
+        creado_por,
+        detalles: {
+          create: detalles,
+        },
+      },
+      include: {
+        proveedor: true,
+        creador: {
+          select: {
+            nombres: true,
+            apellidos: true,
+          },
+        },
+        detalles: {
+          include: {
+            item: true,
+          },
+        },
+      },
+    });
+
+    // Emitir evento
+    this.eventsService.emitPurchaseOrderCreated(
+      ordenCompra.codigo_orden_compra,
+      creado_por,
+      ordenCompra,
+    );
+
+    return ordenCompra;
+  }
+
+  /**
+   * Obtener todas las órdenes de compra con filtros y paginación
+   */
+  async getAllOrdenesCompra(
+    page: number = 1,
+    limit: number = 50,
+    filters?: any,
+  ) {
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (filters?.codigo_proveedor) {
+      where.codigo_proveedor = parseInt(filters.codigo_proveedor);
+    }
+
+    if (filters?.estado) {
+      where.estado = filters.estado;
+    }
+
+    if (filters?.fecha_desde || filters?.fecha_hasta) {
+      where.fecha_orden = {};
+      if (filters.fecha_desde) {
+        where.fecha_orden.gte = new Date(filters.fecha_desde);
+      }
+      if (filters.fecha_hasta) {
+        where.fecha_orden.lte = new Date(filters.fecha_hasta);
+      }
+    }
+
+    if (filters?.creado_por) {
+      where.creado_por = parseInt(filters.creado_por);
+    }
+
+    const [ordenes, total] = await Promise.all([
+      this.prisma.ordenCompra.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { fecha_orden: 'desc' },
+        include: {
+          proveedor: true,
+          creador: {
+            select: {
+              nombres: true,
+              apellidos: true,
+            },
+          },
+          detalles: {
+            include: {
+              item: {
+                select: {
+                  codigo_interno: true,
+                  nombre: true,
+                  unidad_medida: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.ordenCompra.count({ where }),
+    ]);
+
+    return {
+      data: ordenes,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Obtener orden de compra por ID
+   */
+  async getOrdenCompraById(codigo_orden_compra: number) {
+    const orden = await this.prisma.ordenCompra.findUnique({
+      where: { codigo_orden_compra },
+      include: {
+        proveedor: true,
+        creador: {
+          select: {
+            nombres: true,
+            apellidos: true,
+          },
+        },
+        detalles: {
+          include: {
+            item: true,
+          },
+        },
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    return orden;
+  }
+
+  /**
+   * Actualizar orden de compra (solo si está en BORRADOR)
+   */
+  async updateOrdenCompra(
+    codigo_orden_compra: number,
+    data: any,
+    usuario_id: number,
+  ) {
+    const orden = await this.prisma.ordenCompra.findUnique({
+      where: { codigo_orden_compra },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    if (orden.estado !== 'BORRADOR') {
+      throw new BadRequestException(
+        'Solo se pueden editar órdenes en estado BORRADOR',
+      );
+    }
+
+    // Si se actualizan los items, recalcular totales
+    if (data.items) {
+      let subtotal = 0;
+      const nuevosDetalles = data.items.map((item: any) => {
+        const total_linea = item.cantidad * item.precio_unitario;
+        subtotal += total_linea;
+        return {
+          codigo_item: item.codigo_item,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario,
+          total_linea,
+        };
+      });
+
+      const iva = subtotal * 0.15;
+      const total = subtotal + iva;
+
+      // Actualizar orden con nuevos detalles
+      const ordenActualizada = await this.prisma.ordenCompra.update({
+        where: { codigo_orden_compra },
+        data: {
+          codigo_proveedor: data.codigo_proveedor || orden.codigo_proveedor,
+          observaciones: data.observaciones ?? orden.observaciones,
+          subtotal,
+          iva,
+          total,
+          detalles: {
+            deleteMany: {},
+            create: nuevosDetalles,
+          },
+        },
+        include: {
+          proveedor: true,
+          creador: {
+            select: {
+              nombres: true,
+              apellidos: true,
+            },
+          },
+          detalles: {
+            include: {
+              item: true,
+            },
+          },
+        },
+      });
+
+      this.eventsService.emitPurchaseOrderUpdated(
+        ordenActualizada.codigo_orden_compra,
+        usuario_id,
+        ordenActualizada,
+      );
+
+      return ordenActualizada;
+    }
+
+    // Si solo se actualiza información básica
+    const ordenActualizada = await this.prisma.ordenCompra.update({
+      where: { codigo_orden_compra },
+      data: {
+        codigo_proveedor: data.codigo_proveedor,
+        observaciones: data.observaciones,
+      },
+      include: {
+        proveedor: true,
+        creador: {
+          select: {
+            nombres: true,
+            apellidos: true,
+          },
+        },
+        detalles: {
+          include: {
+            item: true,
+          },
+        },
+      },
+    });
+
+    this.eventsService.emitPurchaseOrderUpdated(
+      ordenActualizada.codigo_orden_compra,
+      usuario_id,
+      ordenActualizada,
+    );
+
+    return ordenActualizada;
+  }
+
+  /**
+   * Eliminar orden de compra (solo si está en BORRADOR)
+   */
+  async deleteOrdenCompra(codigo_orden_compra: number, usuario_id: number) {
+    const orden = await this.prisma.ordenCompra.findUnique({
+      where: { codigo_orden_compra },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    if (orden.estado !== 'BORRADOR') {
+      throw new BadRequestException(
+        'Solo se pueden eliminar órdenes en estado BORRADOR',
+      );
+    }
+
+    await this.prisma.ordenCompra.delete({
+      where: { codigo_orden_compra },
+    });
+
+    this.eventsService.emitPurchaseOrderDeleted(
+      codigo_orden_compra,
+      usuario_id,
+      { numero_orden: orden.numero_orden },
+    );
+
+    return { message: 'Orden de compra eliminada correctamente' };
+  }
+
+  /**
+   * Emitir orden de compra (cambiar de BORRADOR a EMITIDA)
+   */
+  async emitirOrdenCompra(codigo_orden_compra: number, usuario_id: number) {
+    const orden = await this.prisma.ordenCompra.findUnique({
+      where: { codigo_orden_compra },
+      include: {
+        proveedor: true,
+        detalles: {
+          include: {
+            item: true,
+          },
+        },
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    if (orden.estado !== 'BORRADOR') {
+      throw new BadRequestException(
+        'Solo se pueden emitir órdenes en estado BORRADOR',
+      );
+    }
+
+    const ordenEmitida = await this.prisma.ordenCompra.update({
+      where: { codigo_orden_compra },
+      data: {
+        estado: 'EMITIDA',
+      },
+      include: {
+        proveedor: true,
+        creador: {
+          select: {
+            nombres: true,
+            apellidos: true,
+          },
+        },
+        detalles: {
+          include: {
+            item: true,
+          },
+        },
+      },
+    });
+
+    this.eventsService.emitPurchaseOrderEmitted(
+      codigo_orden_compra,
+      usuario_id,
+      ordenEmitida,
+    );
+
+    return ordenEmitida;
+  }
+
+  /**
+   * Recibir orden de compra (cambiar a RECIBIDA y crear movimientos de entrada)
+   */
+  async recibirOrdenCompra(
+    codigo_orden_compra: number,
+    data: any,
+    usuario_id: number,
+  ) {
+    const orden = await this.prisma.ordenCompra.findUnique({
+      where: { codigo_orden_compra },
+      include: {
+        proveedor: true,
+        detalles: {
+          include: {
+            item: true,
+          },
+        },
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    if (orden.estado !== 'EMITIDA') {
+      throw new BadRequestException(
+        'Solo se pueden recibir órdenes en estado EMITIDA',
+      );
+    }
+
+    return await this.prisma.$transaction(async (prisma) => {
+      // Actualizar estado de la orden
+      const ordenRecibida = await prisma.ordenCompra.update({
+        where: { codigo_orden_compra },
+        data: {
+          estado: 'RECIBIDA',
+          fecha_entrega_real: new Date(),
+        },
+        include: {
+          proveedor: true,
+          creador: {
+            select: {
+              nombres: true,
+              apellidos: true,
+            },
+          },
+          detalles: {
+            include: {
+              item: true,
+            },
+          },
+        },
+      });
+
+      // Crear movimientos de entrada para cada item
+      const items_recibidos = data.items_recibidos || orden.detalles;
+
+      for (const itemRecibido of items_recibidos) {
+        const detalle = orden.detalles.find(
+          (d) => d.codigo_item === itemRecibido.codigo_item,
+        );
+
+        if (!detalle) continue;
+
+        const cantidad_recibida =
+          itemRecibido.cantidad_recibida || detalle.cantidad;
+
+        // Actualizar stock del item
+        await prisma.item.update({
+          where: { codigo_item: detalle.codigo_item },
+          data: {
+            stock_actual: {
+              increment: cantidad_recibida,
+            },
+          },
+        });
+
+        const item = await prisma.item.findUnique({
+          where: { codigo_item: detalle.codigo_item },
+        });
+
+        // Crear movimiento de entrada
+        await prisma.movimiento.create({
+          data: {
+            codigo_item: detalle.codigo_item,
+            tipo_movimiento: 'ENTRADA',
+            cantidad: cantidad_recibida,
+            stock_anterior: item.stock_actual - cantidad_recibida,
+            stock_nuevo: item.stock_actual,
+            motivo: `Recepción de orden de compra ${orden.numero_orden}`,
+            realizado_por: usuario_id,
+          },
+        });
+
+        // Si se proporcionó información de lote, crear el lote
+        if (itemRecibido.numero_lote) {
+          await prisma.lote.create({
+            data: {
+              codigo_item: detalle.codigo_item,
+              numero_lote: itemRecibido.numero_lote,
+              cantidad_inicial: cantidad_recibida,
+              cantidad_actual: cantidad_recibida,
+              fecha_vencimiento: itemRecibido.fecha_vencimiento
+                ? new Date(itemRecibido.fecha_vencimiento)
+                : null,
+            },
+          });
+        }
+      }
+
+      // Emitir evento
+      this.eventsService.emitPurchaseOrderReceived(
+        codigo_orden_compra,
+        usuario_id,
+        ordenRecibida,
+      );
+
+      return ordenRecibida;
+    });
+  }
+
+  /**
+   * Cancelar orden de compra
+   */
+  async cancelarOrdenCompra(codigo_orden_compra: number, usuario_id: number) {
+    const orden = await this.prisma.ordenCompra.findUnique({
+      where: { codigo_orden_compra },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    if (orden.estado === 'RECIBIDA') {
+      throw new BadRequestException(
+        'No se puede cancelar una orden que ya fue recibida',
+      );
+    }
+
+    if (orden.estado === 'CANCELADA') {
+      throw new BadRequestException('La orden ya está cancelada');
+    }
+
+    const ordenCancelada = await this.prisma.ordenCompra.update({
+      where: { codigo_orden_compra },
+      data: {
+        estado: 'CANCELADA',
+      },
+      include: {
+        proveedor: true,
+        creador: {
+          select: {
+            nombres: true,
+            apellidos: true,
+          },
+        },
+        detalles: {
+          include: {
+            item: true,
+          },
+        },
+      },
+    });
+
+    this.eventsService.emitPurchaseOrderCancelled(
+      codigo_orden_compra,
+      usuario_id,
+      ordenCancelada,
+    );
+
+    return ordenCancelada;
+  }
 }
