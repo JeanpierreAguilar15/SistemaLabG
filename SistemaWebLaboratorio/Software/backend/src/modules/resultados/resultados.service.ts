@@ -408,17 +408,17 @@ export class ResultadosService {
       `PDF subido manualmente para resultado ${codigo_resultado} por usuario ${validado_por}`,
     );
 
-    // Notificar al paciente que su resultado está listo
-    this.eventsGateway.notifyUser(resultado.muestra.codigo_paciente, {
-      eventType: 'resultados.resultado.listo',
-      title: 'Resultado disponible',
-      message: `Tu resultado de ${resultado.examen.nombre} ya está disponible para descargar`,
-      data: {
-        codigo_resultado,
-        codigo_verificacion,
-      },
-      status: 'ready',
-    });
+    // TODO: Implementar notificación WebSocket cuando se complete el EventsGateway
+    // this.eventsGateway.notifyUser(resultado.muestra.codigo_paciente, {
+    //   eventType: 'resultados.resultado.listo',
+    //   title: 'Resultado disponible',
+    //   message: `Tu resultado de ${resultado.examen.nombre} ya está disponible para descargar`,
+    //   data: {
+    //     codigo_resultado,
+    //     codigo_verificacion,
+    //   },
+    //   status: 'ready',
+    // });
 
     // Notificar a admins
     this.eventsGateway.notifyAdminEvent({
