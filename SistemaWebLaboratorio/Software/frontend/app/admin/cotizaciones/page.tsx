@@ -22,7 +22,7 @@ interface Cotizacion {
     apellidos: string
     email: string
   }
-  items: Array<{
+  items?: Array<{
     examen: string
     cantidad: number
     precio_unitario: number
@@ -272,17 +272,23 @@ export default function CotizacionesAdminPage() {
               <div>
                 <h3 className="font-semibold text-lab-neutral-900 mb-3">Exámenes Solicitados</h3>
                 <div className="space-y-2">
-                  {selectedCotizacion.items.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center p-3 bg-lab-neutral-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-lab-neutral-900">{item.examen}</p>
-                        <p className="text-sm text-lab-neutral-600">
-                          {item.cantidad} x ${Number(item.precio_unitario).toFixed(2)}
-                        </p>
+                  {selectedCotizacion.items && selectedCotizacion.items.length > 0 ? (
+                    selectedCotizacion.items.map((item, index) => (
+                      <div key={index} className="flex justify-between items-center p-3 bg-lab-neutral-50 rounded-lg">
+                        <div>
+                          <p className="font-medium text-lab-neutral-900">{item.examen}</p>
+                          <p className="text-sm text-lab-neutral-600">
+                            {item.cantidad} x ${Number(item.precio_unitario).toFixed(2)}
+                          </p>
+                        </div>
+                        <p className="font-semibold text-lab-neutral-900">${Number(item.total_linea).toFixed(2)}</p>
                       </div>
-                      <p className="font-semibold text-lab-neutral-900">${Number(item.total_linea).toFixed(2)}</p>
+                    ))
+                  ) : (
+                    <div className="text-center py-4 text-lab-neutral-500">
+                      No hay items disponibles para esta cotización
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
