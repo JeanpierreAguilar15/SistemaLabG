@@ -16,56 +16,222 @@ interface Supplier {
   fecha_creacion: string
 }
 
+interface Message {
+  type: 'success' | 'error'
+  text: string
+}
+
+// Validador de RUC ecuatoriano
+function validateRucEcuador(ruc: string): boolean {
+  if (!ruc || ruc.length !== 13) return false
+
+  const codigoProvincia = parseInt(ruc.substring(0, 2))
+  if (codigoProvincia < 1 || codigoProvincia > 24) return false
+
+  const tercerDigito = parseInt(ruc.charAt(2))
+  if (tercerDigito < 0 || tercerDigito > 9) return false
+
+  // Los últimos 3 dígitos deben ser 001 para sociedades o 000 para personas naturales
+  const ultimos3 = ruc.substring(10, 13)
+  if (ultimos3 !== '001' && ultimos3 !== '000') return false
+
+  return true
+}
+
 export default function SuppliersManagement() {
   const { accessToken } = useAuthStore()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
+  const [message, setMessage] = useState<Message | null>(null)
+  const [rucError, setRucError] = useState<string>('')
+  const [formData, setFormData] = useState({
+    ruc: '',
+    razon_social: '',
+    nombre_comercial: '',
+    telefono: '',
+    email: '',
+    direccion: '',
+    activo: true,
+  })
 
-  // Esperar a que el componente se monte en el cliente
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useEffect(() => {
-    console.log('Proveedores - accessToken:', accessToken ? 'exists' : 'null', 'mounted:', mounted)
     if (mounted && accessToken) {
       loadSuppliers()
     }
   }, [accessToken, mounted])
 
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
+
   const loadSuppliers = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
-      const fullUrl = `${apiUrl}/admin/suppliers`
-
-      console.log('=== PROVEEDORES DEBUG ===')
-      console.log('API_URL:', process.env.NEXT_PUBLIC_API_URL)
-      console.log('Full URL:', fullUrl)
-      console.log('Token exists:', !!accessToken)
-      console.log('Token preview:', accessToken?.substring(0, 50))
-
       setLoading(true)
-      const response = await fetch(fullUrl, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`, {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
       })
 
-      console.log('Suppliers response status:', response.status)
       if (response.ok) {
         const data = await response.json()
-        console.log('Suppliers loaded successfully:', data.length, 'items')
         setSuppliers(data)
       } else {
-        const errorText = await response.text()
-        console.error('Failed to load suppliers:', response.status, errorText)
+        setMessage({ type: 'error', text: 'Error al cargar proveedores' })
       }
     } catch (error) {
-      console.error('Error loading suppliers:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleOpenForm = (supplier?: Supplier) => {
+    if (supplier) {
+      setEditingSupplier(supplier)
+      setFormData({
+        ruc: supplier.ruc,
+        razon_social: supplier.razon_social,
+        nombre_comercial: supplier.nombre_comercial || '',
+        telefono: supplier.telefono || '',
+        email: supplier.email || '',
+        direccion: supplier.direccion || '',
+        activo: supplier.activo,
+      })
+    } else {
+      setEditingSupplier(null)
+      setFormData({
+        ruc: '',
+        razon_social: '',
+        nombre_comercial: '',
+        telefono: '',
+        email: '',
+        direccion: '',
+        activo: true,
+      })
+    }
+    setRucError('')
+    setShowForm(true)
+  }
+
+  const handleCloseForm = () => {
+    setShowForm(false)
+    setEditingSupplier(null)
+    setRucError('')
+    setFormData({
+      ruc: '',
+      razon_social: '',
+      nombre_comercial: '',
+      telefono: '',
+      email: '',
+      direccion: '',
+      activo: true,
+    })
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
+    }))
+
+    // Validar RUC en tiempo real
+    if (name === 'ruc') {
+      if (value.length === 13) {
+        if (!validateRucEcuador(value)) {
+          setRucError('RUC ecuatoriano inválido')
+        } else {
+          setRucError('')
+        }
+      } else if (value.length > 0) {
+        setRucError('El RUC debe tener 13 dígitos')
+      } else {
+        setRucError('')
+      }
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // Validar RUC antes de enviar
+    if (!validateRucEcuador(formData.ruc)) {
+      setRucError('RUC ecuatoriano inválido')
+      return
+    }
+
+    try {
+      const url = editingSupplier
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers/${editingSupplier.codigo_proveedor}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`
+
+      const payload: any = {
+        ruc: formData.ruc,
+        razon_social: formData.razon_social,
+        activo: formData.activo,
+      }
+
+      if (formData.nombre_comercial) payload.nombre_comercial = formData.nombre_comercial
+      if (formData.telefono) payload.telefono = formData.telefono
+      if (formData.email) payload.email = formData.email
+      if (formData.direccion) payload.direccion = formData.direccion
+
+      const response = await fetch(url, {
+        method: editingSupplier ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (response.ok) {
+        setMessage({
+          type: 'success',
+          text: editingSupplier ? '✅ Proveedor actualizado correctamente' : '✅ Proveedor creado correctamente',
+        })
+        handleCloseForm()
+        loadSuppliers()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al guardar proveedor' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleDelete = async (codigo_proveedor: number) => {
+    if (!confirm('¿Estás seguro de que deseas desactivar este proveedor?')) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers/${codigo_proveedor}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok || response.status === 204) {
+        setMessage({ type: 'success', text: '✅ Proveedor desactivado correctamente' })
+        loadSuppliers()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al desactivar proveedor' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
 
@@ -87,13 +253,26 @@ export default function SuppliersManagement() {
 
   return (
     <div className="space-y-6">
+      {/* Messages */}
+      {message && (
+        <div
+          className={`p-4 rounded-lg ${
+            message.type === 'success'
+              ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
+              : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Proveedores</h1>
           <p className="text-lab-neutral-600 mt-1">Administra los proveedores del laboratorio</p>
         </div>
-        <Button className="bg-lab-primary-600 hover:bg-lab-primary-700">
+        <Button onClick={() => handleOpenForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
           <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
@@ -101,10 +280,156 @@ export default function SuppliersManagement() {
         </Button>
       </div>
 
+      {/* Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-8">
+            <div className="p-6 border-b border-lab-neutral-200">
+              <h2 className="text-2xl font-bold text-lab-neutral-900">
+                {editingSupplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+              </h2>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="ruc" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      RUC * (13 dígitos)
+                    </label>
+                    <input
+                      type="text"
+                      id="ruc"
+                      name="ruc"
+                      value={formData.ruc}
+                      onChange={handleInputChange}
+                      required
+                      maxLength={13}
+                      pattern="^\d{13}$"
+                      className={`block w-full rounded-md border px-3 py-2 focus:ring-lab-primary-500 ${
+                        rucError
+                          ? 'border-lab-danger-500 focus:border-lab-danger-500'
+                          : 'border-lab-neutral-300 focus:border-lab-primary-500'
+                      }`}
+                    />
+                    {rucError && <p className="mt-1 text-sm text-lab-danger-600">{rucError}</p>}
+                    <p className="mt-1 text-xs text-lab-neutral-500">
+                      Formato: 13 dígitos (ej: 1790123456001)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="razon_social" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Razón Social *
+                    </label>
+                    <input
+                      type="text"
+                      id="razon_social"
+                      name="razon_social"
+                      value={formData.razon_social}
+                      onChange={handleInputChange}
+                      required
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="nombre_comercial" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                    Nombre Comercial
+                  </label>
+                  <input
+                    type="text"
+                    id="nombre_comercial"
+                    name="nombre_comercial"
+                    value={formData.nombre_comercial}
+                    onChange={handleInputChange}
+                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="telefono" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Teléfono
+                    </label>
+                    <input
+                      type="tel"
+                      id="telefono"
+                      name="telefono"
+                      value={formData.telefono}
+                      onChange={handleInputChange}
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="direccion" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                    Dirección
+                  </label>
+                  <textarea
+                    id="direccion"
+                    name="direccion"
+                    value={formData.direccion}
+                    onChange={handleInputChange}
+                    rows={2}
+                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="activo"
+                    name="activo"
+                    checked={formData.activo}
+                    onChange={handleInputChange}
+                    className="h-4 w-4 text-lab-primary-600 focus:ring-lab-primary-500 border-lab-neutral-300 rounded"
+                  />
+                  <label htmlFor="activo" className="ml-2 block text-sm text-lab-neutral-700">
+                    Proveedor activo
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-lab-neutral-200">
+                <Button type="button" onClick={handleCloseForm} variant="outline">
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-lab-primary-600 hover:bg-lab-primary-700"
+                  disabled={!!rucError}
+                >
+                  {editingSupplier ? 'Actualizar' : 'Crear'} Proveedor
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Suppliers Table */}
       <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200">
         <div className="px-6 py-4 border-b border-lab-neutral-200">
-          <h2 className="text-lg font-semibold text-lab-neutral-900">Proveedores Registrados</h2>
+          <h2 className="text-lg font-semibold text-lab-neutral-900">
+            Proveedores Registrados ({suppliers.length})
+          </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -134,10 +459,10 @@ export default function SuppliersManagement() {
               {suppliers.map((supplier) => (
                 <tr key={supplier.codigo_proveedor} className="hover:bg-lab-neutral-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-lab-neutral-900">{supplier.ruc}</div>
+                    <div className="text-sm font-medium text-lab-neutral-900 font-mono">{supplier.ruc}</div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-lab-neutral-900">{supplier.razon_social}</div>
+                    <div className="text-sm font-medium text-lab-neutral-900">{supplier.razon_social}</div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-sm text-lab-neutral-600">
@@ -162,11 +487,21 @@ export default function SuppliersManagement() {
                       {supplier.activo ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <Button variant="ghost" size="sm">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenForm(supplier)}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(supplier.codigo_proveedor)}
+                      className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                    >
+                      Desactivar
                     </Button>
                   </td>
                 </tr>

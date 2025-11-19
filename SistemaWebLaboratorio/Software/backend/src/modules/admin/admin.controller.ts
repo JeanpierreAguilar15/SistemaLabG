@@ -375,7 +375,6 @@ export class AdminController {
   }
 
   @Delete('packages/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deletePackage(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -422,7 +421,6 @@ export class AdminController {
   }
 
   @Delete('inventory/items/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteInventoryItem(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -461,7 +459,6 @@ export class AdminController {
   }
 
   @Delete('suppliers/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteSupplier(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
