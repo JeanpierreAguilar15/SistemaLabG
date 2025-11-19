@@ -447,6 +447,7 @@ export class AgendaService {
 
   /**
    * Obtener citas del paciente autenticado
+   * Devuelve datos transformados para el frontend (aplanados)
    */
   async getMyCitas(codigo_paciente: number) {
     const citas = await this.prisma.cita.findMany({
@@ -466,7 +467,24 @@ export class AgendaService {
       },
     });
 
-    return citas;
+    // Transformar datos para el frontend (aplanar objetos anidados)
+    return citas.map((cita) => ({
+      codigo_cita: cita.codigo_cita,
+      fecha: cita.slot.fecha.toISOString().split('T')[0], // YYYY-MM-DD
+      hora_inicio: cita.slot.hora_inicio.toISOString().substring(11, 16), // HH:MM
+      hora_fin: cita.slot.hora_fin.toISOString().substring(11, 16), // HH:MM
+      servicio: cita.slot.servicio.nombre, // Aplanar servicio
+      sede: cita.slot.sede.nombre, // Aplanar sede
+      estado: cita.estado,
+      confirmada: cita.confirmada || false, // Agregar campo confirmada
+      observaciones: cita.observaciones,
+      // Agregar datos completos del slot y servicio/sede para operaciones
+      _slot: {
+        codigo_slot: cita.slot.codigo_slot,
+        servicio: cita.slot.servicio,
+        sede: cita.slot.sede,
+      },
+    }));
   }
 
   /**

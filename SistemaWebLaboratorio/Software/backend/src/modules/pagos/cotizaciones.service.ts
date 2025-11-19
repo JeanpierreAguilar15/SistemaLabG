@@ -3,16 +3,23 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCotizacionDto } from './dto';
 import { Decimal } from '@prisma/client/runtime/library';
+import { AgendaService } from '../agenda/agenda.service';
 
 @Injectable()
 export class CotizacionesService {
   private readonly logger = new Logger(CotizacionesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => AgendaService))
+    private readonly agendaService: AgendaService,
+  ) {}
 
   /**
    * Obtener todos los exámenes agrupados por categoría
@@ -476,6 +483,69 @@ export class CotizacionesService {
       pagadas,
       expiradas,
       total_ventas: totalVentas._sum.total || 0,
+    };
+  }
+
+  /**
+   * Agendar cita desde cotización aprobada/pagada
+   */
+  async agendarCitaDesdeCotizacion(
+    codigo_cotizacion: number,
+    codigo_paciente: number,
+    codigo_slot: number,
+    observaciones?: string,
+  ) {
+    // 1. Verificar que la cotización existe y pertenece al paciente
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { codigo_cotizacion },
+      include: {
+        paciente: {
+          select: {
+            nombres: true,
+            apellidos: true,
+          },
+        },
+      },
+    });
+
+    if (!cotizacion) {
+      throw new NotFoundException('Cotización no encontrada');
+    }
+
+    if (cotizacion.codigo_paciente !== codigo_paciente) {
+      throw new NotFoundException('Cotización no encontrada');
+    }
+
+    // 2. Verificar que la cotización está en estado válido para agendar cita
+    const estadosValidos = ['ACEPTADA', 'APROBADA', 'PAGADA'];
+    if (!estadosValidos.includes(cotizacion.estado)) {
+      throw new BadRequestException(
+        `No se puede agendar cita desde una cotización en estado ${cotizacion.estado}. ` +
+        `La cotización debe estar ACEPTADA, APROBADA o PAGADA.`,
+      );
+    }
+
+    // 3. Crear la cita usando el servicio de agenda
+    const cita = await this.agendaService.createCita(
+      {
+        codigo_slot,
+        observaciones: observaciones || `Cita agendada desde cotización ${cotizacion.numero_cotizacion}`,
+      },
+      codigo_paciente,
+    );
+
+    this.logger.log(
+      `Cita agendada desde cotización: ${cotizacion.numero_cotizacion} | ` +
+      `Cita: ${cita.codigo_cita} | Paciente: ${codigo_paciente}`,
+    );
+
+    return {
+      message: 'Cita agendada exitosamente desde cotización',
+      cita,
+      cotizacion: {
+        codigo_cotizacion: cotizacion.codigo_cotizacion,
+        numero_cotizacion: cotizacion.numero_cotizacion,
+      },
     };
   }
 

@@ -171,6 +171,24 @@ export class AgendaController {
     );
   }
 
+  @Put('citas/:id/confirm')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirmar cita (Paciente)' })
+  @ApiResponse({ status: 200, description: 'Cita confirmada' })
+  @ApiResponse({ status: 404, description: 'Cita no encontrada' })
+  async confirmarCitaPaciente(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') codigo_paciente: number,
+  ) {
+    return this.agendaService.updateCita(
+      id,
+      { estado: 'CONFIRMADA' },
+      codigo_paciente,
+      false,
+    );
+  }
+
   // ==================== CITAS (Admin) ====================
 
   @Get('admin/citas')

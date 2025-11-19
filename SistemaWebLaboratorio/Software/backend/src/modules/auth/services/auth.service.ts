@@ -396,6 +396,208 @@ export class AuthService {
   }
 
   /**
+   * Get user profile (complete data)
+   */
+  async getProfile(codigo_usuario: number) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { codigo_usuario },
+      include: {
+        rol: {
+          select: {
+            nombre: true,
+            nivel_acceso: true,
+          },
+        },
+        perfil_medico: true,
+      },
+    });
+
+    if (!usuario) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    return {
+      codigo_usuario: usuario.codigo_usuario,
+      cedula: usuario.cedula,
+      nombres: usuario.nombres,
+      apellidos: usuario.apellidos,
+      email: usuario.email,
+      telefono: usuario.telefono,
+      fecha_nacimiento: usuario.fecha_nacimiento,
+      genero: usuario.genero,
+      direccion: usuario.direccion,
+      contacto_emergencia_nombre: usuario.contacto_emergencia_nombre,
+      contacto_emergencia_telefono: usuario.contacto_emergencia_telefono,
+      rol: usuario.rol.nombre,
+      nivel_acceso: usuario.rol.nivel_acceso,
+      perfil_medico: usuario.perfil_medico || null,
+    };
+  }
+
+  /**
+   * Update user profile
+   */
+  async updateProfile(
+    codigo_usuario: number,
+    data: {
+      nombres?: string;
+      apellidos?: string;
+      telefono?: string;
+      fecha_nacimiento?: string;
+      genero?: string;
+      direccion?: string;
+      contacto_emergencia_nombre?: string;
+      contacto_emergencia_telefono?: string;
+    },
+  ) {
+    const updateData: any = { ...data };
+
+    if (data.fecha_nacimiento) {
+      updateData.fecha_nacimiento = new Date(data.fecha_nacimiento);
+    }
+
+    const usuario = await this.prisma.usuario.update({
+      where: { codigo_usuario },
+      data: updateData,
+      include: {
+        rol: true,
+      },
+    });
+
+    await this.logActivity(
+      codigo_usuario,
+      'ACTUALIZAR_PERFIL',
+      'Usuario',
+      codigo_usuario,
+      'Perfil actualizado',
+    );
+
+    return {
+      codigo_usuario: usuario.codigo_usuario,
+      cedula: usuario.cedula,
+      nombres: usuario.nombres,
+      apellidos: usuario.apellidos,
+      email: usuario.email,
+      telefono: usuario.telefono,
+      fecha_nacimiento: usuario.fecha_nacimiento,
+      genero: usuario.genero,
+      direccion: usuario.direccion,
+      contacto_emergencia_nombre: usuario.contacto_emergencia_nombre,
+      contacto_emergencia_telefono: usuario.contacto_emergencia_telefono,
+      rol: usuario.rol.nombre,
+    };
+  }
+
+  /**
+   * Change password
+   */
+  async changePassword(
+    codigo_usuario: number,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { codigo_usuario },
+    });
+
+    if (!usuario) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    // Verify current password
+    const isValid = await bcrypt.compare(currentPassword, usuario.password_hash);
+
+    if (!isValid) {
+      throw new BadRequestException('Contraseña actual incorrecta');
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(newPassword, salt);
+
+    await this.prisma.usuario.update({
+      where: { codigo_usuario },
+      data: {
+        password_hash,
+        salt,
+      },
+    });
+
+    await this.logActivity(
+      codigo_usuario,
+      'CAMBIAR_PASSWORD',
+      'Usuario',
+      codigo_usuario,
+      'Contraseña actualizada',
+    );
+
+    return { message: 'Contraseña actualizada exitosamente' };
+  }
+
+  /**
+   * Get user consents
+   */
+  async getConsentimientos(codigo_usuario: number) {
+    const consentimientos = await this.prisma.consentimiento.findMany({
+      where: { codigo_usuario },
+      orderBy: {
+        fecha_consentimiento: 'desc',
+      },
+    });
+
+    return consentimientos;
+  }
+
+  /**
+   * Update user consents
+   */
+  async updateConsentimientos(
+    codigo_usuario: number,
+    consentimientos: Array<{
+      tipo_consentimiento: string;
+      aceptado: boolean;
+    }>,
+  ) {
+    // Update or create each consent
+    for (const consent of consentimientos) {
+      const existing = await this.prisma.consentimiento.findFirst({
+        where: {
+          codigo_usuario,
+          tipo_consentimiento: consent.tipo_consentimiento,
+        },
+      });
+
+      if (existing) {
+        await this.prisma.consentimiento.update({
+          where: { codigo_consentimiento: existing.codigo_consentimiento },
+          data: {
+            aceptado: consent.aceptado,
+          },
+        });
+      } else {
+        await this.prisma.consentimiento.create({
+          data: {
+            codigo_usuario,
+            tipo_consentimiento: consent.tipo_consentimiento,
+            aceptado: consent.aceptado,
+            version_politica: '1.0',
+          },
+        });
+      }
+    }
+
+    await this.logActivity(
+      codigo_usuario,
+      'ACTUALIZAR_CONSENTIMIENTOS',
+      'Consentimiento',
+      codigo_usuario,
+      'Consentimientos actualizados',
+    );
+
+    return { message: 'Consentimientos actualizados exitosamente' };
+  }
+
+  /**
    * Log user activity
    */
   private async logActivity(

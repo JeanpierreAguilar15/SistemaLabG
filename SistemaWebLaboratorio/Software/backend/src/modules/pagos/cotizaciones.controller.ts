@@ -141,6 +141,26 @@ export class CotizacionesController {
     return new StreamableFile(file);
   }
 
+  @Post(':id/agendar-cita')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Agendar cita desde cotización aprobada (Paciente)' })
+  @ApiResponse({ status: 201, description: 'Cita agendada desde cotización' })
+  @ApiResponse({ status: 400, description: 'Cotización no está aprobada o slot no disponible' })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  async agendarCitaDesdeCotizacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { codigo_slot: number; observaciones?: string },
+    @CurrentUser('codigo_usuario') codigo_paciente: number,
+  ) {
+    return this.cotizacionesService.agendarCitaDesdeCotizacion(
+      id,
+      codigo_paciente,
+      body.codigo_slot,
+      body.observaciones,
+    );
+  }
+
   // ==================== COTIZACIONES (Admin) ====================
 
   @Get('admin/all')
