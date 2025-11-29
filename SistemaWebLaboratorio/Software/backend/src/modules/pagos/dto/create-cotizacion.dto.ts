@@ -4,9 +4,13 @@ import {
   IsInt,
   IsOptional,
   IsNumber,
+  IsString,
   Min,
+  Max,
+  MaxLength,
   ValidateNested,
   ArrayMinSize,
+  ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -18,7 +22,8 @@ export class ExamenCotizadoDto {
     description: 'Código del examen',
     example: 1,
   })
-  @IsInt()
+  @IsInt({ message: 'El código del examen debe ser un número entero' })
+  @Min(1, { message: 'El código del examen debe ser mayor a 0' })
   codigo_examen: number;
 
   @ApiProperty({
@@ -26,8 +31,9 @@ export class ExamenCotizadoDto {
     example: 1,
     default: 1,
   })
-  @IsInt()
-  @Min(1)
+  @IsInt({ message: 'La cantidad debe ser un número entero' })
+  @Min(1, { message: 'La cantidad mínima es 1' })
+  @Max(10, { message: 'La cantidad máxima por examen es 10' })
   cantidad: number = 1;
 }
 
@@ -44,8 +50,9 @@ export class CreateCotizacionDto {
       { codigo_examen: 5, cantidad: 1 },
     ],
   })
-  @IsArray()
+  @IsArray({ message: 'Los exámenes deben ser una lista' })
   @ArrayMinSize(1, { message: 'Debe seleccionar al menos un examen' })
+  @ArrayMaxSize(50, { message: 'No puede seleccionar más de 50 exámenes' })
   @ValidateNested({ each: true })
   @Type(() => ExamenCotizadoDto)
   examenes: ExamenCotizadoDto[];
@@ -56,8 +63,9 @@ export class CreateCotizacionDto {
     required: false,
   })
   @IsOptional()
-  @IsNumber()
-  @Min(0)
+  @IsNumber({}, { message: 'El descuento debe ser un número' })
+  @Min(0, { message: 'El descuento no puede ser negativo' })
+  @Max(100, { message: 'El descuento máximo es del 100%' })
   descuento?: number;
 
   @ApiProperty({
@@ -66,5 +74,7 @@ export class CreateCotizacionDto {
     required: false,
   })
   @IsOptional()
+  @IsString({ message: 'Las observaciones deben ser texto' })
+  @MaxLength(500, { message: 'Las observaciones no pueden exceder 500 caracteres' })
   observaciones?: string;
 }

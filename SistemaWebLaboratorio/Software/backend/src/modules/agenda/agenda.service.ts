@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { InventarioService } from '../inventario/inventario.service';
 import {
   CreateSlotDto,
   CreateCitaDto,
@@ -23,6 +24,8 @@ export class AgendaService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => EventsGateway))
     private readonly eventsGateway: EventsGateway,
+    @Inject(forwardRef(() => InventarioService))
+    private readonly inventarioService: InventarioService,
   ) { }
 
   // ==================== SLOTS ====================
@@ -811,6 +814,21 @@ export class AgendaService {
         }
 
         this.logger.log(`Generados resultados pendientes para cita ${codigo_cita}`);
+
+        // Descontar automáticamente el inventario
+        try {
+          const inventarioResult = await this.inventarioService.descontarInventarioPorCita(
+            codigo_cita,
+            cotizacion.codigo_cotizacion,
+            userId,
+          );
+          this.logger.log(
+            `Inventario descontado: ${inventarioResult.items_descontados}/${inventarioResult.total_items} items`
+          );
+        } catch (error) {
+          this.logger.error(`Error al descontar inventario para cita ${codigo_cita}:`, error);
+          // No lanzamos el error para no bloquear la operación
+        }
       }
     }
 

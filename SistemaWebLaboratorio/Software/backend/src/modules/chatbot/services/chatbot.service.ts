@@ -120,7 +120,7 @@ export class ChatbotService implements OnModuleInit {
 
             // 4. Handle Fulfillment (Database Lookups)
             // This is where we inject real data based on the intent
-            if (intent === 'consultar_precios' && config.permitir_acceso_resultados) {
+            if (intent === 'consultar_precios' || intent === 'consultar_precio') {
                 const examenNombre = result.parameters.fields.examen?.stringValue;
                 if (examenNombre) {
                     const precioInfo = await this.consultarPrecio(examenNombre);
@@ -132,6 +132,32 @@ export class ChatbotService implements OnModuleInit {
             } else if (intent === 'consultar_servicios') {
                 const serviciosInfo = await this.consultarServicios();
                 fulfillmentText = serviciosInfo.mensaje;
+            } else if (intent === 'consultar_paquetes') {
+                const paquetesInfo = await this.consultarPaquetes();
+                fulfillmentText = paquetesInfo.mensaje;
+            } else if (intent === 'consultar_disponibilidad' || intent === 'consultar_citas') {
+                const fecha = result.parameters.fields.date?.stringValue;
+                const disponibilidadInfo = await this.consultarDisponibilidad(fecha);
+                fulfillmentText = disponibilidadInfo.mensaje;
+            } else if (intent === 'consultar_preparacion') {
+                const examenNombre = result.parameters.fields.examen?.stringValue;
+                if (examenNombre) {
+                    const preparacionInfo = await this.consultarPreparacion(examenNombre);
+                    fulfillmentText = preparacionInfo.mensaje;
+                }
+            } else if (intent === 'consultar_horarios') {
+                const horariosInfo = await this.consultarHorarios();
+                fulfillmentText = horariosInfo.mensaje;
+            } else if (intent === 'consultar_categorias') {
+                const categoriasInfo = await this.consultarCategorias();
+                fulfillmentText = categoriasInfo.mensaje;
+            } else if (intent === 'interpretar_resultado') {
+                const examenNombre = result.parameters.fields.examen?.stringValue;
+                const valor = result.parameters.fields.valor?.numberValue;
+                if (examenNombre && valor !== undefined && config.permitir_acceso_resultados) {
+                    const interpretacion = await this.interpretarResultado(examenNombre, valor);
+                    fulfillmentText = interpretacion.mensaje;
+                }
             }
 
             // 5. Log conversation
@@ -307,6 +333,268 @@ export class ChatbotService implements OnModuleInit {
             servicios: servicios.map((s) => ({
                 nombre: s.nombre,
                 descripcion: s.descripcion,
+            })),
+        };
+    }
+
+    /**
+     * Consultar paquetes de exámenes disponibles
+     */
+    async consultarPaquetes() {
+        this.logger.log('Consultando paquetes de exámenes');
+
+        const paquetes = await this.prisma.paquete.findMany({
+            where: { activo: true },
+            include: {
+                precios: {
+                    where: { activo: true },
+                    orderBy: { fecha_inicio: 'desc' },
+                    take: 1,
+                },
+                examenes: {
+                    include: {
+                        examen: {
+                            select: { nombre: true },
+                        },
+                    },
+                },
+            },
+            orderBy: { nombre: 'asc' },
+        });
+
+        if (paquetes.length === 0) {
+            return { mensaje: 'No hay paquetes disponibles actualmente.', paquetes: [] };
+        }
+
+        const listaPaquetes = paquetes.map((paq) => {
+            const precio = paq.precios[0]?.precio ? `S/. ${paq.precios[0].precio}` : 'Consultar';
+            const examenes = paq.examenes.map((e) => e.examen.nombre).join(', ');
+            return `📦 ${paq.nombre} - ${precio}\n   Incluye: ${examenes}`;
+        }).join('\n\n');
+
+        return {
+            mensaje: `Tenemos ${paquetes.length} paquete(s) disponibles:\n\n${listaPaquetes}`,
+            paquetes: paquetes.map((p) => ({
+                nombre: p.nombre,
+                descripcion: p.descripcion,
+                precio: p.precios[0]?.precio,
+                examenes: p.examenes.map((e) => e.examen.nombre),
+            })),
+        };
+    }
+
+    /**
+     * Consultar disponibilidad de citas para una fecha
+     */
+    async consultarDisponibilidad(fecha?: string) {
+        this.logger.log(`Consultando disponibilidad para: ${fecha || 'próximos días'}`);
+
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        let fechaBusqueda: Date;
+        let fechaFin: Date;
+
+        if (fecha) {
+            fechaBusqueda = new Date(fecha);
+            fechaFin = new Date(fecha);
+            fechaFin.setHours(23, 59, 59, 999);
+        } else {
+            fechaBusqueda = hoy;
+            fechaFin = new Date(hoy);
+            fechaFin.setDate(fechaFin.getDate() + 7); // Próximos 7 días
+        }
+
+        const slots = await this.prisma.slot.findMany({
+            where: {
+                fecha: {
+                    gte: fechaBusqueda,
+                    lte: fechaFin,
+                },
+                activo: true,
+                cupos_disponibles: { gt: 0 },
+            },
+            include: {
+                servicio: { select: { nombre: true } },
+                sede: { select: { nombre: true } },
+            },
+            orderBy: [{ fecha: 'asc' }, { hora_inicio: 'asc' }],
+            take: 10,
+        });
+
+        if (slots.length === 0) {
+            return {
+                mensaje: fecha
+                    ? `No hay citas disponibles para el ${fecha}. Te sugerimos consultar otras fechas.`
+                    : 'No hay citas disponibles en los próximos días. Por favor contáctanos directamente.',
+                disponibilidad: [],
+            };
+        }
+
+        // Agrupar por fecha
+        const porFecha = slots.reduce((acc, slot) => {
+            const fechaStr = new Date(slot.fecha).toLocaleDateString('es-EC', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+            });
+            if (!acc[fechaStr]) acc[fechaStr] = [];
+            const hora = new Date(slot.hora_inicio).toLocaleTimeString('es-EC', {
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+            acc[fechaStr].push(`${hora} (${slot.cupos_disponibles} cupos) - ${slot.sede.nombre}`);
+            return acc;
+        }, {} as Record<string, string[]>);
+
+        const listaDisponibilidad = Object.entries(porFecha)
+            .map(([fecha, horarios]) => `📅 ${fecha}:\n   ${horarios.join('\n   ')}`)
+            .join('\n\n');
+
+        return {
+            mensaje: `Tenemos disponibilidad:\n\n${listaDisponibilidad}\n\nPuedes agendar tu cita desde el portal web.`,
+            disponibilidad: slots.map((s) => ({
+                fecha: s.fecha,
+                hora: s.hora_inicio,
+                cupos: s.cupos_disponibles,
+                sede: s.sede.nombre,
+            })),
+        };
+    }
+
+    /**
+     * Consultar preparación requerida para un examen
+     */
+    async consultarPreparacion(examenNombre: string) {
+        this.logger.log(`Consultando preparación para: ${examenNombre}`);
+
+        const examen = await this.prisma.examen.findFirst({
+            where: {
+                OR: [
+                    { nombre: { contains: examenNombre, mode: 'insensitive' } },
+                    { codigo_interno: { contains: examenNombre, mode: 'insensitive' } },
+                ],
+                activo: true,
+            },
+        });
+
+        if (!examen) {
+            return {
+                mensaje: `No encontré el examen "${examenNombre}". Por favor verifica el nombre o consulta nuestro catálogo.`,
+            };
+        }
+
+        let mensaje = `📋 Preparación para ${examen.nombre}:\n\n`;
+
+        if (examen.requiere_ayuno) {
+            mensaje += '⏰ REQUIERE AYUNO: Sí (mínimo 8-12 horas)\n';
+        } else {
+            mensaje += '⏰ Ayuno: No requerido\n';
+        }
+
+        if (examen.requiere_preparacion_especial && examen.instrucciones_preparacion) {
+            mensaje += `\n📝 Instrucciones especiales:\n${examen.instrucciones_preparacion}\n`;
+        }
+
+        if (examen.tiempo_entrega) {
+            mensaje += `\n🕐 Tiempo de entrega: ${examen.tiempo_entrega}`;
+        }
+
+        if (!examen.requiere_ayuno && !examen.requiere_preparacion_especial) {
+            mensaje += '\n✅ No requiere preparación especial.';
+        }
+
+        return {
+            mensaje,
+            examen: {
+                nombre: examen.nombre,
+                requiere_ayuno: examen.requiere_ayuno,
+                requiere_preparacion: examen.requiere_preparacion_especial,
+                instrucciones: examen.instrucciones_preparacion,
+                tiempo_entrega: examen.tiempo_entrega,
+            },
+        };
+    }
+
+    /**
+     * Consultar horarios de atención
+     */
+    async consultarHorarios() {
+        this.logger.log('Consultando horarios de atención');
+
+        const sedes = await this.prisma.sede.findMany({
+            where: { activo: true },
+            include: {
+                horarios: {
+                    orderBy: { dia_semana: 'asc' },
+                },
+            },
+        });
+
+        if (sedes.length === 0) {
+            return { mensaje: 'No hay información de horarios disponible.' };
+        }
+
+        const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+        const listaHorarios = sedes.map((sede) => {
+            const horarios = sede.horarios.map((h) => {
+                const dia = diasSemana[h.dia_semana - 1] || `Día ${h.dia_semana}`;
+                const inicio = new Date(h.hora_inicio).toLocaleTimeString('es-EC', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                });
+                const fin = new Date(h.hora_fin).toLocaleTimeString('es-EC', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                });
+                return `   ${dia}: ${inicio} - ${fin}`;
+            }).join('\n');
+
+            return `🏥 ${sede.nombre}\n📍 ${sede.direccion}\n📞 ${sede.telefono || 'No disponible'}\n${horarios || '   Horario no especificado'}`;
+        }).join('\n\n');
+
+        return {
+            mensaje: `Nuestros horarios de atención:\n\n${listaHorarios}`,
+            sedes: sedes.map((s) => ({
+                nombre: s.nombre,
+                direccion: s.direccion,
+                telefono: s.telefono,
+                horarios: s.horarios,
+            })),
+        };
+    }
+
+    /**
+     * Consultar categorías de exámenes
+     */
+    async consultarCategorias() {
+        this.logger.log('Consultando categorías de exámenes');
+
+        const categorias = await this.prisma.categoriaExamen.findMany({
+            where: { activo: true },
+            include: {
+                _count: {
+                    select: { examenes: true },
+                },
+            },
+            orderBy: { nombre: 'asc' },
+        });
+
+        if (categorias.length === 0) {
+            return { mensaje: 'No hay categorías disponibles.' };
+        }
+
+        const listaCategorias = categorias.map(
+            (cat) => `📁 ${cat.nombre} (${cat._count.examenes} exámenes)${cat.descripcion ? '\n   ' + cat.descripcion : ''}`
+        ).join('\n');
+
+        return {
+            mensaje: `Tenemos las siguientes categorías de exámenes:\n\n${listaCategorias}\n\nPuedes preguntarme por exámenes específicos de cada categoría.`,
+            categorias: categorias.map((c) => ({
+                nombre: c.nombre,
+                descripcion: c.descripcion,
+                cantidad_examenes: c._count.examenes,
             })),
         };
     }

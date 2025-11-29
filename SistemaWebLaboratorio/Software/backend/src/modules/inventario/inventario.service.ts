@@ -559,4 +559,184 @@ export class InventarioService {
       data: { estado: 'CANCELADA' },
     });
   }
+
+  // ==================== DESCUENTO AUTOMÁTICO POR CITA ====================
+
+  /**
+   * Descuenta automáticamente el inventario cuando se completa una cita
+   * basándose en los exámenes de la cotización asociada
+   */
+  async descontarInventarioPorCita(
+    codigoCita: number,
+    codigoCotizacion: number,
+    adminId: number,
+  ) {
+    this.logger.log(`Descontando inventario para cita ${codigoCita} | Cotización ${codigoCotizacion}`);
+
+    // Obtener los exámenes de la cotización
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { codigo_cotizacion: codigoCotizacion },
+      include: {
+        detalles: {
+          include: {
+            examen: {
+              select: {
+                codigo_examen: true,
+                nombre: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!cotizacion) {
+      this.logger.warn(`Cotización ${codigoCotizacion} no encontrada`);
+      return { success: false, message: 'Cotización no encontrada' };
+    }
+
+    const resultados = [];
+
+    // Para cada examen en la cotización, obtener los insumos requeridos
+    for (const detalle of cotizacion.detalles) {
+      const insumos = await this.prisma.examenInsumo.findMany({
+        where: {
+          codigo_examen: detalle.codigo_examen,
+          activo: true,
+        },
+        include: {
+          item: true,
+        },
+      });
+
+      // Descontar cada insumo
+      for (const insumo of insumos) {
+        const cantidadTotal = insumo.cantidad_requerida * detalle.cantidad;
+
+        try {
+          // Verificar stock disponible
+          if (insumo.item.stock_actual < cantidadTotal) {
+            this.logger.warn(
+              `Stock insuficiente para ${insumo.item.nombre}: ` +
+              `requerido ${cantidadTotal}, disponible ${insumo.item.stock_actual}`
+            );
+            resultados.push({
+              item: insumo.item.nombre,
+              success: false,
+              message: `Stock insuficiente (requerido: ${cantidadTotal}, disponible: ${insumo.item.stock_actual})`,
+            });
+            continue;
+          }
+
+          // Crear movimiento de salida
+          const movimiento = await this.createMovimiento(
+            {
+              codigo_item: insumo.codigo_item,
+              tipo_movimiento: 'SALIDA',
+              cantidad: cantidadTotal,
+              motivo: `Uso en cita #${codigoCita} - Examen: ${detalle.examen.nombre}`,
+            },
+            adminId,
+          );
+
+          resultados.push({
+            item: insumo.item.nombre,
+            cantidad: cantidadTotal,
+            success: true,
+            movimiento_id: movimiento.codigo_movimiento,
+          });
+
+          this.logger.log(
+            `Descontado ${cantidadTotal} de ${insumo.item.nombre} ` +
+            `para examen ${detalle.examen.nombre}`
+          );
+        } catch (error) {
+          this.logger.error(`Error al descontar ${insumo.item.nombre}:`, error);
+          resultados.push({
+            item: insumo.item.nombre,
+            success: false,
+            message: error.message,
+          });
+        }
+      }
+    }
+
+    // Registrar en auditoría
+    await this.prisma.logActividad.create({
+      data: {
+        codigo_usuario: adminId,
+        accion: 'DESCUENTO_INVENTARIO_AUTOMATICO',
+        entidad: 'Cita',
+        codigo_entidad: codigoCita,
+        descripcion: `Descuento automático de inventario por cita completada`,
+        datos_nuevos: {
+          cotizacion: codigoCotizacion,
+          resultados,
+        },
+      },
+    });
+
+    return {
+      success: true,
+      resultados,
+      total_items: resultados.length,
+      items_descontados: resultados.filter(r => r.success).length,
+    };
+  }
+
+  /**
+   * Verifica disponibilidad de inventario para una cotización
+   */
+  async verificarDisponibilidadInventario(codigoCotizacion: number) {
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { codigo_cotizacion: codigoCotizacion },
+      include: {
+        detalles: {
+          include: {
+            examen: true,
+          },
+        },
+      },
+    });
+
+    if (!cotizacion) {
+      throw new NotFoundException('Cotización no encontrada');
+    }
+
+    const disponibilidad = [];
+
+    for (const detalle of cotizacion.detalles) {
+      const insumos = await this.prisma.examenInsumo.findMany({
+        where: {
+          codigo_examen: detalle.codigo_examen,
+          activo: true,
+        },
+        include: {
+          item: true,
+        },
+      });
+
+      for (const insumo of insumos) {
+        const cantidadRequerida = insumo.cantidad_requerida * detalle.cantidad;
+        const disponible = insumo.item.stock_actual >= cantidadRequerida;
+
+        disponibilidad.push({
+          examen: detalle.examen.nombre,
+          item: insumo.item.nombre,
+          cantidad_requerida: cantidadRequerida,
+          stock_actual: insumo.item.stock_actual,
+          disponible,
+        });
+      }
+    }
+
+    const todoDisponible = disponibilidad.every(d => d.disponible);
+
+    return {
+      cotizacion: cotizacion.numero_cotizacion,
+      disponibilidad,
+      todo_disponible: todoDisponible,
+      items_faltantes: disponibilidad.filter(d => !d.disponible),
+    };
+  }
 }
