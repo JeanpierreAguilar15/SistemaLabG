@@ -9,6 +9,7 @@ import {
   CreateMovimientoDto,
   FilterMovimientosDto,
   ValidateRucEcuador,
+  TipoMovimiento,
 } from './dto';
 
 @Injectable()
@@ -611,7 +612,9 @@ export class InventarioService {
 
       // Descontar cada insumo
       for (const insumo of insumos) {
-        const cantidadTotal = insumo.cantidad_requerida * detalle.cantidad;
+        // Convertir Decimal a number
+        const cantidadRequerida = Number(insumo.cantidad_requerida);
+        const cantidadTotal = cantidadRequerida * detalle.cantidad;
 
         try {
           // Verificar stock disponible
@@ -632,7 +635,7 @@ export class InventarioService {
           const movimiento = await this.createMovimiento(
             {
               codigo_item: insumo.codigo_item,
-              tipo_movimiento: 'SALIDA',
+              tipo_movimiento: TipoMovimiento.SALIDA,
               cantidad: cantidadTotal,
               motivo: `Uso en cita #${codigoCita} - Examen: ${detalle.examen.nombre}`,
             },
@@ -717,7 +720,9 @@ export class InventarioService {
       });
 
       for (const insumo of insumos) {
-        const cantidadRequerida = insumo.cantidad_requerida * detalle.cantidad;
+        // Convertir Decimal a number
+        const cantidadPorExamen = Number(insumo.cantidad_requerida);
+        const cantidadRequerida = cantidadPorExamen * detalle.cantidad;
         const disponible = insumo.item.stock_actual >= cantidadRequerida;
 
         disponibilidad.push({

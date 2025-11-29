@@ -5,7 +5,22 @@ import { UnauthorizedException, ConflictException, BadRequestException } from '@
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { SystemConfigService } from '../../system-config/system-config.service';
 import { mockPrismaService, resetMocks } from '../__mocks__/prisma.mock';
+
+// Mock SystemConfigService
+const mockSystemConfigService = {
+  getNumber: jest.fn().mockResolvedValue(5),
+  getBoolean: jest.fn().mockResolvedValue(false),
+  getString: jest.fn().mockImplementation((key: string, defaultValue: string) => {
+    const configs: Record<string, string> = {
+      'AUTH_JWT_ACCESS_EXPIRATION': '15m',
+      'AUTH_JWT_REFRESH_EXPIRATION': '7d',
+    };
+    return Promise.resolve(configs[key] || defaultValue);
+  }),
+  get: jest.fn().mockResolvedValue(null),
+};
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -79,6 +94,10 @@ describe('AuthService', () => {
               return config[key];
             }),
           },
+        },
+        {
+          provide: SystemConfigService,
+          useValue: mockSystemConfigService,
         },
       ],
     }).compile();

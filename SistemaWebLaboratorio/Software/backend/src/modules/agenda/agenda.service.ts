@@ -511,6 +511,35 @@ export class AgendaService {
       throw new BadRequestException('No hay cupos disponibles en este horario');
     }
 
+    // Verificar si el paciente ya tiene una cita activa (solo se permite 1 cita activa)
+    const citaActiva = await this.prisma.cita.findFirst({
+      where: {
+        codigo_paciente,
+        estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+      },
+      include: {
+        slot: {
+          include: { servicio: true, sede: true },
+        },
+      },
+    });
+
+    if (citaActiva) {
+      let fechaCita = 'fecha desconocida';
+      if (citaActiva.slot?.fecha) {
+        const fecha = new Date(citaActiva.slot.fecha);
+        const hora = citaActiva.slot.hora_inicio
+          ? new Date(citaActiva.slot.hora_inicio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+          : '';
+        fechaCita = `${fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}${hora ? ` a las ${hora}` : ''}`;
+      }
+      const servicio = citaActiva.slot?.servicio?.nombre || 'servicio';
+      throw new BadRequestException(
+        `Ya tienes una cita activa para ${servicio} el ${fechaCita}. ` +
+        `Debes completar o cancelar tu cita actual antes de agendar otra.`
+      );
+    }
+
     // Verificar si el paciente ya tiene cita en ese slot
     const existingCita = await this.prisma.cita.findFirst({
       where: {
