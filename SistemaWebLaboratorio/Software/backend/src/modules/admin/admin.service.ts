@@ -194,22 +194,46 @@ export class AdminService {
   async deleteService(codigo_servicio: number, adminId: number) {
     const service = await this.prisma.servicio.findUnique({
       where: { codigo_servicio },
+      include: {
+        slots: { where: { activo: true } },
+      },
     });
 
     if (!service) {
       throw new NotFoundException('Servicio no encontrado');
     }
 
-    // Desactivar en lugar de eliminar
-    const result = await this.prisma.servicio.update({
+    // Verificar si tiene dependencias activas (slots activos)
+    const hasActiveSlots = service.slots && service.slots.length > 0;
+
+    if (hasActiveSlots) {
+      // Si tiene slots activos, solo desactivar (soft delete)
+      const result = await this.prisma.servicio.update({
+        where: { codigo_servicio },
+        data: { activo: false },
+      });
+
+      this.eventsService.emitServiceDeleted(codigo_servicio, adminId);
+
+      return {
+        ...result,
+        message: 'Servicio desactivado (tiene slots activos asociados)',
+        softDelete: true,
+      };
+    }
+
+    // Si no tiene dependencias, eliminar físicamente
+    await this.prisma.servicio.delete({
       where: { codigo_servicio },
-      data: { activo: false },
     });
 
-    // Emitir evento de eliminación de servicio (soft delete)
     this.eventsService.emitServiceDeleted(codigo_servicio, adminId);
 
-    return result;
+    return {
+      codigo_servicio,
+      message: 'Servicio eliminado permanentemente',
+      softDelete: false,
+    };
   }
 
   // ==================== SEDES ====================

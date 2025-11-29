@@ -198,7 +198,7 @@ export default function CotizacionesPage() {
     if (examenesSeleccionados.size === 0) return
 
     try {
-      const detalles = Array.from(examenesSeleccionados.values()).map((item) => ({
+      const examenes = Array.from(examenesSeleccionados.values()).map((item) => ({
         codigo_examen: item.codigo_examen,
         cantidad: 1, // Siempre 1 ahora
       }))
@@ -209,7 +209,7 @@ export default function CotizacionesPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ detalles }),
+        body: JSON.stringify({ examenes }),
       })
 
       if (response.ok) {
