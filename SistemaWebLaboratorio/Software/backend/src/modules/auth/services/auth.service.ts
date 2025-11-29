@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { SystemConfigService } from '../../system-config/system-config.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 
@@ -18,6 +19,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly systemConfigService: SystemConfigService,
   ) {}
 
   /**
@@ -52,8 +54,9 @@ export class AuthService {
       throw new BadRequestException('Rol PACIENTE no encontrado en el sistema');
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
+    // Hash password with configurable salt rounds
+    const saltRounds = await this.systemConfigService.getNumber('AUTH_BCRYPT_SALT_ROUNDS', 10);
+    const salt = await bcrypt.genSalt(saltRounds);
     const password_hash = await bcrypt.hash(password, salt);
 
     // Create user
@@ -156,9 +159,33 @@ export class AuthService {
 
     // Check if account is blocked
     if (usuario.cuenta_bloqueada) {
-      throw new UnauthorizedException(
-        'Cuenta bloqueada. Contacte al administrador o espere 30 minutos',
-      );
+      // Check if lockout time has passed
+      const tiempoBloqueoMinutos = await this.systemConfigService.getNumber('AUTH_TIEMPO_BLOQUEO_MINUTOS', 30);
+      if (usuario.fecha_bloqueo) {
+        const tiempoTranscurrido = Date.now() - usuario.fecha_bloqueo.getTime();
+        const tiempoBloqueoMs = tiempoBloqueoMinutos * 60 * 1000;
+
+        if (tiempoTranscurrido >= tiempoBloqueoMs) {
+          // Auto-unlock account
+          await this.prisma.usuario.update({
+            where: { codigo_usuario: usuario.codigo_usuario },
+            data: {
+              cuenta_bloqueada: false,
+              fecha_bloqueo: null,
+              intentos_fallidos: 0,
+            },
+          });
+        } else {
+          const minutosRestantes = Math.ceil((tiempoBloqueoMs - tiempoTranscurrido) / 60000);
+          throw new UnauthorizedException(
+            `Cuenta bloqueada. Intente de nuevo en ${minutosRestantes} minutos`,
+          );
+        }
+      } else {
+        throw new UnauthorizedException(
+          `Cuenta bloqueada. Contacte al administrador o espere ${tiempoBloqueoMinutos} minutos`,
+        );
+      }
     }
 
     // Check if account is active
@@ -170,9 +197,10 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, usuario.password_hash);
 
     if (!isPasswordValid) {
-      // Increment failed attempts
+      // Increment failed attempts using configurable max
+      const maxIntentos = await this.systemConfigService.getNumber('AUTH_MAX_INTENTOS_LOGIN', 5);
       const intentos = usuario.intentos_fallidos + 1;
-      const bloqueado = intentos >= 5;
+      const bloqueado = intentos >= maxIntentos;
 
       await this.prisma.usuario.update({
         where: { codigo_usuario: usuario.codigo_usuario },
@@ -183,7 +211,14 @@ export class AuthService {
         },
       });
 
-      throw new UnauthorizedException('Credenciales inválidas');
+      if (bloqueado) {
+        const tiempoBloqueoMinutos = await this.systemConfigService.getNumber('AUTH_TIEMPO_BLOQUEO_MINUTOS', 30);
+        throw new UnauthorizedException(
+          `Cuenta bloqueada por exceder ${maxIntentos} intentos fallidos. Espere ${tiempoBloqueoMinutos} minutos`,
+        );
+      }
+
+      throw new UnauthorizedException(`Credenciales inválidas. Intentos restantes: ${maxIntentos - intentos}`);
     }
 
     // Reset failed attempts
@@ -349,6 +384,12 @@ export class AuthService {
   private async generateTokens(codigo_usuario: number, ipAddress?: string, userAgent?: string) {
     const jti = uuidv4();
 
+    // Get expiration times from system config or environment
+    const accessExpiration = this.configService.get('JWT_ACCESS_EXPIRATION') ||
+      await this.systemConfigService.getString('AUTH_JWT_ACCESS_EXPIRATION', '15m');
+    const refreshExpiration = this.configService.get('JWT_REFRESH_EXPIRATION') ||
+      await this.systemConfigService.getString('AUTH_JWT_REFRESH_EXPIRATION', '7d');
+
     const accessTokenPayload = {
       sub: codigo_usuario,
       jti,
@@ -362,18 +403,16 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(accessTokenPayload, {
       secret: this.configService.get('JWT_ACCESS_SECRET'),
-      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') || '15m',
+      expiresIn: accessExpiration,
     });
 
     const refreshToken = this.jwtService.sign(refreshTokenPayload, {
       secret: this.configService.get('JWT_REFRESH_SECRET'),
-      expiresIn: this.configService.get('JWT_REFRESH_EXPIRATION') || '7d',
+      expiresIn: refreshExpiration,
     });
 
-    // Calculate expiration date
-    const expirationDays = 7; // 7 days for refresh token
-    const fecha_expiracion = new Date();
-    fecha_expiracion.setDate(fecha_expiracion.getDate() + expirationDays);
+    // Calculate expiration date from refresh expiration string
+    const fecha_expiracion = this.calculateExpirationDate(refreshExpiration);
 
     // Store session in database
     await this.prisma.sesion.create({
@@ -388,11 +427,58 @@ export class AuthService {
       },
     });
 
+    // Calculate access token expiration in seconds
+    const expiresInSeconds = this.parseExpirationToSeconds(accessExpiration);
+
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
-      expires_in: 900, // 15 minutes in seconds
+      expires_in: expiresInSeconds,
     };
+  }
+
+  /**
+   * Parse expiration string (e.g., '15m', '7d', '1h') to Date
+   */
+  private calculateExpirationDate(expiration: string): Date {
+    const fecha = new Date();
+    const value = parseInt(expiration);
+    const unit = expiration.slice(-1);
+
+    switch (unit) {
+      case 'm':
+        fecha.setMinutes(fecha.getMinutes() + value);
+        break;
+      case 'h':
+        fecha.setHours(fecha.getHours() + value);
+        break;
+      case 'd':
+        fecha.setDate(fecha.getDate() + value);
+        break;
+      default:
+        fecha.setDate(fecha.getDate() + 7); // Default 7 days
+    }
+
+    return fecha;
+  }
+
+  /**
+   * Parse expiration string to seconds
+   */
+  private parseExpirationToSeconds(expiration: string): number {
+    const value = parseInt(expiration);
+    const unit = expiration.slice(-1);
+
+    switch (unit) {
+      case 'm':
+        return value * 60;
+      case 'h':
+        return value * 60 * 60;
+      case 'd':
+        return value * 24 * 60 * 60;
+      default:
+        return 900; // Default 15 minutes
+    }
   }
 
   /**
