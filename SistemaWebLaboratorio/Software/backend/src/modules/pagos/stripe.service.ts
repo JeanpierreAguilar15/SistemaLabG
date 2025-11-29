@@ -37,9 +37,7 @@ export class StripeService {
   private initializeStripe() {
     const secretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     if (secretKey) {
-      this.stripe = new Stripe(secretKey, {
-        apiVersion: '2024-12-18.acacia',
-      });
+      this.stripe = new Stripe(secretKey);
       this.logger.log('Stripe initialized successfully');
     } else {
       this.logger.warn('STRIPE_SECRET_KEY not configured - Stripe payments disabled');
@@ -293,7 +291,9 @@ export class StripeService {
           datos_nuevos: {
             numero_pago: numeroPago,
             stripe_session_id: session.id,
-            stripe_payment_intent: session.payment_intent,
+            stripe_payment_intent: typeof session.payment_intent === 'string'
+              ? session.payment_intent
+              : session.payment_intent?.id || null,
           },
         },
       });

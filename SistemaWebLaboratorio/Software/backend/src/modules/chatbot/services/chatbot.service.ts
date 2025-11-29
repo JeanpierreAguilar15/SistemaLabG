@@ -346,11 +346,6 @@ export class ChatbotService implements OnModuleInit {
         const paquetes = await this.prisma.paquete.findMany({
             where: { activo: true },
             include: {
-                precios: {
-                    where: { activo: true },
-                    orderBy: { fecha_inicio: 'desc' },
-                    take: 1,
-                },
                 examenes: {
                     include: {
                         examen: {
@@ -367,7 +362,7 @@ export class ChatbotService implements OnModuleInit {
         }
 
         const listaPaquetes = paquetes.map((paq) => {
-            const precio = paq.precios[0]?.precio ? `S/. ${paq.precios[0].precio}` : 'Consultar';
+            const precio = paq.precio_paquete ? `S/. ${paq.precio_paquete}` : 'Consultar';
             const examenes = paq.examenes.map((e) => e.examen.nombre).join(', ');
             return `📦 ${paq.nombre} - ${precio}\n   Incluye: ${examenes}`;
         }).join('\n\n');
@@ -377,7 +372,7 @@ export class ChatbotService implements OnModuleInit {
             paquetes: paquetes.map((p) => ({
                 nombre: p.nombre,
                 descripcion: p.descripcion,
-                precio: p.precios[0]?.precio,
+                precio: p.precio_paquete,
                 examenes: p.examenes.map((e) => e.examen.nombre),
             })),
         };
@@ -492,15 +487,15 @@ export class ChatbotService implements OnModuleInit {
             mensaje += '⏰ Ayuno: No requerido\n';
         }
 
-        if (examen.requiere_preparacion_especial && examen.instrucciones_preparacion) {
+        if (examen.instrucciones_preparacion) {
             mensaje += `\n📝 Instrucciones especiales:\n${examen.instrucciones_preparacion}\n`;
         }
 
-        if (examen.tiempo_entrega) {
-            mensaje += `\n🕐 Tiempo de entrega: ${examen.tiempo_entrega}`;
+        if (examen.tiempo_entrega_horas) {
+            mensaje += `\n🕐 Tiempo de entrega: ${examen.tiempo_entrega_horas} horas`;
         }
 
-        if (!examen.requiere_ayuno && !examen.requiere_preparacion_especial) {
+        if (!examen.requiere_ayuno && !examen.instrucciones_preparacion) {
             mensaje += '\n✅ No requiere preparación especial.';
         }
 
@@ -509,9 +504,9 @@ export class ChatbotService implements OnModuleInit {
             examen: {
                 nombre: examen.nombre,
                 requiere_ayuno: examen.requiere_ayuno,
-                requiere_preparacion: examen.requiere_preparacion_especial,
+                requiere_preparacion: !!examen.instrucciones_preparacion,
                 instrucciones: examen.instrucciones_preparacion,
-                tiempo_entrega: examen.tiempo_entrega,
+                tiempo_entrega: examen.tiempo_entrega_horas,
             },
         };
     }
