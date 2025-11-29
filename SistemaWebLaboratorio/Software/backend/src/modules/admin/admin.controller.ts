@@ -20,6 +20,8 @@ import {
 import { Response } from 'express';
 import { ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
+import { UsersService } from '../users/users.service';
+import { InventarioService } from '../inventario/inventario.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -53,20 +55,19 @@ import {
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN') // Solo administradores pueden acceder
-@UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
-
-  // ==================== USUARIOS ====================
-
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly usersService: UsersService,
+    private readonly inventarioService: InventarioService,
+  ) { }
   @Get('users')
   async getAllUsers(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query() filters?: any,
   ) {
-    return this.adminService.getAllUsers(
+    return this.usersService.findAll(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 20,
       filters,
@@ -75,7 +76,7 @@ export class AdminController {
 
   @Get('users/:id')
   async getUserById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getUserById(id);
+    return this.usersService.findOne(id);
   }
 
   @Post('users')
@@ -84,7 +85,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Body() data: CreateUserDto,
   ) {
-    return this.adminService.createUser(data, adminId);
+    return this.usersService.create(data, adminId);
   }
 
   @Put('users/:id')
@@ -93,7 +94,7 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateUserDto,
   ) {
-    return this.adminService.updateUser(id, data, adminId);
+    return this.usersService.update(id, data, adminId);
   }
 
   @Delete('users/:id')
@@ -101,7 +102,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.adminService.deleteUser(id, adminId);
+    return this.usersService.delete(id, adminId);
   }
 
   @Put('users/:id/toggle-status')
@@ -109,7 +110,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.adminService.toggleUserStatus(id, adminId);
+    return this.usersService.toggleStatus(id, adminId);
   }
 
   @Post('users/:id/reset-password')
@@ -118,7 +119,7 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() data: ResetPasswordDto,
   ) {
-    return this.adminService.resetUserPassword(id, data.newPassword, adminId);
+    return this.usersService.resetPassword(id, data.newPassword, adminId);
   }
 
   // ==================== ROLES ====================
@@ -396,7 +397,7 @@ export class AdminController {
     @Query('limit') limit?: string,
     @Query() filters?: any,
   ) {
-    return this.adminService.getAllInventoryItems(
+    return this.inventarioService.getAllInventoryItems(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 50,
       filters,
@@ -405,7 +406,7 @@ export class AdminController {
 
   @Get('inventory/items/:id')
   async getInventoryItemById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getInventoryItemById(id);
+    return this.inventarioService.getInventoryItemById(id);
   }
 
   @Post('inventory/items')
@@ -414,7 +415,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Body() data: CreateInventoryItemDto,
   ) {
-    return this.adminService.createInventoryItem(data, adminId);
+    return this.inventarioService.createInventoryItem(data, adminId);
   }
 
   @Put('inventory/items/:id')
@@ -423,7 +424,7 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateInventoryItemDto,
   ) {
-    return this.adminService.updateInventoryItem(id, data, adminId);
+    return this.inventarioService.updateInventoryItem(id, data, adminId);
   }
 
   @Delete('inventory/items/:id')
@@ -431,7 +432,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.adminService.deleteInventoryItem(id, adminId);
+    return this.inventarioService.deleteInventoryItem(id, adminId);
   }
 
   // ==================== MOVIMIENTOS DE STOCK ====================
@@ -442,7 +443,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Body() data: CreateMovimientoDto,
   ) {
-    return this.adminService.createMovimiento(data, adminId);
+    return this.inventarioService.createMovimiento(data, adminId);
   }
 
   @Get('inventory/movements')
@@ -451,7 +452,7 @@ export class AdminController {
     @Query('limit') limit?: string,
     @Query() filters?: any,
   ) {
-    return this.adminService.getAllMovimientos(
+    return this.inventarioService.getAllMovimientos(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 50,
       filters,
@@ -464,7 +465,7 @@ export class AdminController {
     @Query('fecha_desde') fecha_desde?: string,
     @Query('fecha_hasta') fecha_hasta?: string,
   ) {
-    return this.adminService.getKardexByItem(itemId, fecha_desde, fecha_hasta);
+    return this.inventarioService.getKardexByItem(itemId, fecha_desde, fecha_hasta);
   }
 
   // ==================== ALERTAS DE STOCK ====================
@@ -480,24 +481,24 @@ export class AdminController {
     if (codigo_item) filters.codigo_item = parseInt(codigo_item);
     if (activo) filters.activo = activo;
 
-    return this.adminService.getAlertasStock(filters);
+    return this.inventarioService.getAlertasStock(filters);
   }
 
   @Get('inventory/alertas/estadisticas')
   async getEstadisticasAlertas() {
-    return this.adminService.getEstadisticasAlertas();
+    return this.inventarioService.getEstadisticasAlertas();
   }
 
   // ==================== PROVEEDORES ====================
 
   @Get('suppliers')
   async getAllSuppliers() {
-    return this.adminService.getAllSuppliers();
+    return this.inventarioService.getAllSuppliers();
   }
 
   @Get('suppliers/:id')
   async getSupplierById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getSupplierById(id);
+    return this.inventarioService.getSupplierById(id);
   }
 
   @Post('suppliers')
@@ -506,7 +507,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Body() data: CreateSupplierDto,
   ) {
-    return this.adminService.createSupplier(data, adminId);
+    return this.inventarioService.createSupplier(data, adminId);
   }
 
   @Put('suppliers/:id')
@@ -515,7 +516,7 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateSupplierDto,
   ) {
-    return this.adminService.updateSupplier(id, data, adminId);
+    return this.inventarioService.updateSupplier(id, data, adminId);
   }
 
   @Delete('suppliers/:id')
@@ -523,7 +524,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.adminService.deleteSupplier(id, adminId);
+    return this.inventarioService.deleteSupplier(id, adminId);
   }
 
   // ==================== AUDITORIA ====================
@@ -584,7 +585,7 @@ export class AdminController {
     @Body() data: any,
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
-    return this.adminService.createOrdenCompra(data, adminId);
+    return this.inventarioService.createOrdenCompra(data, adminId);
   }
 
   @Get('purchase-orders')
@@ -594,7 +595,7 @@ export class AdminController {
     @Query('limit') limit?: string,
     @Query() filters?: any,
   ) {
-    return this.adminService.getAllOrdenesCompra(
+    return this.inventarioService.getAllOrdenesCompra(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 50,
       filters,
@@ -604,7 +605,7 @@ export class AdminController {
   @Get('purchase-orders/:id')
   @ApiOperation({ summary: 'Obtener orden de compra por ID' })
   async getPurchaseOrderById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getOrdenCompraById(id);
+    return this.inventarioService.getOrdenCompraById(id);
   }
 
   @Put('purchase-orders/:id')
@@ -614,7 +615,7 @@ export class AdminController {
     @Body() data: any,
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
-    return this.adminService.updateOrdenCompra(id, data, adminId);
+    return this.inventarioService.updateOrdenCompra(id, data, adminId);
   }
 
   @Delete('purchase-orders/:id')
@@ -623,7 +624,7 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
-    return this.adminService.deleteOrdenCompra(id, adminId);
+    return this.inventarioService.deleteOrdenCompra(id, adminId);
   }
 
   @Post('purchase-orders/:id/emit')
@@ -632,7 +633,7 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
-    return this.adminService.emitirOrdenCompra(id, adminId);
+    return this.inventarioService.emitirOrdenCompra(id, adminId);
   }
 
   @Post('purchase-orders/:id/receive')
@@ -642,7 +643,7 @@ export class AdminController {
     @Body() data: any,
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
-    return this.adminService.recibirOrdenCompra(id, data, adminId);
+    return this.inventarioService.recibirOrdenCompra(id, data, adminId);
   }
 
   @Post('purchase-orders/:id/cancel')
@@ -651,6 +652,6 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
-    return this.adminService.cancelarOrdenCompra(id, adminId);
+    return this.inventarioService.cancelarOrdenCompra(id, adminId);
   }
 }

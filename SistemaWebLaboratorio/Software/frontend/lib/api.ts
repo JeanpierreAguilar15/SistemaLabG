@@ -11,19 +11,19 @@ interface RequestOptions extends RequestInit {
   token?: string
 }
 
-async function request<T>(
+export async function request<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
   const { token, ...fetchOptions } = options
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string>),
   }
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`
+    headers['Authorization'] = `Bearer ${token}`
   }
 
   const response = await fetch(`${API_URL}${endpoint}`, {
@@ -278,3 +278,10 @@ export const quotationsApi = {
 
   getMy: (token: string) => request('/quotations/my', { token }),
 }
+
+export const api = {
+  get: <T>(endpoint: string, options?: RequestOptions) => request<T>(endpoint, { method: 'GET', ...options }),
+  post: <T>(endpoint: string, data: any, options?: RequestOptions) => request<T>(endpoint, { method: 'POST', body: JSON.stringify(data), ...options }),
+  put: <T>(endpoint: string, data: any, options?: RequestOptions) => request<T>(endpoint, { method: 'PUT', body: JSON.stringify(data), ...options }),
+  delete: <T>(endpoint: string, options?: RequestOptions) => request<T>(endpoint, { method: 'DELETE', ...options }),
+};

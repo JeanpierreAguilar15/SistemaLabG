@@ -22,6 +22,7 @@ describe('AgendaService', () => {
               create: jest.fn(),
               update: jest.fn(),
               delete: jest.fn(),
+              deleteMany: jest.fn(),
             },
             cita: {
               findUnique: jest.fn(),
@@ -504,7 +505,7 @@ describe('AgendaService', () => {
         .mockResolvedValueOnce(15)  // completadas
         .mockResolvedValueOnce(5);  // no asistio
 
-      const result = await service.getEstadisticas();
+      const result = await service.getEstadisticas({});
 
       expect(result).toEqual({
         total: 100,
@@ -514,6 +515,31 @@ describe('AgendaService', () => {
         completadas: 15,
         no_asistio: 5,
         tasa_asistencia: '16.67',
+      });
+    });
+  });
+
+  describe('deleteSlotsByRange', () => {
+    it('should delete empty slots in range', async () => {
+      const startDate = '2025-01-01';
+      const endDate = '2025-01-31';
+      const adminId = 1;
+
+      jest.spyOn(prisma.slot, 'deleteMany').mockResolvedValue({ count: 10 } as any);
+
+      const result = await service.deleteSlotsByRange(startDate, endDate, adminId);
+
+      expect(result).toEqual({ count: 10, message: 'Se eliminaron 10 slots vacíos.' });
+      expect(prisma.slot.deleteMany).toHaveBeenCalledWith({
+        where: {
+          fecha: {
+            gte: expect.any(Date),
+            lte: expect.any(Date),
+          },
+          citas: {
+            none: {},
+          },
+        },
       });
     });
   });

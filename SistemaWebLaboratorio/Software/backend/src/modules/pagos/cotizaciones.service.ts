@@ -12,7 +12,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 export class CotizacionesService {
   private readonly logger = new Logger(CotizacionesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /**
    * Obtener todos los exámenes agrupados por categoría
@@ -255,6 +255,13 @@ export class CotizacionesService {
             },
           },
         },
+        cita: {
+          select: {
+            codigo_cita: true,
+            estado: true,
+            fecha_creacion: true,
+          }
+        }
       },
       orderBy: {
         fecha_cotizacion: 'desc',

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,32 +47,42 @@ interface Cotizacion {
   total: number
   estado: string
   detalles: DetalleCotizacion[]
+  cita?: any
 }
 
 export default function CotizacionesPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
+  const router = useRouter()
 
+  // Estados generales
   const [loading, setLoading] = useState(false)
   const [examenes, setExamenes] = useState<Examen[]>([])
   const [examenesSeleccionados, setExamenesSeleccionados] = useState<Map<number, ExamenSeleccionado>>(new Map())
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState('TODAS')
-  const [showCotizacionModal, setShowCotizacionModal] = useState(false)
-  const [showAgendarCitaModal, setShowAgendarCitaModal] = useState(false)
   const [selectedCotizacion, setSelectedCotizacion] = useState<Cotizacion | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
-  // Para agendar cita desde cotización
+  // Estados para agendar cita
+  const [showAgendarCitaModal, setShowAgendarCitaModal] = useState(false)
   const [fechaCita, setFechaCita] = useState('')
-  const [horaCita, setHoraCita] = useState('')
   const [observacionesCita, setObservacionesCita] = useState('')
-
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
+  const [availableSlots, setAvailableSlots] = useState<any[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
 
   useEffect(() => {
     loadExamenes()
     loadCotizaciones()
   }, [])
+
+  // Cargar slots cuando cambia la fecha
+  useEffect(() => {
+    if (fechaCita && showAgendarCitaModal) {
+      loadSlots()
+    }
+  }, [fechaCita, showAgendarCitaModal])
 
   const loadExamenes = async () => {
     try {
@@ -110,37 +121,22 @@ export default function CotizacionesPage() {
     }
   }
 
-  // Filtrar exámenes
-  const examenesFiltrados = useMemo(() => {
-    return examenes.filter((examen) => {
-      const matchSearch = searchTerm === '' ||
-        examen.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        examen.codigo_interno.toLowerCase().includes(searchTerm.toLowerCase())
-
-      const matchCategoria = categoriaFilter === 'TODAS' || examen.categoria === categoriaFilter
-
-      return matchSearch && matchCategoria
-    })
-  }, [examenes, searchTerm, categoriaFilter])
-
-  // Calcular totales dinámicamente
-  const totales = useMemo(() => {
-    let subtotal = 0
-    examenesSeleccionados.forEach((examen) => {
-      subtotal += Number(examen.subtotal) || 0
-    })
-
-    const descuento = 0 // Podría calcularse con lógica de descuentos
-    const total = subtotal - descuento
-
-    return { subtotal, descuento, total }
-  }, [examenesSeleccionados])
-
-  // Categorías únicas
-  const categorias = useMemo(() => {
-    const cats = new Set(examenes.map((e) => e.categoria))
-    return Array.from(cats).sort()
-  }, [examenes])
+  const loadSlots = async () => {
+    try {
+      setLoadingSlots(true)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/slots/available?fecha=${fechaCita}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setAvailableSlots(data)
+      }
+    } catch (error) {
+      console.error('Error loading slots:', error)
+    } finally {
+      setLoadingSlots(false)
+    }
+  }
 
   const handleToggleExamen = (examen: Examen) => {
     const newMap = new Map(examenesSeleccionados)
@@ -160,32 +156,51 @@ export default function CotizacionesPage() {
     setExamenesSeleccionados(newMap)
   }
 
-  const handleCantidadChange = (codigo_examen: number, cantidad: number) => {
-    if (cantidad < 1) return
+  const handleAgendarCita = (cotizacion: Cotizacion) => {
+    setSelectedCotizacion(cotizacion)
+    setShowAgendarCitaModal(true)
+    setFechaCita('')
+    setAvailableSlots([])
+    setSelectedSlot(null)
+  }
 
-    const newMap = new Map(examenesSeleccionados)
-    const examen = newMap.get(codigo_examen)
+  const handleConfirmarCita = async () => {
+    if (!selectedSlot || !selectedCotizacion) return
 
-    if (examen) {
-      newMap.set(codigo_examen, {
-        ...examen,
-        cantidad,
-        subtotal: (Number(examen.precio_actual) || 0) * cantidad,
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/citas`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          codigo_slot: selectedSlot,
+          codigo_cotizacion: selectedCotizacion.codigo_cotizacion,
+          observaciones: observacionesCita,
+        }),
       })
-      setExamenesSeleccionados(newMap)
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cita agendada correctamente' })
+        setShowAgendarCitaModal(false)
+        loadCotizaciones() // Recargar para actualizar estado
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al agendar cita' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión' })
     }
   }
 
   const handleGenerarCotizacion = async () => {
-    if (examenesSeleccionados.size === 0) {
-      setMessage({ type: 'error', text: 'Debes seleccionar al menos un examen' })
-      return
-    }
+    if (examenesSeleccionados.size === 0) return
 
     try {
-      const examenes = Array.from(examenesSeleccionados.values()).map((examen) => ({
-        codigo_examen: examen.codigo_examen,
-        cantidad: examen.cantidad,
+      const detalles = Array.from(examenesSeleccionados.values()).map((item) => ({
+        codigo_examen: item.codigo_examen,
+        cantidad: 1, // Siempre 1 ahora
       }))
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cotizaciones`, {
@@ -194,111 +209,78 @@ export default function CotizacionesPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          examenes,
-          descuento: 0, // El paciente no aplica descuentos, solo admin
-        }),
+        body: JSON.stringify({ detalles }),
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setMessage({ type: 'success', text: `Cotización ${data.numero_cotizacion} generada correctamente` })
+        setMessage({ type: 'success', text: 'Cotización generada exitosamente' })
         setExamenesSeleccionados(new Map())
         loadCotizaciones()
       } else {
         const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al generar la cotización' })
+        setMessage({ type: 'error', text: error.message || 'Error al generar cotización' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexión' })
     }
   }
 
   const handleDescargarPDF = async (cotizacion: Cotizacion) => {
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/${cotizacion.codigo_cotizacion}/pdf`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
-
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `cotizacion_${cotizacion.numero_cotizacion}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Error al descargar el PDF' })
-    }
-  }
-
-  const handleAgendarCitaDesdeCotizacion = async () => {
-    if (!selectedCotizacion || !fechaCita || !horaCita) {
-      setMessage({ type: 'error', text: 'Debes completar la fecha y hora de la cita' })
-      return
-    }
-
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/${selectedCotizacion.codigo_cotizacion}/agendar-cita`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            fecha: fechaCita,
-            hora: horaCita,
-            observaciones: observacionesCita,
-          }),
-        }
-      )
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Cita agendada correctamente desde la cotización' })
-        setShowAgendarCitaModal(false)
-        setSelectedCotizacion(null)
-        setFechaCita('')
-        setHoraCita('')
-        setObservacionesCita('')
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al agendar la cita' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
-    }
+    // Implementar descarga de PDF si es necesario
+    console.log('Descargar PDF', cotizacion)
   }
 
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
       case 'PENDIENTE':
-        return 'lab-badge-warning'
+        return 'bg-lab-warning-100 text-lab-warning-800'
       case 'APROBADA':
-        return 'lab-badge-success'
+        return 'bg-lab-success-100 text-lab-success-800'
       case 'RECHAZADA':
-        return 'lab-badge-danger'
+        return 'bg-lab-danger-100 text-lab-danger-800'
       case 'CONVERTIDA_A_PAGO':
-        return 'lab-badge-info'
+        return 'bg-lab-info-100 text-lab-info-800'
       case 'EXPIRADA':
-        return 'lab-badge-neutral'
+        return 'bg-lab-neutral-100 text-lab-neutral-800'
       default:
-        return 'lab-badge-neutral'
+        return 'bg-lab-neutral-100 text-lab-neutral-600'
     }
   }
 
+  const examenesFiltrados = useMemo(() => {
+    return examenes.filter((examen) => {
+      const matchesSearch =
+        examen.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        examen.codigo_interno.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesCategoria =
+        categoriaFilter === 'TODAS' || examen.categoria === categoriaFilter
+
+      return matchesSearch && matchesCategoria
+    })
+  }, [examenes, searchTerm, categoriaFilter])
+
+  const categorias = useMemo(() => {
+    const cats = new Set(examenes.map((e) => e.categoria))
+    return Array.from(cats).sort()
+  }, [examenes])
+
+  const totales = useMemo(() => {
+    let subtotal = 0
+    let descuento = 0
+
+    examenesSeleccionados.forEach((item) => {
+      subtotal += item.subtotal
+    })
+
+    return {
+      subtotal,
+      descuento,
+      total: subtotal - descuento,
+    }
+  }, [examenesSeleccionados])
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-8 animate-fade-in pb-10">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-lab-neutral-900">Cotizaciones</h1>
@@ -308,20 +290,19 @@ export default function CotizacionesPage() {
       {/* Mensaje */}
       {message && (
         <div
-          className={`p-4 rounded-lg ${
-            message.type === 'success'
-              ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
-              : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
-          }`}
+          className={`p-4 rounded-lg ${message.type === 'success'
+            ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
+            : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
+            }`}
         >
           {message.text}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Panel de Selección de Exámenes */}
         <div className="lg:col-span-2">
-          <Card>
+          <Card className="h-full">
             <CardHeader>
               <CardTitle>Selecciona tus Exámenes</CardTitle>
               <CardDescription>Marca los exámenes que necesitas</CardDescription>
@@ -363,35 +344,29 @@ export default function CotizacionesPage() {
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                   {examenesFiltrados.map((examen) => {
                     const isSelected = examenesSeleccionados.has(examen.codigo_examen)
-                    const cantidad = isSelected ? examenesSeleccionados.get(examen.codigo_examen)!.cantidad : 1
 
                     return (
                       <div
                         key={examen.codigo_examen}
-                        className={`p-4 rounded-lg border-2 transition-all ${
-                          isSelected
-                            ? 'border-lab-primary-500 bg-lab-primary-50'
-                            : 'border-lab-neutral-200 hover:border-lab-primary-300'
-                        }`}
+                        onClick={() => handleToggleExamen(examen)}
+                        className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${isSelected
+                          ? 'border-lab-primary-500 bg-lab-primary-50'
+                          : 'border-lab-neutral-200 hover:border-lab-primary-300'
+                          }`}
                       >
                         <div className="flex items-start space-x-3">
-                          <input
-                            type="checkbox"
-                            id={`examen-${examen.codigo_examen}`}
-                            checked={isSelected}
-                            onChange={() => handleToggleExamen(examen)}
-                            className="mt-1 h-5 w-5 rounded border-lab-neutral-300 text-lab-primary-600 focus:ring-lab-primary-500"
-                          />
+                          <div className={`mt-1 h-5 w-5 rounded border flex items-center justify-center ${isSelected ? 'bg-lab-primary-600 border-lab-primary-600' : 'border-lab-neutral-300'
+                            }`}>
+                            {isSelected && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                          </div>
                           <div className="flex-1">
-                            <label
-                              htmlFor={`examen-${examen.codigo_examen}`}
-                              className="font-medium text-lab-neutral-900 cursor-pointer"
-                            >
-                              {examen.nombre}
-                            </label>
+                            <div className="flex justify-between">
+                              <h3 className="font-medium text-lab-neutral-900">{examen.nombre}</h3>
+                              <span className="font-bold text-lab-neutral-900">${(Number(examen.precio_actual) || 0).toFixed(2)}</span>
+                            </div>
                             <p className="text-sm text-lab-neutral-600 mt-1">
                               {examen.codigo_interno} • {examen.categoria}
                             </p>
@@ -410,28 +385,6 @@ export default function CotizacionesPage() {
                                     Preparación Especial
                                   </span>
                                 )}
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-lab-neutral-900">
-                              ${(Number(examen.precio_actual) || 0).toFixed(2)}
-                            </p>
-                            {isSelected && (
-                              <div className="flex items-center space-x-1 mt-2">
-                                <button
-                                  onClick={() => handleCantidadChange(examen.codigo_examen, cantidad - 1)}
-                                  className="w-6 h-6 rounded bg-lab-neutral-200 hover:bg-lab-neutral-300 flex items-center justify-center"
-                                >
-                                  -
-                                </button>
-                                <span className="w-8 text-center font-medium">{cantidad}</span>
-                                <button
-                                  onClick={() => handleCantidadChange(examen.codigo_examen, cantidad + 1)}
-                                  className="w-6 h-6 rounded bg-lab-neutral-200 hover:bg-lab-neutral-300 flex items-center justify-center"
-                                >
-                                  +
-                                </button>
                               </div>
                             )}
                           </div>
@@ -469,9 +422,6 @@ export default function CotizacionesPage() {
                       <div key={examen.codigo_examen} className="flex justify-between items-center text-sm">
                         <div className="flex-1">
                           <p className="font-medium text-lab-neutral-900">{examen.nombre}</p>
-                          <p className="text-lab-neutral-600">
-                            {examen.cantidad} x ${(Number(examen.precio_actual) || 0).toFixed(2)}
-                          </p>
                         </div>
                         <p className="font-semibold">${(Number(examen.subtotal) || 0).toFixed(2)}</p>
                       </div>
@@ -522,7 +472,7 @@ export default function CotizacionesPage() {
         </div>
       </div>
 
-      {/* Historial de Cotizaciones */}
+      {/* Historial de Cotizaciones (Full Width Bottom) */}
       <Card>
         <CardHeader>
           <CardTitle>Mis Cotizaciones</CardTitle>
@@ -538,44 +488,47 @@ export default function CotizacionesPage() {
               {cotizaciones.map((cotizacion) => (
                 <div
                   key={cotizacion.codigo_cotizacion}
-                  className="flex items-start justify-between p-4 rounded-lg border border-lab-neutral-200"
+                  className="flex items-center justify-between p-4 rounded-lg border border-lab-neutral-200 hover:bg-lab-neutral-50 transition-colors"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h4 className="font-semibold text-lab-neutral-900">{cotizacion.numero_cotizacion}</h4>
-                        <p className="text-sm text-lab-neutral-600">
-                          {formatDate(new Date(cotizacion.fecha_cotizacion))}
-                        </p>
-                      </div>
-                      <span className={getEstadoBadge(cotizacion.estado)}>{cotizacion.estado}</span>
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                    <div>
+                      <h4 className="font-semibold text-lab-neutral-900">{cotizacion.numero_cotizacion}</h4>
+                      <p className="text-sm text-lab-neutral-600">
+                        {formatDate(new Date(cotizacion.fecha_cotizacion))}
+                      </p>
                     </div>
 
-                    <div className="text-sm text-lab-neutral-700 mb-3">
+                    <div>
+                      <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(cotizacion.estado)}`}>
+                        {cotizacion.estado}
+                      </span>
+                    </div>
+
+                    <div className="text-sm text-lab-neutral-700">
                       <strong>{cotizacion.detalles?.length || 0}</strong> examen{(cotizacion.detalles?.length || 0) !== 1 && 'es'}
                     </div>
 
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-bold text-lab-primary-600">
-                        Total: ${(Number(cotizacion.total) || 0).toFixed(2)}
-                      </span>
-                      <div className="flex space-x-2">
-                        <Button size="sm" variant="outline" onClick={() => handleDescargarPDF(cotizacion)}>
-                          Descargar PDF
-                        </Button>
-                        {cotizacion.estado === 'PENDIENTE' && (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setSelectedCotizacion(cotizacion)
-                              setShowAgendarCitaModal(true)
-                            }}
-                          >
-                            Agendar Cita
-                          </Button>
-                        )}
-                      </div>
+                    <div className="font-bold text-lab-neutral-900">
+                      ${Number(cotizacion.total).toFixed(2)}
                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 ml-4">
+                    <Button variant="ghost" size="sm" onClick={() => handleDescargarPDF(cotizacion)} title="Descargar PDF">
+                      <svg className="w-5 h-5 text-lab-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </Button>
+                    {!cotizacion.cita && cotizacion.estado === 'PENDIENTE' && (
+                      <Button size="sm" onClick={() => handleAgendarCita(cotizacion)}>
+                        Agendar Cita
+                      </Button>
+                    )}
+                    {cotizacion.cita && (
+                      <span className="text-xs font-medium text-lab-success-700 bg-lab-success-100 px-2 py-1 rounded">
+                        Cita Agendada
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -584,83 +537,71 @@ export default function CotizacionesPage() {
         </CardContent>
       </Card>
 
-      {/* Modal Agendar Cita desde Cotización */}
+      {/* Modal Agendar Cita */}
       {showAgendarCitaModal && selectedCotizacion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-lab-neutral-900">Agendar Cita</h2>
-                <button
-                  onClick={() => {
-                    setShowAgendarCitaModal(false)
-                    setSelectedCotizacion(null)
-                  }}
-                  className="text-lab-neutral-400 hover:text-lab-neutral-600"
-                >
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-lab-neutral-200">
+              <h2 className="text-xl font-bold text-lab-neutral-900">
+                Agendar Cita para {selectedCotizacion.numero_cotizacion}
+              </h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-2">
+                <Label>Fecha</Label>
+                <Input
+                  type="date"
+                  value={fechaCita}
+                  onChange={(e) => setFechaCita(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                />
               </div>
 
-              <div className="space-y-4">
-                <div className="p-4 bg-lab-neutral-50 rounded-lg">
-                  <h4 className="font-semibold text-lab-neutral-900">{selectedCotizacion.numero_cotizacion}</h4>
-                  <p className="text-sm text-lab-neutral-600 mt-1">
-                    {selectedCotizacion.detalles?.length || 0} examen{(selectedCotizacion.detalles?.length || 0) !== 1 && 'es'} •
-                    Total: ${(Number(selectedCotizacion.total) || 0).toFixed(2)}
-                  </p>
-                </div>
-
+              {fechaCita && (
                 <div className="space-y-2">
-                  <Label htmlFor="fecha_cita">Fecha de la Cita *</Label>
-                  <Input
-                    id="fecha_cita"
-                    type="date"
-                    value={fechaCita}
-                    onChange={(e) => setFechaCita(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                  />
+                  <Label>Horarios Disponibles</Label>
+                  {loadingSlots ? (
+                    <div className="text-center py-4">Cargando horarios...</div>
+                  ) : availableSlots.length === 0 ? (
+                    <div className="text-center py-4 text-lab-neutral-500">No hay horarios disponibles para esta fecha</div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+                      {availableSlots.map((slot) => (
+                        <button
+                          key={slot.codigo_slot}
+                          onClick={() => setSelectedSlot(slot.codigo_slot)}
+                          className={`p-2 text-sm rounded border ${selectedSlot === slot.codigo_slot
+                            ? 'bg-lab-primary-600 text-white border-lab-primary-600'
+                            : 'bg-white text-lab-neutral-700 border-lab-neutral-300 hover:border-lab-primary-500'
+                            }`}
+                        >
+                          {slot.hora_inicio.substring(0, 5)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+              )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="hora_cita">Hora *</Label>
-                  <Input
-                    id="hora_cita"
-                    type="time"
-                    value={horaCita}
-                    onChange={(e) => setHoraCita(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="observaciones_cita">Observaciones</Label>
-                  <textarea
-                    id="observaciones_cita"
-                    value={observacionesCita}
-                    onChange={(e) => setObservacionesCita(e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 rounded-md border border-lab-neutral-300 focus:outline-none focus:ring-2 focus:ring-lab-primary-500"
-                    placeholder="Información adicional (opcional)"
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowAgendarCitaModal(false)
-                      setSelectedCotizacion(null)
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleAgendarCitaDesdeCotizacion} disabled={!fechaCita || !horaCita}>
-                    Confirmar Cita
-                  </Button>
-                </div>
+              <div className="space-y-2">
+                <Label>Observaciones (Opcional)</Label>
+                <Input
+                  value={observacionesCita}
+                  onChange={(e) => setObservacionesCita(e.target.value)}
+                  placeholder="Alguna indicación especial..."
+                />
               </div>
+            </div>
+            <div className="p-6 border-t border-lab-neutral-200 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowAgendarCitaModal(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleConfirmarCita}
+                disabled={!selectedSlot}
+              >
+                Confirmar Cita
+              </Button>
             </div>
           </div>
         </div>

@@ -254,6 +254,8 @@ export default function ResultadosAdminPage() {
         return 'bg-lab-success-100 text-lab-success-800'
       case 'EN_PROCESO':
         return 'bg-lab-warning-100 text-lab-warning-800'
+      case 'PENDIENTE':
+        return 'bg-lab-info-100 text-lab-info-800'
       default:
         return 'bg-lab-neutral-100 text-lab-neutral-600'
     }
@@ -272,11 +274,10 @@ export default function ResultadosAdminPage() {
       {/* Messages */}
       {message && (
         <div
-          className={`p-4 rounded-lg ${
-            message.type === 'success'
+          className={`p-4 rounded-lg ${message.type === 'success'
               ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
               : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
-          }`}
+            }`}
         >
           {message.text}
         </div>

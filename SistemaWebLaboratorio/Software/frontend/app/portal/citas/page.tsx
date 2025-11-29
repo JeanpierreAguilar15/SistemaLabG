@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -38,6 +39,8 @@ interface Slot {
 
 export default function CitasPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
+  const searchParams = useSearchParams()
+  const cotizacionParam = searchParams.get('cotizacion')
 
   const [loading, setLoading] = useState(false)
   const [citas, setCitas] = useState<Cita[]>([])
@@ -62,12 +65,34 @@ export default function CitasPage() {
   // Para cancelar
   const [motivoCancelacion, setMotivoCancelacion] = useState('')
 
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   useEffect(() => {
-    loadCitas()
-    loadServicios()
-  }, [])
+    if (accessToken) {
+      loadCitas()
+      loadServicios()
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    if (cotizacionParam) {
+      setShowAgendarModal(true)
+      setObservaciones(`Cotización: ${cotizacionParam}`)
+    }
+  }, [cotizacionParam])
+
+  const formatTime = (isoString: string) => {
+    if (!isoString) return '';
+    try {
+      if (isoString.includes('T')) {
+        const date = new Date(isoString);
+        return date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hour12: false });
+      }
+      return isoString.substring(0, 5);
+    } catch (e) {
+      return isoString;
+    }
+  }
 
   const loadCitas = async () => {
     try {
@@ -80,7 +105,19 @@ export default function CitasPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setCitas(data)
+        // Map backend response to Cita interface
+        const mappedCitas = data.map((item: any) => ({
+          codigo_cita: item.codigo_cita,
+          fecha: item.slot.fecha,
+          hora_inicio: formatTime(item.slot.hora_inicio),
+          hora_fin: formatTime(item.slot.hora_fin),
+          servicio: item.slot.servicio.nombre,
+          sede: item.slot.sede.nombre,
+          estado: item.estado,
+          confirmada: item.estado === 'CONFIRMADA', // Assuming 'CONFIRMADA' is a state or derived
+          observaciones: item.observaciones
+        }))
+        setCitas(mappedCitas)
       }
     } catch (error) {
       console.error('Error loading citas:', error)
@@ -91,7 +128,7 @@ export default function CitasPage() {
 
   const loadServicios = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/services`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/services`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -110,8 +147,11 @@ export default function CitasPage() {
     if (!servicioId || !fecha) return
 
     try {
+      const fechaDesde = `${fecha}T00:00:00`
+      const fechaHasta = `${fecha}T23:59:59`
+
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/agenda/slots/available?servicio_id=${servicioId}&fecha=${fecha}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/agenda/slots/available?codigo_servicio=${servicioId}&fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -145,10 +185,23 @@ export default function CitasPage() {
 
     try {
       // Necesitamos el codigo_servicio de la cita actual
-      // Lo obtendremos del servicio (asumiendo que podemos inferirlo del nombre)
-      // Por ahora usaremos el mismo endpoint pero sin filtrar por servicio
+      // Buscamos el servicio por nombre en la lista de servicios cargados (si es posible)
+      // O asumimos que el backend nos da el ID, pero en la interfaz Cita solo tenemos el nombre del servicio.
+      // Idealmente la Cita debería tener codigo_servicio.
+      // Por ahora, intentaremos encontrar el servicio en la lista 'servicios' que coincida con el nombre
+      const servicio = servicios.find(s => s.nombre === selectedCita.servicio);
+      const codigoServicio = servicio ? servicio.codigo_servicio : '';
+
+      const fechaDesde = `${fecha}T00:00:00`
+      const fechaHasta = `${fecha}T23:59:59`
+
+      let url = `${process.env.NEXT_PUBLIC_API_URL}/agenda/slots/available?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`
+      if (codigoServicio) {
+        url += `&codigo_servicio=${codigoServicio}`
+      }
+
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/agenda/slots/available?fecha=${fecha}`,
+        url,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -181,6 +234,7 @@ export default function CitasPage() {
         body: JSON.stringify({
           codigo_slot: parseInt(selectedSlot),
           observaciones,
+          codigo_cotizacion: cotizacionIdParam ? parseInt(cotizacionIdParam) : undefined,
         }),
       })
 
@@ -330,11 +384,10 @@ export default function CitasPage() {
       {/* Mensaje */}
       {message && (
         <div
-          className={`p-4 rounded-lg ${
-            message.type === 'success'
-              ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
-              : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
-          }`}
+          className={`p-4 rounded-lg ${message.type === 'success'
+            ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
+            : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
+            }`}
         >
           {message.text}
         </div>
@@ -531,26 +584,50 @@ export default function CitasPage() {
                 )}
 
                 {selectedFecha && slots.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     <Label>Horario Disponible *</Label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {slots.map((slot) => (
-                        <button
-                          key={slot.codigo_slot}
-                          onClick={() => setSelectedSlot(slot.codigo_slot.toString())}
-                          className={`p-3 rounded-lg border-2 text-sm font-medium transition-colors ${
-                            selectedSlot === slot.codigo_slot.toString()
-                              ? 'border-lab-primary-500 bg-lab-primary-50 text-lab-primary-700'
-                              : 'border-lab-neutral-200 hover:border-lab-primary-300'
-                          }`}
-                        >
-                          {slot.hora_inicio}
-                          <span className="block text-xs text-lab-neutral-500 mt-1">
-                            {slot.cupos_disponibles} cupos
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+
+                    {/* Mañana */}
+                    {slots.some(s => parseInt(formatTime(s.hora_inicio).split(':')[0]) < 12) && (
+                      <div>
+                        <h4 className="text-sm font-medium text-lab-neutral-500 mb-2">Mañana</h4>
+                        <div className="grid grid-cols-4 gap-2">
+                          {slots.filter(s => parseInt(formatTime(s.hora_inicio).split(':')[0]) < 12).map((slot) => (
+                            <button
+                              key={slot.codigo_slot}
+                              onClick={() => setSelectedSlot(slot.codigo_slot.toString())}
+                              className={`p-2 rounded-lg border text-sm font-medium transition-colors ${selectedSlot === slot.codigo_slot.toString()
+                                ? 'border-lab-primary-500 bg-lab-primary-50 text-lab-primary-700'
+                                : 'border-lab-neutral-200 hover:border-lab-primary-300 hover:bg-lab-neutral-50'
+                                }`}
+                            >
+                              {formatTime(slot.hora_inicio)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tarde */}
+                    {slots.some(s => parseInt(formatTime(s.hora_inicio).split(':')[0]) >= 12) && (
+                      <div>
+                        <h4 className="text-sm font-medium text-lab-neutral-500 mb-2">Tarde</h4>
+                        <div className="grid grid-cols-4 gap-2">
+                          {slots.filter(s => parseInt(formatTime(s.hora_inicio).split(':')[0]) >= 12).map((slot) => (
+                            <button
+                              key={slot.codigo_slot}
+                              onClick={() => setSelectedSlot(slot.codigo_slot.toString())}
+                              className={`p-2 rounded-lg border text-sm font-medium transition-colors ${selectedSlot === slot.codigo_slot.toString()
+                                ? 'border-lab-primary-500 bg-lab-primary-50 text-lab-primary-700'
+                                : 'border-lab-neutral-200 hover:border-lab-primary-300 hover:bg-lab-neutral-50'
+                                }`}
+                            >
+                              {formatTime(slot.hora_inicio)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -709,13 +786,12 @@ export default function CitasPage() {
                         <button
                           key={slot.codigo_slot}
                           onClick={() => setReprogramarSlot(slot.codigo_slot.toString())}
-                          className={`p-3 rounded-lg border-2 text-sm font-medium transition-colors ${
-                            reprogramarSlot === slot.codigo_slot.toString()
-                              ? 'border-lab-primary-500 bg-lab-primary-50 text-lab-primary-700'
-                              : 'border-lab-neutral-200 hover:border-lab-primary-300'
-                          }`}
+                          className={`p-3 rounded-lg border-2 text-sm font-medium transition-colors ${reprogramarSlot === slot.codigo_slot.toString()
+                            ? 'border-lab-primary-500 bg-lab-primary-50 text-lab-primary-700'
+                            : 'border-lab-neutral-200 hover:border-lab-primary-300'
+                            }`}
                         >
-                          {slot.hora_inicio}
+                          {formatTime(slot.hora_inicio)}
                           <span className="block text-xs text-lab-neutral-500 mt-1">
                             {slot.cupos_disponibles} cupos
                           </span>

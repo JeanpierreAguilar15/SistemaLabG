@@ -17,4 +17,13 @@ export class CreateCitaDto {
   @IsOptional()
   @IsString()
   observaciones?: string;
+
+  @ApiProperty({
+    description: 'Código de la cotización asociada (opcional)',
+    example: 1,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  codigo_cotizacion?: number;
 }

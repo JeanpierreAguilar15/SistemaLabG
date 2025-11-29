@@ -55,30 +55,33 @@ export default function PortalLayout({
     <div className="min-h-screen bg-lab-neutral-50">
       {/* Sidebar for desktop */}
       <div className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
-        <div className="flex flex-col flex-grow bg-white border-r border-lab-neutral-200 pt-5 pb-4 overflow-y-auto">
+        <div className="flex flex-col flex-grow bg-lab-primary-900 pt-5 pb-4 overflow-y-auto">
           {/* Logo */}
           <div className="flex items-center flex-shrink-0 px-6 mb-6">
-            <div className="bg-lab-primary-600 text-white rounded-xl p-2">
+            <div className="bg-white text-lab-primary-600 rounded-xl p-2">
               <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
               </svg>
             </div>
-            <span className="ml-3 text-xl font-bold text-lab-neutral-900">Lab Franz</span>
+            <div className="ml-3">
+              <span className="text-xl font-bold text-white">Lab Franz</span>
+              <p className="text-xs text-lab-primary-200">Portal Paciente</p>
+            </div>
           </div>
 
           {/* User info */}
           <div className="px-6 mb-6">
             <div className="flex items-center space-x-3">
               <div className="flex-shrink-0">
-                <div className="w-10 h-10 rounded-full bg-lab-primary-100 text-lab-primary-700 flex items-center justify-center font-semibold">
+                <div className="w-10 h-10 rounded-full bg-lab-primary-700 text-white flex items-center justify-center font-semibold">
                   {getInitials(user.nombres, user.apellidos)}
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-lab-neutral-900 truncate">
+                <p className="text-sm font-medium text-white truncate">
                   {user.nombres} {user.apellidos}
                 </p>
-                <p className="text-xs text-lab-neutral-500 truncate">{user.email}</p>
+                <p className="text-xs text-lab-primary-200 truncate">{user.email}</p>
               </div>
             </div>
           </div>
@@ -94,13 +97,13 @@ export default function PortalLayout({
                   className={`
                     group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors
                     ${isActive
-                      ? 'bg-lab-primary-50 text-lab-primary-700'
-                      : 'text-lab-neutral-700 hover:bg-lab-neutral-100 hover:text-lab-neutral-900'
+                      ? 'bg-lab-primary-800 text-white'
+                      : 'text-lab-primary-100 hover:bg-lab-primary-800 hover:text-white'
                     }
                   `}
                 >
                   <svg
-                    className={`mr-3 flex-shrink-0 h-5 w-5 ${isActive ? 'text-lab-primary-600' : 'text-lab-neutral-400 group-hover:text-lab-neutral-600'}`}
+                    className={`mr-3 flex-shrink-0 h-5 w-5 ${isActive ? 'text-white' : 'text-lab-primary-300 group-hover:text-white'}`}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -117,7 +120,7 @@ export default function PortalLayout({
           <div className="px-3 mt-6">
             <Button
               variant="outline"
-              className="w-full justify-start text-lab-danger-600 border-lab-danger-200 hover:bg-lab-danger-50"
+              className="w-full justify-start text-white bg-lab-primary-800 border-lab-primary-700 hover:bg-lab-primary-700"
               onClick={handleLogout}
             >
               <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -134,19 +137,22 @@ export default function PortalLayout({
         <div className="md:hidden">
           <div className="fixed inset-0 z-40 flex">
             <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)}></div>
-            <div className="relative flex w-full max-w-xs flex-1 flex-col bg-white">
+            <div className="relative flex w-full max-w-xs flex-1 flex-col bg-lab-primary-900">
               {/* Same content as desktop sidebar */}
               <div className="flex flex-col flex-grow pt-5 pb-4 overflow-y-auto">
                 <div className="flex items-center justify-between px-6 mb-6">
                   <div className="flex items-center">
-                    <div className="bg-lab-primary-600 text-white rounded-xl p-2">
+                    <div className="bg-white text-lab-primary-600 rounded-xl p-2">
                       <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                       </svg>
                     </div>
-                    <span className="ml-3 text-xl font-bold text-lab-neutral-900">Lab Franz</span>
+                    <div className="ml-3">
+                      <span className="text-xl font-bold text-white">Lab Franz</span>
+                      <p className="text-xs text-lab-primary-200">Portal Paciente</p>
+                    </div>
                   </div>
-                  <button onClick={() => setSidebarOpen(false)} className="text-lab-neutral-400 hover:text-lab-neutral-600">
+                  <button onClick={() => setSidebarOpen(false)} className="text-lab-primary-300 hover:text-white">
                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -155,14 +161,14 @@ export default function PortalLayout({
 
                 <div className="px-6 mb-6">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-lab-primary-100 text-lab-primary-700 flex items-center justify-center font-semibold">
+                    <div className="w-10 h-10 rounded-full bg-lab-primary-700 text-white flex items-center justify-center font-semibold">
                       {getInitials(user.nombres, user.apellidos)}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-lab-neutral-900">
+                      <p className="text-sm font-medium text-white">
                         {user.nombres} {user.apellidos}
                       </p>
-                      <p className="text-xs text-lab-neutral-500">{user.email}</p>
+                      <p className="text-xs text-lab-primary-200">{user.email}</p>
                     </div>
                   </div>
                 </div>
@@ -178,13 +184,13 @@ export default function PortalLayout({
                         className={`
                           group flex items-center px-3 py-2 text-sm font-medium rounded-lg
                           ${isActive
-                            ? 'bg-lab-primary-50 text-lab-primary-700'
-                            : 'text-lab-neutral-700 hover:bg-lab-neutral-100'
+                            ? 'bg-lab-primary-800 text-white'
+                            : 'text-lab-primary-100 hover:bg-lab-primary-800'
                           }
                         `}
                       >
                         <svg
-                          className={`mr-3 h-5 w-5 ${isActive ? 'text-lab-primary-600' : 'text-lab-neutral-400'}`}
+                          className={`mr-3 h-5 w-5 ${isActive ? 'text-white' : 'text-lab-primary-300'}`}
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -200,7 +206,7 @@ export default function PortalLayout({
                 <div className="px-3 mt-6">
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-lab-danger-600 border-lab-danger-200 hover:bg-lab-danger-50"
+                    className="w-full justify-start text-white bg-lab-primary-800 border-lab-primary-700 hover:bg-lab-primary-700"
                     onClick={handleLogout}
                   >
                     <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

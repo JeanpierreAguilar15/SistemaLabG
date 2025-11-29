@@ -38,6 +38,14 @@ export class QuerySlotsDto {
   fecha_hasta?: string;
 
   @ApiProperty({
+    description: 'Fecha específica (YYYY-MM-DD)',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  fecha?: string;
+
+  @ApiProperty({
     description: 'Solo slots con cupos disponibles',
     required: false,
     default: true,

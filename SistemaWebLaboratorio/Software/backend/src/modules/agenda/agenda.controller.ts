@@ -26,9 +26,16 @@ import {
 @ApiTags('Agenda')
 @Controller('agenda')
 export class AgendaController {
-  constructor(private readonly agendaService: AgendaService) {}
+  constructor(private readonly agendaService: AgendaService) { }
 
   // ==================== SLOTS (Admin) ====================
+
+  @Get('services')
+  @ApiOperation({ summary: 'Obtener todos los servicios (Público)' })
+  @ApiResponse({ status: 200, description: 'Lista de servicios' })
+  async getServices() {
+    return this.agendaService.getAllServices();
+  }
 
   @Post('slots')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -93,6 +100,36 @@ export class AgendaController {
     return this.agendaService.deleteSlot(id, adminId);
   }
 
+  @Post('admin/generate-slots')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generar slots masivamente (Admin)' })
+  @ApiResponse({ status: 201, description: 'Slots generados exitosamente' })
+  async generateSlots(
+    @Body() body: { startDate: string; endDate: string },
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.agendaService.generateDailySlots(body.startDate, body.endDate, adminId);
+  }
+
+  @Delete('admin/slots')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Eliminar slots masivamente por rango (Admin)' })
+  @ApiResponse({ status: 200, description: 'Slots eliminados exitosamente' })
+  async deleteSlotsByRange(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    if (!startDate || !endDate) {
+      throw new Error('startDate y endDate son requeridos');
+    }
+    return this.agendaService.deleteSlotsByRange(startDate, endDate, adminId);
+  }
+
   // ==================== CITAS (Paciente) ====================
 
   @Post('citas')
@@ -129,7 +166,7 @@ export class AgendaController {
     @CurrentUser('codigo_usuario') codigo_usuario: number,
     @CurrentUser('rol') rol: string,
   ) {
-    const isAdmin = rol === 'Administrador';
+    const isAdmin = rol === 'ADMIN';
     return this.agendaService.getCitaById(id, isAdmin ? undefined : codigo_usuario);
   }
 

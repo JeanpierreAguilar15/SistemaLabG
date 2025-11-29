@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { validateEmail, validatePhoneEcuador, validateTimeRange } from '@/lib/utils'
+import { systemConfigService, SystemConfig } from '@/lib/services/system-config.service'
 
 interface LabConfig {
   nombre: string
@@ -50,23 +51,36 @@ export default function ConfigurationPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [loadingStats, setLoadingStats] = useState(true)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [systemConfigs, setSystemConfigs] = useState<SystemConfig[]>([])
 
   useEffect(() => {
-    // Load configuration from localStorage
-    const savedConfig = localStorage.getItem('labConfig')
-    if (savedConfig) {
-      try {
-        const parsed = JSON.parse(savedConfig)
-        setConfig(parsed)
-        setTempConfig(parsed)
-      } catch (e) {
-        console.error('Error loading config:', e)
-      }
-    }
-
-    // Load system stats (mock data for now - could be replaced with API calls)
+    loadConfigurations()
     loadSystemStats()
   }, [])
+
+  const loadConfigurations = async () => {
+    try {
+      const configs = await systemConfigService.getAll()
+      setSystemConfigs(configs)
+
+      // Map backend configs to local state if they exist
+      const newConfig = { ...config }
+      configs.forEach(c => {
+        if (c.clave === 'LAB_NOMBRE') newConfig.nombre = c.valor
+        if (c.clave === 'LAB_EMAIL') newConfig.email = c.valor
+        if (c.clave === 'LAB_TELEFONO') newConfig.telefono = c.valor
+        if (c.clave === 'LAB_DIRECCION') newConfig.direccion = c.valor
+        if (c.clave === 'AGENDA_HORA_INICIO') newConfig.horaInicio = c.valor
+        if (c.clave === 'AGENDA_HORA_FIN') newConfig.horaFin = c.valor
+        if (c.clave === 'AGENDA_DURACION_SLOT') newConfig.duracionSlot = Number(c.valor)
+        if (c.clave === 'AGENDA_CAPACIDAD_DEFECTO') newConfig.capacidadDefecto = Number(c.valor)
+      })
+      setConfig(newConfig)
+      setTempConfig(newConfig)
+    } catch (error) {
+      console.error('Error loading configurations:', error)
+    }
+  }
 
   const loadSystemStats = async () => {
     try {
@@ -91,86 +105,59 @@ export default function ConfigurationPage() {
     }
   }
 
-  const handleSaveSection = (section: string) => {
+  const updateConfigValue = async (key: string, value: string, group: string, type: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON' = 'STRING', isPublic: boolean = false) => {
+    const existing = systemConfigs.find(c => c.clave === key)
+    if (existing) {
+      await systemConfigService.update(existing.codigo_config, { valor: value })
+    } else {
+      await systemConfigService.create({
+        clave: key,
+        valor: value,
+        grupo: group,
+        tipo_dato: type,
+        es_publico: isPublic
+      })
+    }
+  }
+
+  const handleSaveSection = async (section: string) => {
     setIsLoading(true)
     try {
-      // Validaciones según la sección
-
       if (section === 'general') {
-        // Validar nombre (mínimo 3 caracteres)
-        if (tempConfig.nombre.trim().length < 3) {
-          setMessage({ type: 'error', text: '❌ El nombre del laboratorio debe tener al menos 3 caracteres.' })
-          setIsLoading(false)
-          return
-        }
+        if (tempConfig.nombre.trim().length < 3) throw new Error('El nombre debe tener al menos 3 caracteres')
+        if (!validateEmail(tempConfig.email)) throw new Error('Email inválido')
+        if (!validatePhoneEcuador(tempConfig.telefono)) throw new Error('Teléfono inválido')
+        if (tempConfig.direccion.trim().length < 10) throw new Error('Dirección muy corta')
 
-        // Validar email
-        if (!validateEmail(tempConfig.email)) {
-          setMessage({ type: 'error', text: '❌ El email ingresado no es válido.' })
-          setIsLoading(false)
-          return
-        }
-
-        // Validar teléfono
-        if (!validatePhoneEcuador(tempConfig.telefono)) {
-          setMessage({
-            type: 'error',
-            text: '❌ El teléfono debe ser un número ecuatoriano válido (Ej: 0999999999 o +593999999999)'
-          })
-          setIsLoading(false)
-          return
-        }
-
-        // Validar dirección (mínimo 10 caracteres)
-        if (tempConfig.direccion.trim().length < 10) {
-          setMessage({ type: 'error', text: '❌ La dirección debe tener al menos 10 caracteres.' })
-          setIsLoading(false)
-          return
-        }
+        await Promise.all([
+          updateConfigValue('LAB_NOMBRE', tempConfig.nombre, 'GENERAL', 'STRING', true),
+          updateConfigValue('LAB_EMAIL', tempConfig.email, 'GENERAL', 'STRING', true),
+          updateConfigValue('LAB_TELEFONO', tempConfig.telefono, 'GENERAL', 'STRING', true),
+          updateConfigValue('LAB_DIRECCION', tempConfig.direccion, 'GENERAL', 'STRING', true),
+        ])
       }
 
       if (section === 'appointments') {
-        // Validar rango de horas (horaInicio < horaFin)
-        if (!validateTimeRange(tempConfig.horaInicio, tempConfig.horaFin)) {
-          setMessage({
-            type: 'error',
-            text: `❌ La hora de inicio (${tempConfig.horaInicio}) debe ser menor que la hora de fin (${tempConfig.horaFin}).`
-          })
-          setIsLoading(false)
-          return
-        }
+        if (!validateTimeRange(tempConfig.horaInicio, tempConfig.horaFin)) throw new Error('Rango de horas inválido')
+        if (![15, 30, 45, 60].includes(tempConfig.duracionSlot)) throw new Error('Duración de slot inválida')
+        if (tempConfig.capacidadDefecto < 1 || tempConfig.capacidadDefecto > 20) throw new Error('Capacidad inválida')
 
-        // Validar duración de slot (15, 30, 45, 60)
-        const slotsValidos = [15, 30, 45, 60]
-        if (!slotsValidos.includes(tempConfig.duracionSlot)) {
-          setMessage({
-            type: 'error',
-            text: '❌ La duración del slot debe ser 15, 30, 45 o 60 minutos.'
-          })
-          setIsLoading(false)
-          return
-        }
-
-        // Validar capacidad por defecto (1-20)
-        if (tempConfig.capacidadDefecto < 1 || tempConfig.capacidadDefecto > 20) {
-          setMessage({
-            type: 'error',
-            text: '❌ La capacidad por defecto debe estar entre 1 y 20 cupos.'
-          })
-          setIsLoading(false)
-          return
-        }
+        await Promise.all([
+          updateConfigValue('AGENDA_HORA_INICIO', tempConfig.horaInicio, 'AGENDA', 'STRING', true),
+          updateConfigValue('AGENDA_HORA_FIN', tempConfig.horaFin, 'AGENDA', 'STRING', true),
+          updateConfigValue('AGENDA_DURACION_SLOT', tempConfig.duracionSlot.toString(), 'AGENDA', 'NUMBER', true),
+          updateConfigValue('AGENDA_CAPACIDAD_DEFECTO', tempConfig.capacidadDefecto.toString(), 'AGENDA', 'NUMBER', true),
+        ])
       }
 
-      // Save to localStorage
-      localStorage.setItem('labConfig', JSON.stringify(tempConfig))
       setConfig(tempConfig)
       setEditingSection(null)
       setMessage({ type: 'success', text: 'Configuración guardada exitosamente' })
+      await loadConfigurations() // Reload to get updated IDs if created
 
       setTimeout(() => setMessage(null), 3000)
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Error al guardar la configuración' })
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Error al guardar la configuración' })
     } finally {
       setIsLoading(false)
     }
@@ -196,11 +183,10 @@ export default function ConfigurationPage() {
 
       {/* Success/Error Message */}
       {message && (
-        <div className={`p-4 rounded-lg ${
-          message.type === 'success'
+        <div className={`p-4 rounded-lg ${message.type === 'success'
             ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
             : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
-        }`}>
+          }`}>
           {message.text}
         </div>
       )}
@@ -296,98 +282,7 @@ export default function ConfigurationPage() {
           )}
         </div>
 
-        {/* Appointment Settings */}
-        <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-lab-info-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-lab-info-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-lab-neutral-900">Gestión de Citas</h2>
-                <p className="text-sm text-lab-neutral-600">Horarios y disponibilidad</p>
-              </div>
-            </div>
-          </div>
 
-          {editingSection === 'appointments' ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="horaInicio">Hora de Inicio</Label>
-                  <Input
-                    id="horaInicio"
-                    type="time"
-                    value={tempConfig.horaInicio}
-                    onChange={(e) => setTempConfig({ ...tempConfig, horaInicio: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="horaFin">Hora de Fin</Label>
-                  <Input
-                    id="horaFin"
-                    type="time"
-                    value={tempConfig.horaFin}
-                    onChange={(e) => setTempConfig({ ...tempConfig, horaFin: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="duracionSlot">Duración de Slot (minutos)</Label>
-                <Input
-                  id="duracionSlot"
-                  type="number"
-                  min="15"
-                  step="15"
-                  value={tempConfig.duracionSlot}
-                  onChange={(e) => setTempConfig({ ...tempConfig, duracionSlot: parseInt(e.target.value) })}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="capacidadDefecto">Capacidad por Defecto</Label>
-                <Input
-                  id="capacidadDefecto"
-                  type="number"
-                  min="1"
-                  value={tempConfig.capacidadDefecto}
-                  onChange={(e) => setTempConfig({ ...tempConfig, capacidadDefecto: parseInt(e.target.value) })}
-                  className="mt-1"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={() => handleSaveSection('appointments')} disabled={isLoading} className="flex-1">
-                  {isLoading ? 'Guardando...' : 'Guardar'}
-                </Button>
-                <Button onClick={handleCancelEdit} variant="outline" className="flex-1">
-                  Cancelar
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="py-2">
-                <p className="text-xs text-lab-neutral-500">Horarios de Atención</p>
-                <p className="text-sm font-medium text-lab-neutral-900">{config.horaInicio} - {config.horaFin}</p>
-              </div>
-              <div className="py-2">
-                <p className="text-xs text-lab-neutral-500">Duración de Slots</p>
-                <p className="text-sm font-medium text-lab-neutral-900">{config.duracionSlot} minutos</p>
-              </div>
-              <div className="py-2">
-                <p className="text-xs text-lab-neutral-500">Capacidad por Defecto</p>
-                <p className="text-sm font-medium text-lab-neutral-900">{config.capacidadDefecto} cupos</p>
-              </div>
-              <Button onClick={() => handleEdit('appointments')} variant="outline" size="sm" className="w-full mt-2">
-                Configurar Horarios
-              </Button>
-            </div>
-          )}
-        </div>
 
         {/* Email Settings */}
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
