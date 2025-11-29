@@ -225,7 +225,7 @@ export class ChatbotService implements OnModuleInit {
         mensaje += `El rango normal es de ${min} a ${max} ${unidad}.`;
 
         if (interpretacion !== 'NORMAL') {
-            mensaje += `\n⚠️ Te recomendamos consultar con un médico para una evaluación completa.`;
+            mensaje += `\nIMPORTANTE: Te recomendamos consultar con un médico para una evaluación completa.`;
         }
 
         return { mensaje };
@@ -293,7 +293,7 @@ export class ChatbotService implements OnModuleInit {
         }
 
         const listaSedes = sedes.map(
-            (s) => `🏥 ${s.nombre}: ${s.direccion} (${s.horarios?.map(h => h.dia_semana).join(', ') || 'Horario no disponible'})`,
+            (s) => `- ${s.nombre}: ${s.direccion} (${s.horarios?.map(h => h.dia_semana).join(', ') || 'Horario no disponible'})`,
         ).join('\n');
 
         return {
@@ -325,7 +325,7 @@ export class ChatbotService implements OnModuleInit {
         }
 
         const listaServicios = servicios.map(
-            (srv) => `🔬 ${srv.nombre}${srv.descripcion ? ': ' + srv.descripcion : ''}`,
+            (srv) => `- ${srv.nombre}${srv.descripcion ? ': ' + srv.descripcion : ''}`,
         ).join('\n');
 
         return {
@@ -364,7 +364,7 @@ export class ChatbotService implements OnModuleInit {
         const listaPaquetes = paquetes.map((paq) => {
             const precio = paq.precio_paquete ? `S/. ${paq.precio_paquete}` : 'Consultar';
             const examenes = paq.examenes.map((e) => e.examen.nombre).join(', ');
-            return `📦 ${paq.nombre} - ${precio}\n   Incluye: ${examenes}`;
+            return `* ${paq.nombre} - ${precio}\n   Incluye: ${examenes}`;
         }).join('\n\n');
 
         return {
@@ -443,7 +443,7 @@ export class ChatbotService implements OnModuleInit {
         }, {} as Record<string, string[]>);
 
         const listaDisponibilidad = Object.entries(porFecha)
-            .map(([fecha, horarios]) => `📅 ${fecha}:\n   ${horarios.join('\n   ')}`)
+            .map(([fecha, horarios]) => `${fecha}:\n   ${horarios.join('\n   ')}`)
             .join('\n\n');
 
         return {
@@ -479,24 +479,24 @@ export class ChatbotService implements OnModuleInit {
             };
         }
 
-        let mensaje = `📋 Preparación para ${examen.nombre}:\n\n`;
+        let mensaje = `Preparación para ${examen.nombre}:\n\n`;
 
         if (examen.requiere_ayuno) {
-            mensaje += '⏰ REQUIERE AYUNO: Sí (mínimo 8-12 horas)\n';
+            mensaje += 'REQUIERE AYUNO: Sí (mínimo 8-12 horas)\n';
         } else {
-            mensaje += '⏰ Ayuno: No requerido\n';
+            mensaje += 'Ayuno: No requerido\n';
         }
 
         if (examen.instrucciones_preparacion) {
-            mensaje += `\n📝 Instrucciones especiales:\n${examen.instrucciones_preparacion}\n`;
+            mensaje += `\nInstrucciones especiales:\n${examen.instrucciones_preparacion}\n`;
         }
 
         if (examen.tiempo_entrega_horas) {
-            mensaje += `\n🕐 Tiempo de entrega: ${examen.tiempo_entrega_horas} horas`;
+            mensaje += `\nTiempo de entrega: ${examen.tiempo_entrega_horas} horas`;
         }
 
         if (!examen.requiere_ayuno && !examen.instrucciones_preparacion) {
-            mensaje += '\n✅ No requiere preparación especial.';
+            mensaje += '\nNo requiere preparación especial.';
         }
 
         return {
@@ -546,7 +546,7 @@ export class ChatbotService implements OnModuleInit {
                 return `   ${dia}: ${inicio} - ${fin}`;
             }).join('\n');
 
-            return `🏥 ${sede.nombre}\n📍 ${sede.direccion}\n📞 ${sede.telefono || 'No disponible'}\n${horarios || '   Horario no especificado'}`;
+            return `${sede.nombre}\nDirección: ${sede.direccion}\nTeléfono: ${sede.telefono || 'No disponible'}\n${horarios || '   Horario no especificado'}`;
         }).join('\n\n');
 
         return {
@@ -581,7 +581,7 @@ export class ChatbotService implements OnModuleInit {
         }
 
         const listaCategorias = categorias.map(
-            (cat) => `📁 ${cat.nombre} (${cat._count.examenes} exámenes)${cat.descripcion ? '\n   ' + cat.descripcion : ''}`
+            (cat) => `- ${cat.nombre} (${cat._count.examenes} exámenes)${cat.descripcion ? '\n   ' + cat.descripcion : ''}`
         ).join('\n');
 
         return {
