@@ -137,12 +137,11 @@ export default function ResultadosPage() {
 
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
-      case 'LIBERADO':
+      case 'LISTO':
+      case 'ENTREGADO':
         return 'lab-badge-success'
       case 'VALIDADO':
         return 'lab-badge-info'
-      case 'COMPLETADO':
-        return 'lab-badge-warning'
       case 'EN_PROCESO':
         return 'lab-badge-neutral'
       default:
@@ -152,12 +151,12 @@ export default function ResultadosPage() {
 
   const getEstadoText = (estado: string) => {
     switch (estado) {
-      case 'LIBERADO':
+      case 'LISTO':
         return 'Disponible'
+      case 'ENTREGADO':
+        return 'Entregado'
       case 'VALIDADO':
         return 'Validado'
-      case 'COMPLETADO':
-        return 'Completado'
       case 'EN_PROCESO':
         return 'En Proceso'
       default:
@@ -206,8 +205,8 @@ export default function ResultadosPage() {
     }
   }
 
-  const resultadosDisponibles = filteredResultados.filter((r) => r.estado === 'LIBERADO')
-  const resultadosEnProceso = filteredResultados.filter((r) => r.estado !== 'LIBERADO')
+  const resultadosDisponibles = filteredResultados.filter((r) => ['LISTO', 'ENTREGADO', 'VALIDADO'].includes(r.estado))
+  const resultadosEnProceso = filteredResultados.filter((r) => r.estado === 'EN_PROCESO')
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -307,9 +306,9 @@ export default function ResultadosPage() {
                 className="w-full h-10 px-3 rounded-md border border-lab-neutral-300 focus:outline-none focus:ring-2 focus:ring-lab-primary-500"
               >
                 <option value="TODOS">Todos</option>
-                <option value="LIBERADO">Disponible</option>
+                <option value="LISTO">Disponible</option>
+                <option value="ENTREGADO">Entregado</option>
                 <option value="VALIDADO">Validado</option>
-                <option value="COMPLETADO">Completado</option>
                 <option value="EN_PROCESO">En Proceso</option>
               </select>
             </div>
@@ -398,7 +397,7 @@ export default function ResultadosPage() {
                         </span>
                       </div>
 
-                      {resultado.estado === 'LIBERADO' && (
+                      {['LISTO', 'ENTREGADO', 'VALIDADO'].includes(resultado.estado) && (
                         <div className="mt-3 flex items-center space-x-2">
                           {resultado.nivel && (
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getNivelBadge(resultado.nivel)}`}>
@@ -414,7 +413,7 @@ export default function ResultadosPage() {
                       )}
 
                       <div className="flex space-x-2 mt-3">
-                        {resultado.estado === 'LIBERADO' && (
+                        {['LISTO', 'ENTREGADO', 'VALIDADO'].includes(resultado.estado) && (
                           <>
                             <Button
                               size="sm"

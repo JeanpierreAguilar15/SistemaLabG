@@ -3,15 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-
-interface Examen {
-  codigo_examen: number
-  nombre: string
-  precio: number
-}
 
 interface Package {
   codigo_paquete: number
@@ -22,25 +13,51 @@ interface Package {
   activo: boolean
   fecha_creacion: string
   examenes?: Array<{
-    examen: Examen
+    codigo_paquete_examen: number
+    codigo_examen: number
+    examen: {
+      codigo_examen: number
+      nombre: string
+      precio: string
+    }
   }>
   _count?: {
     examenes: number
   }
 }
 
+interface Exam {
+  codigo_examen: number
+  nombre: string
+  precio: string
+  codigo_categoria: number
+  categoria: {
+    nombre: string
+  }
+}
+
+interface Message {
+  type: 'success' | 'error'
+  text: string
+}
+
 export default function PackagesManagement() {
   const { accessToken } = useAuthStore()
   const [packages, setPackages] = useState<Package[]>([])
-  const [allExamenes, setAllExamenes] = useState<Examen[]>([])
+  const [exams, setExams] = useState<Exam[]>([])
   const [loading, setLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showDetailModal, setShowDetailModal] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null)
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editingPackage, setEditingPackage] = useState<Package | null>(null)
+  const [message, setMessage] = useState<Message | null>(null)
+  const [formData, setFormData] = useState({
+    nombre: '',
+    descripcion: '',
+    precio_paquete: '',
+    descuento: '0',
+    activo: true,
+    examenes: [] as number[],
+  })
 
   useEffect(() => {
     setMounted(true)
@@ -49,15 +66,13 @@ export default function PackagesManagement() {
   useEffect(() => {
     if (mounted && accessToken) {
       loadPackages()
-      loadExamenes()
+      loadExams()
     }
   }, [accessToken, mounted])
 
   useEffect(() => {
     if (message) {
-      const timer = setTimeout(() => {
-        setMessage(null)
-      }, 5000)
+      const timer = setTimeout(() => setMessage(null), 5000)
       return () => clearTimeout(timer)
     }
   }, [message])
@@ -66,128 +81,184 @@ export default function PackagesManagement() {
     try {
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/packages`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       })
 
       if (response.ok) {
         const data = await response.json()
         setPackages(data)
+      } else {
+        setMessage({ type: 'error', text: 'Error al cargar paquetes' })
       }
     } catch (error) {
-      console.error('Error loading packages:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     } finally {
       setLoading(false)
     }
   }
 
-  const loadExamenes = async () => {
+  const loadExams = async () => {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exams`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       })
 
       if (response.ok) {
-        const result = await response.json()
-        const examenes = result.data || result
-        setAllExamenes(examenes)
+        const data = await response.json()
+        setExams(data.data || data)
       }
     } catch (error) {
-      console.error('Error loading examenes:', error)
+      console.error('Error loading exams:', error)
     }
   }
 
-  const handleCreate = (formData: PackageFormData) => {
-    createPackage(formData)
+  const handleOpenForm = (pkg?: Package) => {
+    if (pkg) {
+      setEditingPackage(pkg)
+      setFormData({
+        nombre: pkg.nombre,
+        descripcion: pkg.descripcion || '',
+        precio_paquete: String(pkg.precio_paquete || ''),
+        descuento: String(pkg.descuento || '0'),
+        activo: pkg.activo,
+        examenes: pkg.examenes?.map(e => e.codigo_examen) || [],
+      })
+    } else {
+      setEditingPackage(null)
+      setFormData({
+        nombre: '',
+        descripcion: '',
+        precio_paquete: '',
+        descuento: '0',
+        activo: true,
+        examenes: [],
+      })
+    }
+    setShowForm(true)
   }
 
-  const handleEdit = (pkg: Package) => {
-    setSelectedPackage(pkg)
-    setShowEditModal(true)
+  const handleCloseForm = () => {
+    setShowForm(false)
+    setEditingPackage(null)
+    setFormData({
+      nombre: '',
+      descripcion: '',
+      precio_paquete: '',
+      descuento: '0',
+      activo: true,
+      examenes: [],
+    })
   }
 
-  const handleViewDetails = (pkg: Package) => {
-    setSelectedPackage(pkg)
-    setShowDetailModal(true)
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
+    }))
   }
 
-  const handleDelete = (pkg: Package) => {
-    setSelectedPackage(pkg)
-    setShowDeleteModal(true)
+  const handleExamToggle = (examId: number) => {
+    setFormData(prev => ({
+      ...prev,
+      examenes: prev.examenes.includes(examId)
+        ? prev.examenes.filter(id => id !== examId)
+        : [...prev.examenes, examId],
+    }))
   }
 
-  const createPackage = async (formData: PackageFormData) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/packages`, {
-        method: 'POST',
+      const url = editingPackage
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/packages/${editingPackage.codigo_paquete}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/packages`
+
+      const response = await fetch(url, {
+        method: editingPackage ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          nombre: formData.nombre,
+          descripcion: formData.descripcion || null,
+          precio_paquete: parseFloat(formData.precio_paquete),
+          descuento: parseFloat(formData.descuento),
+          activo: formData.activo,
+          examenes: formData.examenes,
+        }),
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Paquete creado exitosamente' })
+        setMessage({
+          type: 'success',
+          text: editingPackage ? '✅ Paquete actualizado correctamente' : '✅ Paquete creado correctamente',
+        })
+        handleCloseForm()
         loadPackages()
-        setShowCreateModal(false)
       } else {
-        setMessage({ type: 'error', text: 'Error al crear paquete' })
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al guardar paquete' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error al crear paquete' })
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
 
-  const updatePackage = async (codigo_paquete: number, formData: PackageFormData) => {
+  const handleDelete = async (codigo_paquete: number) => {
+    if (!confirm('¿Estás seguro de que deseas desactivar este paquete?')) return
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/packages/${codigo_paquete}`, {
-        method: 'PUT',
+        method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(formData),
       })
 
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Paquete actualizado exitosamente' })
+      if (response.ok || response.status === 204) {
+        setMessage({ type: 'success', text: '✅ Paquete desactivado correctamente' })
         loadPackages()
-        setShowEditModal(false)
-        setSelectedPackage(null)
       } else {
-        setMessage({ type: 'error', text: 'Error al actualizar paquete' })
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al desactivar paquete' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error al actualizar paquete' })
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
 
-  const confirmDelete = async () => {
-    if (!selectedPackage) return
-
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/admin/packages/${selectedPackage.codigo_paquete}`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      )
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Paquete eliminado exitosamente' })
-        loadPackages()
-        setShowDeleteModal(false)
-        setSelectedPackage(null)
-      } else {
-        setMessage({ type: 'error', text: 'Error al eliminar paquete' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Error al eliminar paquete' })
-    }
+  const calculateTotalPrice = () => {
+    if (formData.examenes.length === 0) return '0.00'
+    const total = formData.examenes.reduce((sum, examId) => {
+      const exam = exams.find(e => e.codigo_examen === examId)
+      return sum + (exam ? parseFloat(exam.precio) : 0)
+    }, 0)
+    return total.toFixed(2)
   }
 
-  if (!mounted || loading) {
+  const calculateSavings = () => {
+    const total = parseFloat(calculateTotalPrice())
+    const packagePrice = parseFloat(formData.precio_paquete || '0')
+    const savings = total - packagePrice
+    return savings > 0 ? savings.toFixed(2) : '0.00'
+  }
+
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>
+      </div>
+    )
+  }
+
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>
@@ -197,13 +268,26 @@ export default function PackagesManagement() {
 
   return (
     <div className="space-y-6">
+      {/* Messages */}
+      {message && (
+        <div
+          className={`p-4 rounded-lg ${
+            message.type === 'success'
+              ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
+              : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Paquetes</h1>
           <p className="text-lab-neutral-600 mt-1">Administra los paquetes de exámenes</p>
         </div>
-        <Button className="bg-lab-primary-600 hover:bg-lab-primary-700" onClick={() => setShowCreateModal(true)}>
+        <Button onClick={() => handleOpenForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
           <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
@@ -211,21 +295,172 @@ export default function PackagesManagement() {
         </Button>
       </div>
 
-      {/* Message */}
-      {message && (
-        <div
-          className={`p-4 rounded-lg flex justify-between items-center ${
-            message.type === 'success'
-              ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
-              : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
-          }`}
-        >
-          <span>{message.text}</span>
-          <button onClick={() => setMessage(null)} className="ml-4 hover:opacity-70">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+      {/* Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full my-8">
+            <div className="p-6 border-b border-lab-neutral-200">
+              <h2 className="text-2xl font-bold text-lab-neutral-900">
+                {editingPackage ? 'Editar Paquete' : 'Nuevo Paquete'}
+              </h2>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Column */}
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="nombre" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Nombre del Paquete *
+                    </label>
+                    <input
+                      type="text"
+                      id="nombre"
+                      name="nombre"
+                      value={formData.nombre}
+                      onChange={handleInputChange}
+                      required
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="descripcion" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Descripción
+                    </label>
+                    <textarea
+                      id="descripcion"
+                      name="descripcion"
+                      value={formData.descripcion}
+                      onChange={handleInputChange}
+                      rows={3}
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="precio_paquete" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Precio del Paquete (USD) *
+                    </label>
+                    <input
+                      type="number"
+                      id="precio_paquete"
+                      name="precio_paquete"
+                      value={formData.precio_paquete}
+                      onChange={handleInputChange}
+                      step="0.01"
+                      min="0"
+                      required
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="descuento" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Descuento (%)
+                    </label>
+                    <input
+                      type="number"
+                      id="descuento"
+                      name="descuento"
+                      value={formData.descuento}
+                      onChange={handleInputChange}
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="activo"
+                      name="activo"
+                      checked={formData.activo}
+                      onChange={handleInputChange}
+                      className="h-4 w-4 text-lab-primary-600 focus:ring-lab-primary-500 border-lab-neutral-300 rounded"
+                    />
+                    <label htmlFor="activo" className="ml-2 block text-sm text-lab-neutral-700">
+                      Paquete activo
+                    </label>
+                  </div>
+
+                  {/* Price Summary */}
+                  {formData.examenes.length > 0 && (
+                    <div className="bg-lab-neutral-50 rounded-lg p-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-lab-neutral-600">Precio individual de exámenes:</span>
+                        <span className="font-semibold">${calculateTotalPrice()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-lab-neutral-600">Precio del paquete:</span>
+                        <span className="font-semibold">${formData.precio_paquete || '0.00'}</span>
+                      </div>
+                      <div className="flex justify-between text-sm pt-2 border-t border-lab-neutral-200">
+                        <span className="text-lab-success-600 font-medium">Ahorro:</span>
+                        <span className="font-bold text-lab-success-600">${calculateSavings()}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column - Exams Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-lab-neutral-700 mb-2">
+                    Exámenes Incluidos * ({formData.examenes.length} seleccionados)
+                  </label>
+                  <div className="border border-lab-neutral-300 rounded-md max-h-96 overflow-y-auto">
+                    {exams.length === 0 ? (
+                      <div className="p-4 text-center text-lab-neutral-500">
+                        No hay exámenes disponibles
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-lab-neutral-200">
+                        {exams.map((exam) => (
+                          <div
+                            key={exam.codigo_examen}
+                            className="p-3 hover:bg-lab-neutral-50 cursor-pointer"
+                            onClick={() => handleExamToggle(exam.codigo_examen)}
+                          >
+                            <div className="flex items-start">
+                              <input
+                                type="checkbox"
+                                checked={formData.examenes.includes(exam.codigo_examen)}
+                                onChange={() => handleExamToggle(exam.codigo_examen)}
+                                className="h-4 w-4 mt-0.5 text-lab-primary-600 focus:ring-lab-primary-500 border-lab-neutral-300 rounded"
+                              />
+                              <div className="ml-3 flex-1">
+                                <div className="text-sm font-medium text-lab-neutral-900">{exam.nombre}</div>
+                                <div className="text-xs text-lab-neutral-500">{exam.categoria.nombre}</div>
+                              </div>
+                              <div className="text-sm font-semibold text-lab-primary-600">${Number(exam.precio).toFixed(2)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {formData.examenes.length === 0 && (
+                    <p className="mt-2 text-sm text-lab-danger-600">Debe seleccionar al menos un examen</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-lab-neutral-200">
+                <Button type="button" onClick={handleCloseForm} variant="outline">
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-lab-primary-600 hover:bg-lab-primary-700"
+                  disabled={formData.examenes.length === 0}
+                >
+                  {editingPackage ? 'Actualizar' : 'Crear'} Paquete
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -239,24 +474,23 @@ export default function PackagesManagement() {
             <div className="flex items-start justify-between mb-4">
               <div className="w-12 h-12 bg-lab-success-100 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
               </div>
               <span
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  pkg.activo ? 'bg-lab-success-100 text-lab-success-800' : 'bg-lab-neutral-100 text-lab-neutral-800'
+                  pkg.activo
+                    ? 'bg-lab-success-100 text-lab-success-800'
+                    : 'bg-lab-neutral-100 text-lab-neutral-800'
                 }`}
               >
                 {pkg.activo ? 'Activo' : 'Inactivo'}
               </span>
             </div>
 
-            <h3 className="text-lg font-semibold text-lab-neutral-900 mb-2">{pkg.nombre}</h3>
+            <h3 className="text-lg font-semibold text-lab-neutral-900 mb-2">
+              {pkg.nombre}
+            </h3>
 
             <p className="text-sm text-lab-neutral-600 mb-4 line-clamp-2">
               {pkg.descripcion || 'Sin descripción'}
@@ -265,45 +499,46 @@ export default function PackagesManagement() {
             <div className="flex items-center justify-between py-3 border-t border-b border-lab-neutral-200 my-4">
               <div>
                 <p className="text-xs text-lab-neutral-500">Precio</p>
-                <p className="text-2xl font-bold text-lab-primary-600">${Number(pkg.precio_paquete).toFixed(2)}</p>
+                <p className="text-2xl font-bold text-lab-primary-600">
+                  ${Number(pkg.precio_paquete).toFixed(2)}
+                </p>
               </div>
               {Number(pkg.descuento) > 0 && (
                 <div className="text-right">
                   <p className="text-xs text-lab-neutral-500">Descuento</p>
-                  <p className="text-lg font-semibold text-lab-success-600">{Number(pkg.descuento).toFixed(0)}%</p>
+                  <p className="text-lg font-semibold text-lab-success-600">
+                    {Number(pkg.descuento).toFixed(0)}%
+                  </p>
                 </div>
               )}
             </div>
 
-            <div className="flex items-center justify-between mb-4">
+            <div className="space-y-3">
               <div className="flex items-center space-x-2 text-sm text-lab-neutral-600">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span>{pkg._count?.examenes || 0} exámenes</span>
               </div>
-            </div>
 
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => handleViewDetails(pkg)}>
-                Ver
-              </Button>
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(pkg)}>
-                Editar
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-lab-danger-600 hover:bg-lab-danger-50"
-                onClick={() => handleDelete(pkg)}
-              >
-                Eliminar
-              </Button>
+              <div className="flex space-x-2">
+                <Button
+                  onClick={() => handleOpenForm(pkg)}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                >
+                  Editar
+                </Button>
+                <Button
+                  onClick={() => handleDelete(pkg.codigo_paquete)}
+                  variant="outline"
+                  size="sm"
+                  className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                >
+                  Desactivar
+                </Button>
+              </div>
             </div>
           </div>
         ))}
@@ -311,314 +546,13 @@ export default function PackagesManagement() {
 
       {packages.length === 0 && (
         <div className="text-center py-12">
-          <svg
-            className="mx-auto h-12 w-12 text-lab-neutral-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-            />
+          <svg className="mx-auto h-12 w-12 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
           <h3 className="mt-2 text-sm font-medium text-lab-neutral-900">No hay paquetes</h3>
           <p className="mt-1 text-sm text-lab-neutral-500">Comienza creando un nuevo paquete de exámenes.</p>
         </div>
       )}
-
-      {/* Create/Edit Modal */}
-      {(showCreateModal || showEditModal) && (
-        <PackageFormModal
-          package={showEditModal ? selectedPackage : null}
-          examenes={allExamenes}
-          onClose={() => {
-            setShowCreateModal(false)
-            setShowEditModal(false)
-            setSelectedPackage(null)
-          }}
-          onSave={(formData) => {
-            if (showEditModal && selectedPackage) {
-              updatePackage(selectedPackage.codigo_paquete, formData)
-            } else {
-              createPackage(formData)
-            }
-          }}
-        />
-      )}
-
-      {/* Detail Modal */}
-      {showDetailModal && selectedPackage && (
-        <PackageDetailModal
-          package={selectedPackage}
-          onClose={() => {
-            setShowDetailModal(false)
-            setSelectedPackage(null)
-          }}
-        />
-      )}
-
-      {/* Delete Modal */}
-      {showDeleteModal && selectedPackage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-lab-neutral-900 mb-4">Confirmar Eliminación</h2>
-            <p className="text-lab-neutral-600 mb-6">
-              ¿Estás seguro de que deseas eliminar el paquete{' '}
-              <span className="font-semibold">{selectedPackage.nombre}</span>? Esta acción no se puede deshacer.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowDeleteModal(false)
-                  setSelectedPackage(null)
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button className="bg-lab-danger-600 hover:bg-lab-danger-700" onClick={confirmDelete}>
-                Eliminar
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Types for form data
-interface PackageFormData {
-  nombre: string
-  descripcion: string
-  precio_paquete: number
-  descuento: number
-  activo: boolean
-  examenes: number[]
-}
-
-// Package Form Modal Component
-function PackageFormModal({
-  package: pkg,
-  examenes,
-  onClose,
-  onSave,
-}: {
-  package: Package | null
-  examenes: Examen[]
-  onClose: () => void
-  onSave: (formData: PackageFormData) => void
-}) {
-  const [nombre, setNombre] = useState(pkg?.nombre || '')
-  const [descripcion, setDescripcion] = useState(pkg?.descripcion || '')
-  const [precio, setPrecio] = useState(Number(pkg?.precio_paquete || 0))
-  const [descuento, setDescuento] = useState(Number(pkg?.descuento || 0))
-  const [activo, setActivo] = useState(pkg?.activo ?? true)
-  const [selectedExamenes, setSelectedExamenes] = useState<number[]>(
-    pkg?.examenes?.map((e) => e.examen.codigo_examen) || []
-  )
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave({
-      nombre,
-      descripcion,
-      precio_paquete: precio,
-      descuento,
-      activo,
-      examenes: selectedExamenes,
-    })
-  }
-
-  const toggleExamen = (codigo_examen: number) => {
-    if (selectedExamenes.includes(codigo_examen)) {
-      setSelectedExamenes(selectedExamenes.filter((id) => id !== codigo_examen))
-    } else {
-      setSelectedExamenes([...selectedExamenes, codigo_examen])
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-xl max-w-3xl w-full my-8">
-        <div className="p-6 border-b border-lab-neutral-200">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-lab-neutral-900">{pkg ? 'Editar' : 'Crear'} Paquete</h2>
-            <button onClick={onClose} className="text-lab-neutral-400 hover:text-lab-neutral-600">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="nombre">Nombre del Paquete *</Label>
-              <Input
-                id="nombre"
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Ej: Paquete Básico"
-                required
-              />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="descripcion">Descripción</Label>
-              <textarea
-                id="descripcion"
-                value={descripcion}
-                onChange={(e) => setDescripcion(e.target.value)}
-                className="w-full min-h-[80px] px-3 py-2 rounded-md border border-lab-neutral-300"
-                placeholder="Descripción del paquete..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="precio">Precio ($) *</Label>
-              <Input
-                id="precio"
-                type="number"
-                step="0.01"
-                min="0"
-                value={precio}
-                onChange={(e) => setPrecio(parseFloat(e.target.value) || 0)}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="descuento">Descuento (%) *</Label>
-              <Input
-                id="descuento"
-                type="number"
-                step="1"
-                min="0"
-                max="100"
-                value={descuento}
-                onChange={(e) => setDescuento(parseFloat(e.target.value) || 0)}
-                required
-              />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="activo"
-                  checked={activo}
-                  onChange={(e) => setActivo(e.target.checked)}
-                  className="w-4 h-4 text-lab-primary-600 border-lab-neutral-300 rounded"
-                />
-                <Label htmlFor="activo">Paquete activo</Label>
-              </div>
-            </div>
-          </div>
-
-          {/* Examenes Selection */}
-          <div className="space-y-2">
-            <Label>Exámenes Incluidos *</Label>
-            <div className="border border-lab-neutral-300 rounded-md p-4 max-h-60 overflow-y-auto">
-              {examenes.map((examen) => (
-                <div key={examen.codigo_examen} className="flex items-center space-x-2 py-2">
-                  <input
-                    type="checkbox"
-                    id={`examen-${examen.codigo_examen}`}
-                    checked={selectedExamenes.includes(examen.codigo_examen)}
-                    onChange={() => toggleExamen(examen.codigo_examen)}
-                    className="w-4 h-4 text-lab-primary-600 border-lab-neutral-300 rounded"
-                  />
-                  <label htmlFor={`examen-${examen.codigo_examen}`} className="flex-1 text-sm cursor-pointer">
-                    {examen.nombre} - ${Number(examen.precio).toFixed(2)}
-                  </label>
-                </div>
-              ))}
-              {examenes.length === 0 && (
-                <p className="text-sm text-lab-neutral-500 text-center py-4">
-                  No hay exámenes disponibles. Crea exámenes primero.
-                </p>
-              )}
-            </div>
-            <p className="text-xs text-lab-neutral-500">{selectedExamenes.length} exámenes seleccionados</p>
-          </div>
-
-          {/* Actions */}
-          <div className="flex justify-end space-x-3 pt-4 border-t border-lab-neutral-200">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit">{pkg ? 'Actualizar' : 'Crear'} Paquete</Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// Package Detail Modal Component
-function PackageDetailModal({ package: pkg, onClose }: { package: Package; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-2xl w-full">
-        <div className="p-6 border-b border-lab-neutral-200">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-lab-neutral-900">Detalles del Paquete</h2>
-            <button onClick={onClose} className="text-lab-neutral-400 hover:text-lab-neutral-600">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6 space-y-4">
-          <div>
-            <h3 className="text-2xl font-bold text-lab-neutral-900">{pkg.nombre}</h3>
-            <p className="text-lab-neutral-600 mt-1">{pkg.descripcion || 'Sin descripción'}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-lab-neutral-50 p-4 rounded-lg">
-              <p className="text-sm text-lab-neutral-600 mb-1">Precio</p>
-              <p className="text-2xl font-bold text-lab-primary-600">${Number(pkg.precio_paquete).toFixed(2)}</p>
-            </div>
-            <div className="bg-lab-neutral-50 p-4 rounded-lg">
-              <p className="text-sm text-lab-neutral-600 mb-1">Descuento</p>
-              <p className="text-2xl font-bold text-lab-success-600">{Number(pkg.descuento).toFixed(0)}%</p>
-            </div>
-          </div>
-
-          <div className="bg-lab-neutral-50 p-4 rounded-lg">
-            <p className="text-sm text-lab-neutral-600 mb-1">Estado</p>
-            <span
-              className={`text-sm px-3 py-1 rounded ${
-                pkg.activo ? 'bg-lab-success-100 text-lab-success-800' : 'bg-lab-neutral-100 text-lab-neutral-800'
-              }`}
-            >
-              {pkg.activo ? 'Activo' : 'Inactivo'}
-            </span>
-          </div>
-
-          {pkg.examenes && pkg.examenes.length > 0 && (
-            <div>
-              <h4 className="font-semibold text-lab-neutral-900 mb-3">Exámenes Incluidos ({pkg.examenes.length})</h4>
-              <div className="space-y-2">
-                {pkg.examenes.map((item) => (
-                  <div key={item.examen.codigo_examen} className="flex justify-between items-center p-3 bg-lab-neutral-50 rounded-lg">
-                    <span className="font-medium text-lab-neutral-900">{item.examen.nombre}</span>
-                    <span className="text-sm text-lab-neutral-600">${Number(item.examen.precio).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   )
 }

@@ -14,6 +14,8 @@ interface DashboardStats {
   appointments: {
     total: number
     today: number
+    completed: number
+    completionRate: number
   }
   results: {
     pending: number
@@ -21,15 +23,20 @@ interface DashboardStats {
   inventory: {
     lowStock: number
   }
-  recentActivities: Array<{
-    codigo_log: number
-    accion: string
-    entidad: string | null
-    fecha_accion: string
-    usuario: {
-      nombres: string
-      apellidos: string
-    } | null
+  revenue: {
+    monthly: number
+    total: number
+  }
+  quotations: {
+    total: number
+    approved: number
+    pending: number
+    conversionRate: number
+  }
+  recentExams: Array<{
+    code: string
+    name: string
+    date: Date
   }>
 }
 
@@ -79,37 +86,41 @@ export default function AdminDashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Usuarios */}
+        {/* Ingresos del Mes */}
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-lab-neutral-600">Usuarios Totales</p>
-              <p className="text-3xl font-bold text-lab-neutral-900 mt-2">{stats?.users.total || 0}</p>
-              <p className="text-sm text-lab-success-600 mt-1">{stats?.users.active || 0} activos</p>
+              <p className="text-sm font-medium text-lab-neutral-600">Ingresos del Mes</p>
+              <p className="text-3xl font-bold text-lab-success-600 mt-2">
+                ${(stats?.revenue.monthly || 0).toFixed(2)}
+              </p>
+              <p className="text-sm text-lab-neutral-500 mt-1">Total histórico: ${(stats?.revenue.total || 0).toFixed(2)}</p>
             </div>
-            <div className="w-12 h-12 bg-lab-primary-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-12 h-12 bg-lab-success-100 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
             </div>
           </div>
         </div>
 
-        {/* Exámenes */}
+        {/* Cotizaciones */}
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-lab-neutral-600">Exámenes Activos</p>
-              <p className="text-3xl font-bold text-lab-neutral-900 mt-2">{stats?.exams.total || 0}</p>
-              <p className="text-sm text-lab-neutral-500 mt-1">En catálogo</p>
+              <p className="text-sm font-medium text-lab-neutral-600">Cotizaciones</p>
+              <p className="text-3xl font-bold text-lab-neutral-900 mt-2">{stats?.quotations.total || 0}</p>
+              <p className="text-sm text-lab-success-600 mt-1">
+                {stats?.quotations.conversionRate || 0}% convertidas
+              </p>
             </div>
-            <div className="w-12 h-12 bg-lab-secondary-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-lab-secondary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-12 h-12 bg-lab-primary-100 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -125,9 +136,11 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-lab-neutral-600">Citas Totales</p>
+              <p className="text-sm font-medium text-lab-neutral-600">Citas</p>
               <p className="text-3xl font-bold text-lab-neutral-900 mt-2">{stats?.appointments.total || 0}</p>
-              <p className="text-sm text-lab-info-600 mt-1">{stats?.appointments.today || 0} hoy</p>
+              <p className="text-sm text-lab-info-600 mt-1">
+                {stats?.appointments.completionRate || 0}% completadas • {stats?.appointments.today || 0} hoy
+              </p>
             </div>
             <div className="w-12 h-12 bg-lab-info-100 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-lab-info-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -142,13 +155,13 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Inventario */}
+        {/* Resultados Pendientes */}
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-lab-neutral-600">Stock Bajo</p>
-              <p className="text-3xl font-bold text-lab-neutral-900 mt-2">{stats?.inventory.lowStock || 0}</p>
-              <p className="text-sm text-lab-warning-600 mt-1">Requiere atención</p>
+              <p className="text-sm font-medium text-lab-neutral-600">Resultados Pendientes</p>
+              <p className="text-3xl font-bold text-lab-warning-600 mt-2">{stats?.results.pending || 0}</p>
+              <p className="text-sm text-lab-neutral-500 mt-1">Requieren procesamiento</p>
             </div>
             <div className="w-12 h-12 bg-lab-warning-100 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -156,7 +169,7 @@ export default function AdminDashboard() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                 />
               </svg>
             </div>
@@ -190,46 +203,99 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Recent Activities */}
-      <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200">
-        <div className="px-6 py-4 border-b border-lab-neutral-200">
-          <h2 className="text-lg font-semibold text-lab-neutral-900">Actividad Reciente</h2>
+      {/* Business Insights Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Últimos Exámenes */}
+        <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200">
+          <div className="px-6 py-4 border-b border-lab-neutral-200">
+            <h2 className="text-lg font-semibold text-lab-neutral-900">Últimos Exámenes Agregados</h2>
+            <p className="text-sm text-lab-neutral-600 mt-1">5 exámenes más recientes del catálogo</p>
+          </div>
+          <div className="p-6">
+            {stats?.recentExams && stats.recentExams.length > 0 ? (
+              <div className="space-y-3">
+                {stats.recentExams.map((exam, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-lab-neutral-50 rounded-lg hover:bg-lab-neutral-100 transition-colors">
+                    <div className="flex items-center space-x-3 flex-1">
+                      <div className="w-10 h-10 bg-lab-primary-100 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-lab-neutral-900 truncate">{exam.name}</p>
+                        <p className="text-xs text-lab-neutral-600 font-mono">{exam.code}</p>
+                      </div>
+                    </div>
+                    <div className="text-xs text-lab-neutral-500 ml-2">
+                      {new Date(exam.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-lab-neutral-500">
+                <p>No hay exámenes disponibles</p>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="divide-y divide-lab-neutral-200">
-          {stats?.recentActivities && stats.recentActivities.length > 0 ? (
-            stats.recentActivities.map((activity) => (
-              <div key={activity.codigo_log} className="px-6 py-4 hover:bg-lab-neutral-50 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-lab-neutral-900">{activity.accion}</p>
-                    {activity.entidad && (
-                      <p className="text-sm text-lab-neutral-600 mt-1">
-                        Entidad: <span className="font-medium">{activity.entidad}</span>
-                      </p>
-                    )}
-                    {activity.usuario && (
-                      <p className="text-xs text-lab-neutral-500 mt-1">
-                        Por {activity.usuario.nombres} {activity.usuario.apellidos}
-                      </p>
-                    )}
-                  </div>
-                  <div className="text-xs text-lab-neutral-500 ml-4">
-                    {new Date(activity.fecha_accion).toLocaleString('es-ES', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </div>
+
+        {/* Métricas Adicionales */}
+        <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200">
+          <div className="px-6 py-4 border-b border-lab-neutral-200">
+            <h2 className="text-lg font-semibold text-lab-neutral-900">Resumen Operativo</h2>
+            <p className="text-sm text-lab-neutral-600 mt-1">Métricas clave del sistema</p>
+          </div>
+          <div className="p-6 space-y-4">
+            {/* Usuarios */}
+            <div className="flex items-center justify-between p-4 bg-lab-neutral-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-lab-primary-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-lab-neutral-900">Usuarios del Sistema</p>
+                  <p className="text-xs text-lab-neutral-600">{stats?.users.active || 0} activos de {stats?.users.total || 0} totales</p>
                 </div>
               </div>
-            ))
-          ) : (
-            <div className="px-6 py-8 text-center text-lab-neutral-500">
-              <p>No hay actividad reciente</p>
+              <div className="text-2xl font-bold text-lab-neutral-900">{stats?.users.total || 0}</div>
             </div>
-          )}
+
+            {/* Catálogo */}
+            <div className="flex items-center justify-between p-4 bg-lab-neutral-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-lab-secondary-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-lab-secondary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-lab-neutral-900">Exámenes en Catálogo</p>
+                  <p className="text-xs text-lab-neutral-600">Servicios activos</p>
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-lab-neutral-900">{stats?.exams.total || 0}</div>
+            </div>
+
+            {/* Inventario */}
+            <div className="flex items-center justify-between p-4 bg-lab-warning-50 rounded-lg border border-lab-warning-200">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-lab-warning-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-lab-warning-900">Items con Stock Bajo</p>
+                  <p className="text-xs text-lab-warning-700">Requiere reabastecimiento</p>
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-lab-warning-600">{stats?.inventory.lowStock || 0}</div>
+            </div>
+          </div>
         </div>
       </div>
 

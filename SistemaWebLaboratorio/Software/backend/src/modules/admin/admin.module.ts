@@ -4,10 +4,14 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminEventsService } from './admin-events.service';
 import { PrismaModule } from '../../prisma/prisma.module';
+import { UsersModule } from '../users/users.module';
+import { InventarioModule } from '../inventario/inventario.module';
 
 @Module({
   imports: [
     PrismaModule,
+    UsersModule,
+    InventarioModule,
     EventEmitterModule.forRoot({
       // Configuración del Event Emitter
       wildcard: true, // Permitir wildcards en nombres de eventos
@@ -19,4 +23,4 @@ import { PrismaModule } from '../../prisma/prisma.module';
   providers: [AdminService, AdminEventsService],
   exports: [AdminService, AdminEventsService],
 })
-export class AdminModule {}
+export class AdminModule { }

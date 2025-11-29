@@ -14,6 +14,8 @@ import { ComunicacionesModule } from './modules/comunicaciones/comunicaciones.mo
 import { AuditoriaModule } from './modules/auditoria/auditoria.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { EventsModule } from './modules/events/events.module';
+import { SystemConfigModule } from './modules/system-config/system-config.module';
+import { FeriadosModule } from './modules/feriados/feriados.module';
 
 @Module({
   imports: [
@@ -53,6 +55,8 @@ import { EventsModule } from './modules/events/events.module';
     InventarioModule,
     ComunicacionesModule,
     AuditoriaModule,
+    SystemConfigModule,
+    FeriadosModule,
   ],
 })
-export class AppModule {}
+export class AppModule { }

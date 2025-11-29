@@ -30,6 +30,13 @@ export default function AuditoriaPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [entidadFilter, setEntidadFilter] = useState('TODAS')
   const [limit, setLimit] = useState(50)
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
+  const [generatingPdf, setGeneratingPdf] = useState(false)
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
 
   useEffect(() => {
     loadLogs()
@@ -67,8 +74,62 @@ export default function AuditoriaPage() {
 
     const matchEntidad = entidadFilter === 'TODAS' || log.entidad === entidadFilter
 
-    return matchSearch && matchEntidad
+    const logDate = new Date(log.fecha_accion)
+    const matchFechaDesde = !fechaDesde || logDate >= new Date(fechaDesde)
+    const matchFechaHasta = !fechaHasta || logDate <= new Date(fechaHasta + 'T23:59:59')
+
+    return matchSearch && matchEntidad && matchFechaDesde && matchFechaHasta
   })
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentLogs = filteredLogs.slice(startIndex, endIndex)
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, entidadFilter, fechaDesde, fechaHasta])
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
+
+  const handleGeneratePdf = async () => {
+    setGeneratingPdf(true)
+    try {
+      const params = new URLSearchParams()
+      if (fechaDesde) params.append('fecha_desde', fechaDesde)
+      if (fechaHasta) params.append('fecha_hasta', fechaHasta)
+      if (entidadFilter !== 'TODAS') params.append('entidad', entidadFilter)
+      if (searchTerm) params.append('search', searchTerm)
+      params.append('limit', limit.toString())
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/audit/activity-logs/pdf?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `reporte-auditoria-${new Date().toISOString().split('T')[0]}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      } else {
+        alert('Error al generar el PDF')
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      alert('Error de conexión al servidor')
+    } finally {
+      setGeneratingPdf(false)
+    }
+  }
 
   const entidades = Array.from(new Set(logs.map((log) => log.entidad).filter(Boolean)))
 
@@ -148,6 +209,49 @@ export default function AuditoriaPage() {
                 <option value="500">500</option>
               </select>
             </div>
+
+            <div className="space-y-2">
+              <Label>Fecha Desde</Label>
+              <Input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fecha Hasta</Label>
+              <Input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2 flex items-end">
+              <button
+                onClick={handleGeneratePdf}
+                disabled={generatingPdf}
+                className="w-full h-10 px-4 bg-lab-danger-600 hover:bg-lab-danger-700 text-white rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                {generatingPdf ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Generando...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <span>Generar PDF</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -206,7 +310,7 @@ export default function AuditoriaPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.map((log) => (
+                {currentLogs.map((log) => (
                   <tr key={log.codigo_log} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
                     <td className="p-4 text-sm text-lab-neutral-700">
                       <div>{formatDate(new Date(log.fecha_accion))}</div>
@@ -243,6 +347,48 @@ export default function AuditoriaPage() {
               <div className="text-center py-12 text-lab-neutral-500">No se encontraron registros</div>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 mt-4 border-t border-lab-neutral-200">
+              <div className="text-sm text-lab-neutral-600">
+                Mostrando {startIndex + 1} - {Math.min(endIndex, filteredLogs.length)} de {filteredLogs.length} registros
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => goToPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm rounded-md border border-lab-neutral-300 hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Primera
+                </button>
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm rounded-md border border-lab-neutral-300 hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <span className="px-3 py-1 text-sm text-lab-neutral-700">
+                  Página {currentPage} de {totalPages}
+                </span>
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm rounded-md border border-lab-neutral-300 hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+                <button
+                  onClick={() => goToPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm rounded-md border border-lab-neutral-300 hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Última
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

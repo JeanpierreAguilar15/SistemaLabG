@@ -13,12 +13,20 @@ import {
   HttpStatus,
   ValidationPipe,
   UsePipes,
+  NotFoundException,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
+import { Response } from 'express';
+import { ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
+import { UsersService } from '../users/users.service';
+import { InventarioService } from '../inventario/inventario.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { getAllRoleLevels, getPermissionsForLevel } from './constants/role-permissions';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -41,24 +49,25 @@ import {
   UpdateInventoryItemDto,
   CreateSupplierDto,
   UpdateSupplierDto,
+  CreateMovimientoDto,
+  FilterMovimientosDto,
 } from './dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN') // Solo administradores pueden acceder
-@UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
-
-  // ==================== USUARIOS ====================
-
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly usersService: UsersService,
+    private readonly inventarioService: InventarioService,
+  ) { }
   @Get('users')
   async getAllUsers(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query() filters?: any,
   ) {
-    return this.adminService.getAllUsers(
+    return this.usersService.findAll(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 20,
       filters,
@@ -67,7 +76,7 @@ export class AdminController {
 
   @Get('users/:id')
   async getUserById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getUserById(id);
+    return this.usersService.findOne(id);
   }
 
   @Post('users')
@@ -76,7 +85,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Body() data: CreateUserDto,
   ) {
-    return this.adminService.createUser(data, adminId);
+    return this.usersService.create(data, adminId);
   }
 
   @Put('users/:id')
@@ -85,16 +94,15 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateUserDto,
   ) {
-    return this.adminService.updateUser(id, data, adminId);
+    return this.usersService.update(id, data, adminId);
   }
 
   @Delete('users/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteUser(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.adminService.deleteUser(id, adminId);
+    return this.usersService.delete(id, adminId);
   }
 
   @Put('users/:id/toggle-status')
@@ -102,7 +110,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.adminService.toggleUserStatus(id, adminId);
+    return this.usersService.toggleStatus(id, adminId);
   }
 
   @Post('users/:id/reset-password')
@@ -111,10 +119,24 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() data: ResetPasswordDto,
   ) {
-    return this.adminService.resetUserPassword(id, data.newPassword, adminId);
+    return this.usersService.resetPassword(id, data.newPassword, adminId);
   }
 
   // ==================== ROLES ====================
+
+  @Get('roles/permissions')
+  async getRolePermissions() {
+    return getAllRoleLevels();
+  }
+
+  @Get('roles/permissions/:nivel')
+  async getPermissionsByLevel(@Param('nivel', ParseIntPipe) nivel: number) {
+    const permissions = getPermissionsForLevel(nivel);
+    if (!permissions) {
+      throw new NotFoundException(`No se encontraron permisos para el nivel ${nivel}`);
+    }
+    return permissions;
+  }
 
   @Get('roles')
   async getAllRoles() {
@@ -145,7 +167,6 @@ export class AdminController {
   }
 
   @Delete('roles/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteRole(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -184,7 +205,6 @@ export class AdminController {
   }
 
   @Delete('services/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteService(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -223,7 +243,6 @@ export class AdminController {
   }
 
   @Delete('locations/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteLocation(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -363,7 +382,6 @@ export class AdminController {
   }
 
   @Delete('packages/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deletePackage(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
@@ -379,7 +397,7 @@ export class AdminController {
     @Query('limit') limit?: string,
     @Query() filters?: any,
   ) {
-    return this.adminService.getAllInventoryItems(
+    return this.inventarioService.getAllInventoryItems(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 50,
       filters,
@@ -388,7 +406,7 @@ export class AdminController {
 
   @Get('inventory/items/:id')
   async getInventoryItemById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getInventoryItemById(id);
+    return this.inventarioService.getInventoryItemById(id);
   }
 
   @Post('inventory/items')
@@ -397,7 +415,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Body() data: CreateInventoryItemDto,
   ) {
-    return this.adminService.createInventoryItem(data, adminId);
+    return this.inventarioService.createInventoryItem(data, adminId);
   }
 
   @Put('inventory/items/:id')
@@ -406,28 +424,81 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateInventoryItemDto,
   ) {
-    return this.adminService.updateInventoryItem(id, data, adminId);
+    return this.inventarioService.updateInventoryItem(id, data, adminId);
   }
 
   @Delete('inventory/items/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteInventoryItem(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.adminService.deleteInventoryItem(id, adminId);
+    return this.inventarioService.deleteInventoryItem(id, adminId);
+  }
+
+  // ==================== MOVIMIENTOS DE STOCK ====================
+
+  @Post('inventory/movements')
+  @HttpCode(HttpStatus.CREATED)
+  async createMovimiento(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: CreateMovimientoDto,
+  ) {
+    return this.inventarioService.createMovimiento(data, adminId);
+  }
+
+  @Get('inventory/movements')
+  async getAllMovimientos(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query() filters?: any,
+  ) {
+    return this.inventarioService.getAllMovimientos(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+      filters,
+    );
+  }
+
+  @Get('inventory/kardex/:itemId')
+  async getKardexByItem(
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Query('fecha_desde') fecha_desde?: string,
+    @Query('fecha_hasta') fecha_hasta?: string,
+  ) {
+    return this.inventarioService.getKardexByItem(itemId, fecha_desde, fecha_hasta);
+  }
+
+  // ==================== ALERTAS DE STOCK ====================
+
+  @Get('inventory/alertas')
+  async getAlertasStock(
+    @Query('tipo') tipo?: string,
+    @Query('codigo_item') codigo_item?: string,
+    @Query('activo') activo?: string,
+  ) {
+    const filters: any = {};
+    if (tipo) filters.tipo = tipo;
+    if (codigo_item) filters.codigo_item = parseInt(codigo_item);
+    if (activo) filters.activo = activo;
+
+    return this.inventarioService.getAlertasStock(filters);
+  }
+
+  @Get('inventory/alertas/estadisticas')
+  async getEstadisticasAlertas() {
+    return this.inventarioService.getEstadisticasAlertas();
   }
 
   // ==================== PROVEEDORES ====================
 
   @Get('suppliers')
   async getAllSuppliers() {
-    return this.adminService.getAllSuppliers();
+    return this.inventarioService.getAllSuppliers();
   }
 
   @Get('suppliers/:id')
   async getSupplierById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getSupplierById(id);
+    return this.inventarioService.getSupplierById(id);
   }
 
   @Post('suppliers')
@@ -436,7 +507,7 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Body() data: CreateSupplierDto,
   ) {
-    return this.adminService.createSupplier(data, adminId);
+    return this.inventarioService.createSupplier(data, adminId);
   }
 
   @Put('suppliers/:id')
@@ -445,16 +516,15 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateSupplierDto,
   ) {
-    return this.adminService.updateSupplier(id, data, adminId);
+    return this.inventarioService.updateSupplier(id, data, adminId);
   }
 
   @Delete('suppliers/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteSupplier(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.adminService.deleteSupplier(id, adminId);
+    return this.inventarioService.deleteSupplier(id, adminId);
   }
 
   // ==================== AUDITORIA ====================
@@ -470,6 +540,21 @@ export class AdminController {
       limit ? parseInt(limit) : 50,
       filters,
     );
+  }
+
+  @Get('audit/activity-logs/pdf')
+  async getActivityLogsPdf(
+    @Query() filters: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const pdfBuffer = await this.adminService.generateAuditPdf(filters);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=reporte-auditoria-${new Date().toISOString().split('T')[0]}.pdf`,
+    });
+
+    return new StreamableFile(pdfBuffer);
   }
 
   @Get('audit/error-logs')
@@ -490,5 +575,83 @@ export class AdminController {
   @Get('dashboard/stats')
   async getDashboardStats() {
     return this.adminService.getDashboardStats();
+  }
+
+  // ==================== ÓRDENES DE COMPRA ====================
+
+  @Post('purchase-orders')
+  @ApiOperation({ summary: 'Crear orden de compra' })
+  async createPurchaseOrder(
+    @Body() data: any,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.inventarioService.createOrdenCompra(data, adminId);
+  }
+
+  @Get('purchase-orders')
+  @ApiOperation({ summary: 'Obtener todas las órdenes de compra' })
+  async getAllPurchaseOrders(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query() filters?: any,
+  ) {
+    return this.inventarioService.getAllOrdenesCompra(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+      filters,
+    );
+  }
+
+  @Get('purchase-orders/:id')
+  @ApiOperation({ summary: 'Obtener orden de compra por ID' })
+  async getPurchaseOrderById(@Param('id', ParseIntPipe) id: number) {
+    return this.inventarioService.getOrdenCompraById(id);
+  }
+
+  @Put('purchase-orders/:id')
+  @ApiOperation({ summary: 'Actualizar orden de compra' })
+  async updatePurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: any,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.inventarioService.updateOrdenCompra(id, data, adminId);
+  }
+
+  @Delete('purchase-orders/:id')
+  @ApiOperation({ summary: 'Eliminar orden de compra' })
+  async deletePurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.inventarioService.deleteOrdenCompra(id, adminId);
+  }
+
+  @Post('purchase-orders/:id/emit')
+  @ApiOperation({ summary: 'Emitir orden de compra' })
+  async emitPurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.inventarioService.emitirOrdenCompra(id, adminId);
+  }
+
+  @Post('purchase-orders/:id/receive')
+  @ApiOperation({ summary: 'Recibir orden de compra' })
+  async receivePurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: any,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.inventarioService.recibirOrdenCompra(id, data, adminId);
+  }
+
+  @Post('purchase-orders/:id/cancel')
+  @ApiOperation({ summary: 'Cancelar orden de compra' })
+  async cancelPurchaseOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.inventarioService.cancelarOrdenCompra(id, adminId);
   }
 }

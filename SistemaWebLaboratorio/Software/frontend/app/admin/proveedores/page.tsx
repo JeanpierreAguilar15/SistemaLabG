@@ -16,31 +16,57 @@ interface Supplier {
   fecha_creacion: string
 }
 
+interface Message {
+  type: 'success' | 'error'
+  text: string
+}
+
+// Validador de RUC ecuatoriano
+function validateRucEcuador(ruc: string): boolean {
+  if (!ruc || ruc.length !== 13) return false
+
+  const codigoProvincia = parseInt(ruc.substring(0, 2))
+  if (codigoProvincia < 1 || codigoProvincia > 24) return false
+
+  const tercerDigito = parseInt(ruc.charAt(2))
+  if (tercerDigito < 0 || tercerDigito > 9) return false
+
+  // Los últimos 3 dígitos deben ser 001 para sociedades o 000 para personas naturales
+  const ultimos3 = ruc.substring(10, 13)
+  if (ultimos3 !== '001' && ultimos3 !== '000') return false
+
+  return true
+}
+
 export default function SuppliersManagement() {
   const { accessToken } = useAuthStore()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showDetailModal, setShowDetailModal] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
+  const [message, setMessage] = useState<Message | null>(null)
+  const [rucError, setRucError] = useState<string>('')
+  const [formData, setFormData] = useState({
+    ruc: '',
+    razon_social: '',
+    nombre_comercial: '',
+    telefono: '',
+    email: '',
+    direccion: '',
+    activo: true,
+  })
 
-  // Esperar a que el componente se monte en el cliente
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useEffect(() => {
-    console.log('Proveedores - accessToken:', accessToken ? 'exists' : 'null', 'mounted:', mounted)
     if (mounted && accessToken) {
       loadSuppliers()
     }
   }, [accessToken, mounted])
 
-  // Auto-dismiss messages after 5 seconds
   useEffect(() => {
     if (message) {
       const timer = setTimeout(() => setMessage(null), 5000)
@@ -50,112 +76,162 @@ export default function SuppliersManagement() {
 
   const loadSuppliers = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
-      const fullUrl = `${apiUrl}/admin/suppliers`
-
-      console.log('=== PROVEEDORES DEBUG ===')
-      console.log('API_URL:', process.env.NEXT_PUBLIC_API_URL)
-      console.log('Full URL:', fullUrl)
-      console.log('Token exists:', !!accessToken)
-      console.log('Token preview:', accessToken?.substring(0, 50))
-
       setLoading(true)
-      const response = await fetch(fullUrl, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`, {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
       })
 
-      console.log('Suppliers response status:', response.status)
       if (response.ok) {
         const data = await response.json()
-        console.log('Suppliers loaded successfully:', data.length, 'items')
         setSuppliers(data)
       } else {
-        const errorText = await response.text()
-        console.error('Failed to load suppliers:', response.status, errorText)
+        setMessage({ type: 'error', text: 'Error al cargar proveedores' })
       }
     } catch (error) {
-      console.error('Error loading suppliers:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     } finally {
       setLoading(false)
     }
   }
 
-  const createSupplier = async (supplierData: Partial<Supplier>) => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
-      const response = await fetch(`${apiUrl}/admin/suppliers`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(supplierData),
+  const handleOpenForm = (supplier?: Supplier) => {
+    if (supplier) {
+      setEditingSupplier(supplier)
+      setFormData({
+        ruc: supplier.ruc,
+        razon_social: supplier.razon_social,
+        nombre_comercial: supplier.nombre_comercial || '',
+        telefono: supplier.telefono || '',
+        email: supplier.email || '',
+        direccion: supplier.direccion || '',
+        activo: supplier.activo,
       })
+    } else {
+      setEditingSupplier(null)
+      setFormData({
+        ruc: '',
+        razon_social: '',
+        nombre_comercial: '',
+        telefono: '',
+        email: '',
+        direccion: '',
+        activo: true,
+      })
+    }
+    setRucError('')
+    setShowForm(true)
+  }
 
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Proveedor creado exitosamente' })
-        loadSuppliers()
-        setShowCreateModal(false)
+  const handleCloseForm = () => {
+    setShowForm(false)
+    setEditingSupplier(null)
+    setRucError('')
+    setFormData({
+      ruc: '',
+      razon_social: '',
+      nombre_comercial: '',
+      telefono: '',
+      email: '',
+      direccion: '',
+      activo: true,
+    })
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
+    }))
+
+    // Validar RUC en tiempo real
+    if (name === 'ruc') {
+      if (value.length === 13) {
+        if (!validateRucEcuador(value)) {
+          setRucError('RUC ecuatoriano inválido')
+        } else {
+          setRucError('')
+        }
+      } else if (value.length > 0) {
+        setRucError('El RUC debe tener 13 dígitos')
       } else {
-        const errorData = await response.json()
-        setMessage({ type: 'error', text: errorData.message || 'Error al crear proveedor' })
+        setRucError('')
       }
-    } catch (error) {
-      console.error('Error creating supplier:', error)
-      setMessage({ type: 'error', text: 'Error al crear proveedor' })
     }
   }
 
-  const updateSupplier = async (codigo_proveedor: number, supplierData: Partial<Supplier>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // Validar RUC antes de enviar
+    if (!validateRucEcuador(formData.ruc)) {
+      setRucError('RUC ecuatoriano inválido')
+      return
+    }
+
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
-      const response = await fetch(`${apiUrl}/admin/suppliers/${codigo_proveedor}`, {
-        method: 'PUT',
+      const url = editingSupplier
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers/${editingSupplier.codigo_proveedor}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`
+
+      const payload: any = {
+        ruc: formData.ruc,
+        razon_social: formData.razon_social,
+        activo: formData.activo,
+      }
+
+      if (formData.nombre_comercial) payload.nombre_comercial = formData.nombre_comercial
+      if (formData.telefono) payload.telefono = formData.telefono
+      if (formData.email) payload.email = formData.email
+      if (formData.direccion) payload.direccion = formData.direccion
+
+      const response = await fetch(url, {
+        method: editingSupplier ? 'PUT' : 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(supplierData),
+        body: JSON.stringify(payload),
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Proveedor actualizado exitosamente' })
+        setMessage({
+          type: 'success',
+          text: editingSupplier ? '✅ Proveedor actualizado correctamente' : '✅ Proveedor creado correctamente',
+        })
+        handleCloseForm()
         loadSuppliers()
-        setShowEditModal(false)
       } else {
-        const errorData = await response.json()
-        setMessage({ type: 'error', text: errorData.message || 'Error al actualizar proveedor' })
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al guardar proveedor' })
       }
     } catch (error) {
-      console.error('Error updating supplier:', error)
-      setMessage({ type: 'error', text: 'Error al actualizar proveedor' })
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
 
-  const deleteSupplier = async (codigo_proveedor: number) => {
+  const handleDelete = async (codigo_proveedor: number) => {
+    if (!confirm('¿Estás seguro de que deseas desactivar este proveedor?')) return
+
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
-      const response = await fetch(`${apiUrl}/admin/suppliers/${codigo_proveedor}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers/${codigo_proveedor}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       })
 
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Proveedor eliminado exitosamente' })
+      if (response.ok || response.status === 204) {
+        setMessage({ type: 'success', text: '✅ Proveedor desactivado correctamente' })
         loadSuppliers()
-        setShowDeleteModal(false)
       } else {
-        const errorData = await response.json()
-        setMessage({ type: 'error', text: errorData.message || 'Error al eliminar proveedor' })
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al desactivar proveedor' })
       }
     } catch (error) {
-      console.error('Error deleting supplier:', error)
-      setMessage({ type: 'error', text: 'Error al eliminar proveedor' })
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
 
@@ -177,28 +253,16 @@ export default function SuppliersManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Message */}
+      {/* Messages */}
       {message && (
-        <div className={`p-4 rounded-lg flex items-center justify-between ${
-          message.type === 'success' ? 'bg-lab-success-50 text-lab-success-800' : 'bg-lab-error-50 text-lab-error-800'
-        }`}>
-          <div className="flex items-center">
-            {message.type === 'success' ? (
-              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-            )}
-            <span>{message.text}</span>
-          </div>
-          <button onClick={() => setMessage(null)} className="ml-4">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-          </button>
+        <div
+          className={`p-4 rounded-lg ${
+            message.type === 'success'
+              ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
+              : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
+          }`}
+        >
+          {message.text}
         </div>
       )}
 
@@ -208,10 +272,7 @@ export default function SuppliersManagement() {
           <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Proveedores</h1>
           <p className="text-lab-neutral-600 mt-1">Administra los proveedores del laboratorio</p>
         </div>
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-lab-primary-600 hover:bg-lab-primary-700"
-        >
+        <Button onClick={() => handleOpenForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
           <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
@@ -219,10 +280,156 @@ export default function SuppliersManagement() {
         </Button>
       </div>
 
+      {/* Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-8">
+            <div className="p-6 border-b border-lab-neutral-200">
+              <h2 className="text-2xl font-bold text-lab-neutral-900">
+                {editingSupplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+              </h2>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="ruc" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      RUC * (13 dígitos)
+                    </label>
+                    <input
+                      type="text"
+                      id="ruc"
+                      name="ruc"
+                      value={formData.ruc}
+                      onChange={handleInputChange}
+                      required
+                      maxLength={13}
+                      pattern="^\d{13}$"
+                      className={`block w-full rounded-md border px-3 py-2 focus:ring-lab-primary-500 ${
+                        rucError
+                          ? 'border-lab-danger-500 focus:border-lab-danger-500'
+                          : 'border-lab-neutral-300 focus:border-lab-primary-500'
+                      }`}
+                    />
+                    {rucError && <p className="mt-1 text-sm text-lab-danger-600">{rucError}</p>}
+                    <p className="mt-1 text-xs text-lab-neutral-500">
+                      Formato: 13 dígitos (ej: 1790123456001)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="razon_social" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Razón Social *
+                    </label>
+                    <input
+                      type="text"
+                      id="razon_social"
+                      name="razon_social"
+                      value={formData.razon_social}
+                      onChange={handleInputChange}
+                      required
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="nombre_comercial" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                    Nombre Comercial
+                  </label>
+                  <input
+                    type="text"
+                    id="nombre_comercial"
+                    name="nombre_comercial"
+                    value={formData.nombre_comercial}
+                    onChange={handleInputChange}
+                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="telefono" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Teléfono
+                    </label>
+                    <input
+                      type="tel"
+                      id="telefono"
+                      name="telefono"
+                      value={formData.telefono}
+                      onChange={handleInputChange}
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="direccion" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                    Dirección
+                  </label>
+                  <textarea
+                    id="direccion"
+                    name="direccion"
+                    value={formData.direccion}
+                    onChange={handleInputChange}
+                    rows={2}
+                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="activo"
+                    name="activo"
+                    checked={formData.activo}
+                    onChange={handleInputChange}
+                    className="h-4 w-4 text-lab-primary-600 focus:ring-lab-primary-500 border-lab-neutral-300 rounded"
+                  />
+                  <label htmlFor="activo" className="ml-2 block text-sm text-lab-neutral-700">
+                    Proveedor activo
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-lab-neutral-200">
+                <Button type="button" onClick={handleCloseForm} variant="outline">
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-lab-primary-600 hover:bg-lab-primary-700"
+                  disabled={!!rucError}
+                >
+                  {editingSupplier ? 'Actualizar' : 'Crear'} Proveedor
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Suppliers Table */}
       <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200">
         <div className="px-6 py-4 border-b border-lab-neutral-200">
-          <h2 className="text-lg font-semibold text-lab-neutral-900">Proveedores Registrados</h2>
+          <h2 className="text-lg font-semibold text-lab-neutral-900">
+            Proveedores Registrados ({suppliers.length})
+          </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -252,10 +459,10 @@ export default function SuppliersManagement() {
               {suppliers.map((supplier) => (
                 <tr key={supplier.codigo_proveedor} className="hover:bg-lab-neutral-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-lab-neutral-900">{supplier.ruc}</div>
+                    <div className="text-sm font-medium text-lab-neutral-900 font-mono">{supplier.ruc}</div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-lab-neutral-900">{supplier.razon_social}</div>
+                    <div className="text-sm font-medium text-lab-neutral-900">{supplier.razon_social}</div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-sm text-lab-neutral-600">
@@ -280,50 +487,22 @@ export default function SuppliersManagement() {
                       {supplier.activo ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedSupplier(supplier)
-                          setShowDetailModal(true)
-                        }}
-                        title="Ver detalles"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedSupplier(supplier)
-                          setShowEditModal(true)
-                        }}
-                        title="Editar"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedSupplier(supplier)
-                          setShowDeleteModal(true)
-                        }}
-                        className="text-lab-error-600 hover:text-lab-error-700"
-                        title="Eliminar"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </Button>
-                    </div>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenForm(supplier)}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(supplier.codigo_proveedor)}
+                      className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                    >
+                      Desactivar
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -340,329 +519,6 @@ export default function SuppliersManagement() {
             <p className="mt-1 text-sm text-lab-neutral-500">Comienza registrando un nuevo proveedor.</p>
           </div>
         )}
-      </div>
-
-      {/* Create/Edit Modal */}
-      {(showCreateModal || showEditModal) && (
-        <SupplierFormModal
-          supplier={showEditModal ? selectedSupplier : null}
-          onClose={() => {
-            setShowCreateModal(false)
-            setShowEditModal(false)
-            setSelectedSupplier(null)
-          }}
-          onSave={(data) => {
-            if (showEditModal && selectedSupplier) {
-              updateSupplier(selectedSupplier.codigo_proveedor, data)
-            } else {
-              createSupplier(data)
-            }
-          }}
-        />
-      )}
-
-      {/* Detail Modal */}
-      {showDetailModal && selectedSupplier && (
-        <SupplierDetailModal
-          supplier={selectedSupplier}
-          onClose={() => {
-            setShowDetailModal(false)
-            setSelectedSupplier(null)
-          }}
-        />
-      )}
-
-      {/* Delete Modal */}
-      {showDeleteModal && selectedSupplier && (
-        <DeleteConfirmationModal
-          supplierName={selectedSupplier.razon_social}
-          onClose={() => {
-            setShowDeleteModal(false)
-            setSelectedSupplier(null)
-          }}
-          onConfirm={() => deleteSupplier(selectedSupplier.codigo_proveedor)}
-        />
-      )}
-    </div>
-  )
-}
-
-// Supplier Form Modal Component
-function SupplierFormModal({
-  supplier,
-  onClose,
-  onSave,
-}: {
-  supplier: Supplier | null
-  onClose: () => void
-  onSave: (data: Partial<Supplier>) => void
-}) {
-  const [ruc, setRuc] = useState(supplier?.ruc || '')
-  const [razonSocial, setRazonSocial] = useState(supplier?.razon_social || '')
-  const [nombreComercial, setNombreComercial] = useState(supplier?.nombre_comercial || '')
-  const [telefono, setTelefono] = useState(supplier?.telefono || '')
-  const [email, setEmail] = useState(supplier?.email || '')
-  const [direccion, setDireccion] = useState(supplier?.direccion || '')
-  const [activo, setActivo] = useState(supplier?.activo ?? true)
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave({
-      ruc,
-      razon_social: razonSocial,
-      nombre_comercial: nombreComercial || null,
-      telefono: telefono || null,
-      email: email || null,
-      direccion: direccion || null,
-      activo,
-    })
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-lab-neutral-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-lab-neutral-900">
-            {supplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}
-          </h2>
-          <button onClick={onClose} className="text-lab-neutral-400 hover:text-lab-neutral-600">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                RUC <span className="text-lab-error-600">*</span>
-              </label>
-              <input
-                type="text"
-                value={ruc}
-                onChange={(e) => setRuc(e.target.value)}
-                className="w-full px-3 py-2 border border-lab-neutral-300 rounded-lg focus:ring-2 focus:ring-lab-primary-500 focus:border-lab-primary-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                Razón Social <span className="text-lab-error-600">*</span>
-              </label>
-              <input
-                type="text"
-                value={razonSocial}
-                onChange={(e) => setRazonSocial(e.target.value)}
-                className="w-full px-3 py-2 border border-lab-neutral-300 rounded-lg focus:ring-2 focus:ring-lab-primary-500 focus:border-lab-primary-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                Nombre Comercial
-              </label>
-              <input
-                type="text"
-                value={nombreComercial}
-                onChange={(e) => setNombreComercial(e.target.value)}
-                className="w-full px-3 py-2 border border-lab-neutral-300 rounded-lg focus:ring-2 focus:ring-lab-primary-500 focus:border-lab-primary-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                Teléfono
-              </label>
-              <input
-                type="text"
-                value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
-                className="w-full px-3 py-2 border border-lab-neutral-300 rounded-lg focus:ring-2 focus:ring-lab-primary-500 focus:border-lab-primary-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-lab-neutral-300 rounded-lg focus:ring-2 focus:ring-lab-primary-500 focus:border-lab-primary-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                Dirección
-              </label>
-              <input
-                type="text"
-                value={direccion}
-                onChange={(e) => setDireccion(e.target.value)}
-                className="w-full px-3 py-2 border border-lab-neutral-300 rounded-lg focus:ring-2 focus:ring-lab-primary-500 focus:border-lab-primary-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="activo"
-              checked={activo}
-              onChange={(e) => setActivo(e.target.checked)}
-              className="w-4 h-4 text-lab-primary-600 border-lab-neutral-300 rounded focus:ring-lab-primary-500"
-            />
-            <label htmlFor="activo" className="ml-2 text-sm text-lab-neutral-700">
-              Proveedor activo
-            </label>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" className="bg-lab-primary-600 hover:bg-lab-primary-700">
-              {supplier ? 'Actualizar' : 'Crear'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// Supplier Detail Modal Component
-function SupplierDetailModal({
-  supplier,
-  onClose,
-}: {
-  supplier: Supplier
-  onClose: () => void
-}) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-lab-neutral-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-lab-neutral-900">Detalles del Proveedor</h2>
-          <button onClick={onClose} className="text-lab-neutral-400 hover:text-lab-neutral-600">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-500 mb-1">RUC</label>
-              <p className="text-lab-neutral-900">{supplier.ruc}</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-500 mb-1">Razón Social</label>
-              <p className="text-lab-neutral-900">{supplier.razon_social}</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-500 mb-1">Nombre Comercial</label>
-              <p className="text-lab-neutral-900">{supplier.nombre_comercial || '-'}</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-500 mb-1">Teléfono</label>
-              <p className="text-lab-neutral-900">{supplier.telefono || '-'}</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-500 mb-1">Email</label>
-              <p className="text-lab-neutral-900">{supplier.email || '-'}</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-500 mb-1">Dirección</label>
-              <p className="text-lab-neutral-900">{supplier.direccion || '-'}</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-500 mb-1">Estado</label>
-              <span
-                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  supplier.activo
-                    ? 'bg-lab-success-100 text-lab-success-800'
-                    : 'bg-lab-neutral-100 text-lab-neutral-800'
-                }`}
-              >
-                {supplier.activo ? 'Activo' : 'Inactivo'}
-              </span>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-lab-neutral-500 mb-1">Fecha de Registro</label>
-              <p className="text-lab-neutral-900">
-                {new Date(supplier.fecha_creacion).toLocaleDateString('es-EC')}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-4">
-            <Button onClick={onClose} className="bg-lab-primary-600 hover:bg-lab-primary-700">
-              Cerrar
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Delete Confirmation Modal Component
-function DeleteConfirmationModal({
-  supplierName,
-  onClose,
-  onConfirm,
-}: {
-  supplierName: string
-  onClose: () => void
-  onConfirm: () => void
-}) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-        <div className="p-6">
-          <div className="flex items-center justify-center w-12 h-12 mx-auto bg-lab-error-100 rounded-full">
-            <svg className="w-6 h-6 text-lab-error-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-
-          <h3 className="mt-4 text-lg font-semibold text-center text-lab-neutral-900">
-            ¿Eliminar Proveedor?
-          </h3>
-          <p className="mt-2 text-sm text-center text-lab-neutral-600">
-            ¿Estás seguro de que deseas eliminar el proveedor <strong>{supplierName}</strong>? Esta acción no se puede deshacer.
-          </p>
-
-          <div className="mt-6 flex gap-3">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="flex-1"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={onConfirm}
-              className="flex-1 bg-lab-error-600 hover:bg-lab-error-700 text-white"
-            >
-              Eliminar
-            </Button>
-          </div>
-        </div>
       </div>
     </div>
   )

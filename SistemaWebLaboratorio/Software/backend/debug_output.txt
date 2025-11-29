@@ -1,0 +1,12 @@
+﻿{
+    "user":  {
+                 "codigo_usuario":  1,
+                 "cedula":  "1710034065",
+                 "nombres":  "Administrador",
+                 "apellidos":  "Sistema",
+                 "email":  "admin@lab.com",
+                 "rol":  "ADMIN",
+                 "nivel_acceso":  10
+             },
+    "roleType":  "string"
+}

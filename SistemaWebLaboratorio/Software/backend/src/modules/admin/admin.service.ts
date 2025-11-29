@@ -3,274 +3,25 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
-import { ValidateCedulaEcuatoriana } from './dto/user.dto';
-import { ValidateRucEcuador } from './dto/supplier.dto';
+
 import { AdminEventsService } from './admin-events.service';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private prisma: PrismaService,
     private eventsService: AdminEventsService,
-  ) {}
+  ) { }
 
   // ==================== USUARIOS ====================
+  // Logic moved to UsersService
 
-  async getAllUsers(page: number = 1, limit: number = 20, filters?: any) {
-    const skip = (page - 1) * limit;
-
-    const where: Prisma.UsuarioWhereInput = {};
-
-    if (filters?.search) {
-      where.OR = [
-        { nombres: { contains: filters.search, mode: 'insensitive' } },
-        { apellidos: { contains: filters.search, mode: 'insensitive' } },
-        { email: { contains: filters.search, mode: 'insensitive' } },
-        { cedula: { contains: filters.search } },
-      ];
-    }
-
-    if (filters?.codigo_rol) {
-      where.codigo_rol = parseInt(filters.codigo_rol);
-    }
-
-    if (filters?.activo !== undefined) {
-      where.activo = filters.activo === 'true';
-    }
-
-    const [users, total] = await Promise.all([
-      this.prisma.usuario.findMany({
-        where,
-        include: {
-          rol: true,
-        },
-        orderBy: { fecha_creacion: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.usuario.count({ where }),
-    ]);
-
-    // Remover información sensible
-    const sanitizedUsers = users.map(({ password_hash, salt, ...user }) => user);
-
-    return {
-      data: sanitizedUsers,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  async getUserById(codigo_usuario: number) {
-    const user = await this.prisma.usuario.findUnique({
-      where: { codigo_usuario },
-      include: {
-        rol: true,
-        perfil_medico: true,
-        sesiones: {
-          where: { activo: true },
-          orderBy: { fecha_creacion: 'desc' },
-          take: 5,
-        },
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
-
-    const { password_hash, salt, ...sanitizedUser } = user;
-    return sanitizedUser;
-  }
-
-  async createUser(data: any, adminId?: number) {
-    // Validar formato de cédula ecuatoriana
-    if (!ValidateCedulaEcuatoriana(data.cedula)) {
-      throw new BadRequestException('La cédula ecuatoriana no es válida');
-    }
-
-    // Validar que el email y cedula no existan
-    const existingUser = await this.prisma.usuario.findFirst({
-      where: {
-        OR: [
-          { email: data.email },
-          { cedula: data.cedula },
-        ],
-      },
-    });
-
-    if (existingUser) {
-      throw new BadRequestException('El email o cédula ya están registrados');
-    }
-
-    // Generar salt y hash de password
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(data.password, salt);
-
-    const { password, ...userData } = data;
-
-    const user = await this.prisma.usuario.create({
-      data: {
-        ...userData,
-        password_hash,
-        salt,
-      },
-      include: {
-        rol: true,
-      },
-    });
-
-    // Emitir evento de creación de usuario
-    this.eventsService.emitUserCreated(
-      user.codigo_usuario,
-      adminId || 0,
-      { rol: user.rol.nombre, email: user.email, nombres: user.nombres },
-    );
-
-    const { password_hash: _, salt: __, ...sanitizedUser } = user;
-    return sanitizedUser;
-  }
-
-  async updateUser(codigo_usuario: number, data: any, adminId?: number) {
-    const user = await this.prisma.usuario.findUnique({
-      where: { codigo_usuario },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
-
-    // Validar formato de cédula si se está actualizando
-    if (data.cedula && !ValidateCedulaEcuatoriana(data.cedula)) {
-      throw new BadRequestException('La cédula ecuatoriana no es válida');
-    }
-
-    // Si se está actualizando email o cedula, validar que no existan
-    if (data.email || data.cedula) {
-      const existingUser = await this.prisma.usuario.findFirst({
-        where: {
-          AND: [
-            { codigo_usuario: { not: codigo_usuario } },
-            {
-              OR: [
-                ...(data.email ? [{ email: data.email }] : []),
-                ...(data.cedula ? [{ cedula: data.cedula }] : []),
-              ],
-            },
-          ],
-        },
-      });
-
-      if (existingUser) {
-        throw new BadRequestException('El email o cédula ya están registrados');
-      }
-    }
-
-    const updatedUser = await this.prisma.usuario.update({
-      where: { codigo_usuario },
-      data,
-      include: {
-        rol: true,
-      },
-    });
-
-    // Emitir evento de actualización de usuario
-    this.eventsService.emitUserUpdated(
-      codigo_usuario,
-      adminId || 0,
-      { changedFields: Object.keys(data) },
-    );
-
-    const { password_hash, salt, ...sanitizedUser } = updatedUser;
-    return sanitizedUser;
-  }
-
-  async deleteUser(codigo_usuario: number, adminId?: number) {
-    // Verificar que el usuario existe
-    const user = await this.prisma.usuario.findUnique({
-      where: { codigo_usuario },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
-
-    // En lugar de eliminar, desactivar el usuario
-    const updatedUser = await this.prisma.usuario.update({
-      where: { codigo_usuario },
-      data: { activo: false },
-    });
-
-    // Emitir evento de eliminación (soft delete)
-    this.eventsService.emitUserDeleted(codigo_usuario, adminId);
-
-    const { password_hash, salt, ...sanitizedUser } = updatedUser;
-    return sanitizedUser;
-  }
-
-  async toggleUserStatus(codigo_usuario: number, adminId?: number) {
-    const user = await this.prisma.usuario.findUnique({
-      where: { codigo_usuario },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
-
-    const updatedUser = await this.prisma.usuario.update({
-      where: { codigo_usuario },
-      data: { activo: !user.activo },
-    });
-
-    // Emitir evento de cambio de estado
-    this.eventsService.emitEvent(
-      'admin.user.status_changed' as any,
-      {
-        entityType: 'user',
-        entityId: codigo_usuario,
-        action: 'updated',
-        userId: adminId || 0,
-        data: { activo: updatedUser.activo },
-        timestamp: new Date(),
-      },
-    );
-
-    const { password_hash, salt, ...sanitizedUser } = updatedUser;
-    return sanitizedUser;
-  }
-
-  async resetUserPassword(codigo_usuario: number, newPassword: string, adminId?: number) {
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(newPassword, salt);
-
-    await this.prisma.usuario.update({
-      where: { codigo_usuario },
-      data: {
-        password_hash,
-        salt,
-        intentos_fallidos: 0,
-        cuenta_bloqueada: false,
-        fecha_bloqueo: null,
-      },
-    });
-
-    // Emitir evento de actualización de usuario (password reset)
-    this.eventsService.emitUserUpdated(
-      codigo_usuario,
-      adminId || 0,
-      { action: 'password_reset', cuenta_desbloqueada: true },
-    );
-
-    return { message: 'Contraseña restablecida exitosamente' };
-  }
 
   // ==================== ROLES ====================
 
@@ -905,10 +656,10 @@ export class AdminService {
         ...packageData,
         examenes: examenes
           ? {
-              create: examenes.map((examen_id: number) => ({
-                codigo_examen: examen_id,
-              })),
-            }
+            create: examenes.map((examen_id: number) => ({
+              codigo_examen: examen_id,
+            })),
+          }
           : undefined,
       },
       include: {
@@ -1000,326 +751,8 @@ export class AdminService {
   }
 
   // ==================== INVENTARIO ====================
+  // Logic moved to InventarioService
 
-  async getAllInventoryItems(page: number = 1, limit: number = 50, filters?: any) {
-    const skip = (page - 1) * limit;
-
-    // Si se requiere filtro de stock bajo, usar consulta SQL cruda
-    if (filters?.stock_bajo === 'true' || filters?.stock_bajo === true) {
-      const items = await this.prisma.$queryRaw<any[]>`
-        SELECT i.*, c.nombre as categoria_nombre, c.descripcion as categoria_descripcion,
-               c.fecha_creacion as categoria_fecha_creacion
-        FROM inventario.item i
-        LEFT JOIN inventario.categoria_item c ON i.codigo_categoria = c.codigo_categoria
-        WHERE i.stock_actual <= i.stock_minimo
-        ${filters?.search ? Prisma.sql`AND (i.nombre ILIKE ${`%${filters.search}%`} OR i.codigo_interno ILIKE ${`%${filters.search}%`})` : Prisma.empty}
-        ${filters?.codigo_categoria ? Prisma.sql`AND i.codigo_categoria = ${parseInt(filters.codigo_categoria)}` : Prisma.empty}
-        ORDER BY i.nombre ASC
-        LIMIT ${limit} OFFSET ${skip}
-      `;
-
-      const totalResult = await this.prisma.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(*)::int as count
-        FROM inventario.item i
-        WHERE i.stock_actual <= i.stock_minimo
-        ${filters?.search ? Prisma.sql`AND (i.nombre ILIKE ${`%${filters.search}%`} OR i.codigo_interno ILIKE ${`%${filters.search}%`})` : Prisma.empty}
-        ${filters?.codigo_categoria ? Prisma.sql`AND i.codigo_categoria = ${parseInt(filters.codigo_categoria)}` : Prisma.empty}
-      `;
-
-      const total = Number(totalResult[0].count);
-
-      // Transformar resultados para que tengan la estructura esperada con categoria
-      const itemsWithCategory = items.map((item: any) => ({
-        ...item,
-        categoria: item.codigo_categoria ? {
-          codigo_categoria: item.codigo_categoria,
-          nombre: item.categoria_nombre,
-          descripcion: item.categoria_descripcion,
-          fecha_creacion: item.categoria_fecha_creacion,
-        } : null,
-      }));
-
-      // Eliminar campos de categoria redundantes
-      itemsWithCategory.forEach((item: any) => {
-        delete item.categoria_nombre;
-        delete item.categoria_descripcion;
-        delete item.categoria_fecha_creacion;
-      });
-
-      return {
-        data: itemsWithCategory,
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
-        },
-      };
-    }
-
-    // Consulta normal sin filtro de stock bajo
-    const where: Prisma.ItemWhereInput = {};
-
-    if (filters?.search) {
-      where.OR = [
-        { nombre: { contains: filters.search, mode: 'insensitive' } },
-        { codigo_interno: { contains: filters.search, mode: 'insensitive' } },
-      ];
-    }
-
-    if (filters?.codigo_categoria) {
-      where.codigo_categoria = parseInt(filters.codigo_categoria);
-    }
-
-    const [items, total] = await Promise.all([
-      this.prisma.item.findMany({
-        where,
-        include: {
-          categoria: true,
-        },
-        orderBy: { nombre: 'asc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.item.count({ where }),
-    ]);
-
-    return {
-      data: items,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  async getInventoryItemById(codigo_item: number) {
-    const item = await this.prisma.item.findUnique({
-      where: { codigo_item },
-      include: {
-        categoria: true,
-        lotes: {
-          orderBy: { fecha_vencimiento: 'asc' },
-        },
-        movimientos: {
-          orderBy: { fecha_movimiento: 'desc' },
-          take: 20,
-          include: {
-            usuario: {
-              select: {
-                nombres: true,
-                apellidos: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!item) {
-      throw new NotFoundException('Item no encontrado');
-    }
-
-    return item;
-  }
-
-  async createInventoryItem(data: any, adminId: number) {
-    // Verificar que el codigo_interno no exista
-    const existingItem = await this.prisma.item.findUnique({
-      where: { codigo_interno: data.codigo_interno },
-    });
-
-    if (existingItem) {
-      throw new BadRequestException('El código interno ya existe');
-    }
-
-    const item = await this.prisma.item.create({
-      data,
-      include: {
-        categoria: true,
-      },
-    });
-
-    // Emitir evento de creación de item de inventario
-    this.eventsService.emitInventoryItemCreated(
-      item.codigo_item,
-      0, // TODO: Obtener del contexto de autenticación
-      { nombre: item.nombre, codigo_interno: item.codigo_interno, stock_actual: item.stock_actual },
-    );
-
-    return item;
-  }
-
-  async updateInventoryItem(codigo_item: number, data: any, adminId: number) {
-    const item = await this.prisma.item.findUnique({
-      where: { codigo_item },
-    });
-
-    if (!item) {
-      throw new NotFoundException('Item no encontrado');
-    }
-
-    const updatedItem = await this.prisma.item.update({
-      where: { codigo_item },
-      data,
-      include: {
-        categoria: true,
-      },
-    });
-
-    // Emitir evento de actualización de item de inventario
-    this.eventsService.emitInventoryItemUpdated(
-      codigo_item,
-      0, // TODO: Obtener del contexto de autenticación
-      { changedFields: Object.keys(data) },
-    );
-
-    return updatedItem;
-  }
-
-  async deleteInventoryItem(codigo_item: number, adminId: number) {
-    const item = await this.prisma.item.findUnique({
-      where: { codigo_item },
-    });
-
-    if (!item) {
-      throw new NotFoundException('Item no encontrado');
-    }
-
-    // Desactivar en lugar de eliminar
-    const result = await this.prisma.item.update({
-      where: { codigo_item },
-      data: { activo: false },
-    });
-
-    // Emitir evento de eliminación de item de inventario (soft delete)
-    this.eventsService.emitInventoryItemDeleted(codigo_item, adminId);
-
-    return result;
-  }
-
-  // ==================== PROVEEDORES ====================
-
-  async getAllSuppliers() {
-    return this.prisma.proveedor.findMany({
-      include: {
-        _count: {
-          select: { ordenes_compra: true },
-        },
-      },
-      orderBy: { razon_social: 'asc' },
-    });
-  }
-
-  async getSupplierById(codigo_proveedor: number) {
-    const supplier = await this.prisma.proveedor.findUnique({
-      where: { codigo_proveedor },
-      include: {
-        ordenes_compra: {
-          orderBy: { fecha_orden: 'desc' },
-          take: 10,
-        },
-      },
-    });
-
-    if (!supplier) {
-      throw new NotFoundException('Proveedor no encontrado');
-    }
-
-    return supplier;
-  }
-
-  async createSupplier(data: Prisma.ProveedorCreateInput, adminId: number) {
-    // Validar formato de RUC ecuatoriano
-    if (!ValidateRucEcuador(data.ruc)) {
-      throw new BadRequestException('El RUC ecuatoriano no es válido');
-    }
-
-    // Verificar que el RUC no exista
-    const existingSupplier = await this.prisma.proveedor.findUnique({
-      where: { ruc: data.ruc },
-    });
-
-    if (existingSupplier) {
-      throw new BadRequestException('El RUC ya existe');
-    }
-
-    const supplier = await this.prisma.proveedor.create({
-      data,
-    });
-
-    // Emitir evento de creación de proveedor
-    this.eventsService.emitSupplierCreated(
-      supplier.codigo_proveedor,
-      0, // TODO: Obtener del contexto de autenticación
-      { razon_social: supplier.razon_social, ruc: supplier.ruc },
-    );
-
-    return supplier;
-  }
-
-  async updateSupplier(codigo_proveedor: number, data: Prisma.ProveedorUpdateInput, adminId: number) {
-    const supplier = await this.prisma.proveedor.findUnique({
-      where: { codigo_proveedor },
-    });
-
-    if (!supplier) {
-      throw new NotFoundException('Proveedor no encontrado');
-    }
-
-    // Validar formato de RUC si se está actualizando
-    if (data.ruc && typeof data.ruc === 'string' && !ValidateRucEcuador(data.ruc)) {
-      throw new BadRequestException('El RUC ecuatoriano no es válido');
-    }
-
-    // Si se está actualizando el RUC, validar que no exista
-    if (data.ruc && data.ruc !== supplier.ruc) {
-      const existingSupplier = await this.prisma.proveedor.findUnique({
-        where: { ruc: data.ruc as string },
-      });
-
-      if (existingSupplier) {
-        throw new BadRequestException('El RUC ya existe');
-      }
-    }
-
-    const updatedSupplier = await this.prisma.proveedor.update({
-      where: { codigo_proveedor },
-      data,
-    });
-
-    // Emitir evento de actualización de proveedor
-    this.eventsService.emitSupplierUpdated(
-      codigo_proveedor,
-      0, // TODO: Obtener del contexto de autenticación
-      { changedFields: Object.keys(data) },
-    );
-
-    return updatedSupplier;
-  }
-
-  async deleteSupplier(codigo_proveedor: number, adminId: number) {
-    const supplier = await this.prisma.proveedor.findUnique({
-      where: { codigo_proveedor },
-    });
-
-    if (!supplier) {
-      throw new NotFoundException('Proveedor no encontrado');
-    }
-
-    // Desactivar en lugar de eliminar
-    const result = await this.prisma.proveedor.update({
-      where: { codigo_proveedor },
-      data: { activo: false },
-    });
-
-    // Emitir evento de eliminación de proveedor (soft delete)
-    this.eventsService.emitSupplierDeleted(codigo_proveedor, adminId);
-
-    return result;
-  }
 
   // ==================== AUDITORIA ====================
 
@@ -1423,72 +856,428 @@ export class AdminService {
     };
   }
 
-  // ==================== ESTADÍSTICAS ====================
+  /**
+   * Generar PDF de auditoría con filtros
+   */
+  async generateAuditPdf(filters?: any): Promise<Buffer> {
+    try {
+      // Importación dinámica de PDFKit
+      const PDFKit = await import('pdfkit');
+      const PDFDocument = (PDFKit.default as any) || PDFKit;
 
-  async getDashboardStats() {
-    const [
-      totalUsers,
-      activeUsers,
-      totalExams,
-      totalAppointments,
-      todayAppointments,
-      pendingResults,
-      lowStockItems,
-      recentActivities,
-    ] = await Promise.all([
-      this.prisma.usuario.count(),
-      this.prisma.usuario.count({ where: { activo: true } }),
-      this.prisma.examen.count({ where: { activo: true } }),
-      this.prisma.cita.count(),
-      this.prisma.cita.count({
-        where: {
-          slot: {
-            fecha: new Date(),
-          },
-        },
-      }),
-      this.prisma.resultado.count({
-        where: { estado: 'EN_PROCESO' },
-      }),
-      // Usar consulta SQL cruda para comparar columnas
-      this.prisma.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(*)::int as count
-        FROM inventario.item
-        WHERE stock_actual <= stock_minimo
-      `.then(result => Number(result[0].count)),
-      this.prisma.logActividad.findMany({
-        take: 10,
-        orderBy: { fecha_accion: 'desc' },
+      // Construir filtros para query
+      const where: Prisma.LogActividadWhereInput = {};
+
+      if (filters?.search) {
+        where.OR = [
+          { accion: { contains: filters.search, mode: 'insensitive' } },
+          { entidad: { contains: filters.search, mode: 'insensitive' } },
+          { descripcion: { contains: filters.search, mode: 'insensitive' } },
+        ];
+      }
+
+      if (filters?.entidad) {
+        where.entidad = filters.entidad;
+      }
+
+      if (filters?.fecha_desde || filters?.fecha_hasta) {
+        where.fecha_accion = {};
+
+        if (filters.fecha_desde) {
+          where.fecha_accion.gte = new Date(filters.fecha_desde);
+        }
+
+        if (filters.fecha_hasta) {
+          const fechaHasta = new Date(filters.fecha_hasta);
+          fechaHasta.setHours(23, 59, 59, 999);
+          where.fecha_accion.lte = fechaHasta;
+        }
+      }
+
+      // Obtener logs con límite
+      const limit = filters?.limit ? parseInt(filters.limit) : 50;
+      const logs = await this.prisma.logActividad.findMany({
+        where,
         include: {
           usuario: {
             select: {
               nombres: true,
               apellidos: true,
+              email: true,
             },
           },
         },
-      }),
-    ]);
+        orderBy: { fecha_accion: 'desc' },
+        take: limit,
+      });
 
-    return {
-      users: {
-        total: totalUsers,
-        active: activeUsers,
-      },
-      exams: {
-        total: totalExams,
-      },
-      appointments: {
-        total: totalAppointments,
-        today: todayAppointments,
-      },
-      results: {
-        pending: pendingResults,
-      },
-      inventory: {
-        lowStock: lowStockItems,
-      },
-      recentActivities,
-    };
+      // Crear PDF en memoria
+      return new Promise((resolve, reject) => {
+        try {
+          const doc = new PDFDocument({
+            size: 'LETTER',
+            margins: {
+              top: 50,
+              bottom: 50,
+              left: 50,
+              right: 50,
+            },
+            info: {
+              Title: 'Reporte de Auditoría',
+              Author: 'Laboratorio Clínico Franz',
+              Subject: 'Registro de Actividades del Sistema',
+              Creator: 'Sistema de Gestión Laboratorio Franz',
+            },
+          });
+
+          const chunks: Buffer[] = [];
+
+          doc.on('data', (chunk) => chunks.push(chunk));
+          doc.on('end', () => resolve(Buffer.concat(chunks)));
+          doc.on('error', reject);
+
+          // Header
+          doc
+            .fontSize(20)
+            .fillColor('#2563EB')
+            .font('Helvetica-Bold')
+            .text('LABORATORIO CLÍNICO FRANZ', { align: 'center' });
+
+          doc
+            .fontSize(10)
+            .fillColor('#666666')
+            .font('Helvetica')
+            .text('Sistema de Auditoría', { align: 'center' })
+            .moveDown(0.5);
+
+          // Línea separadora
+          doc
+            .strokeColor('#2563EB')
+            .lineWidth(2)
+            .moveTo(50, doc.y)
+            .lineTo(562, doc.y)
+            .stroke()
+            .moveDown(1);
+
+          // Título del documento
+          doc
+            .fontSize(16)
+            .fillColor('#000000')
+            .font('Helvetica-Bold')
+            .text('REPORTE DE AUDITORÍA', { align: 'center' })
+            .moveDown(1);
+
+          // Información del reporte
+          const now = new Date();
+          doc
+            .fontSize(10)
+            .font('Helvetica')
+            .fillColor('#333333')
+            .text(`Fecha de generación: ${this.formatDate(now)}`, { align: 'left' })
+            .text(`Hora: ${this.formatTime(now)}`, { align: 'left' });
+
+          // Filtros aplicados
+          if (filters?.fecha_desde || filters?.fecha_hasta || filters?.entidad) {
+            doc.moveDown(0.5).font('Helvetica-Bold').text('Filtros aplicados:', { align: 'left' });
+            doc.font('Helvetica');
+
+            if (filters.fecha_desde) {
+              doc.text(`  • Desde: ${filters.fecha_desde}`, { align: 'left' });
+            }
+            if (filters.fecha_hasta) {
+              doc.text(`  • Hasta: ${filters.fecha_hasta}`, { align: 'left' });
+            }
+            if (filters.entidad) {
+              doc.text(`  • Entidad: ${filters.entidad}`, { align: 'left' });
+            }
+          }
+
+          doc.moveDown(0.5).text(`Total de registros: ${logs.length}`, { align: 'left' }).moveDown(1);
+
+          // Tabla de logs
+          const tableTop = doc.y;
+          const colWidths = {
+            fecha: 90,
+            usuario: 120,
+            accion: 120,
+            entidad: 80,
+            ip: 80,
+          };
+
+          // Headers de tabla
+          doc
+            .fontSize(9)
+            .font('Helvetica-Bold')
+            .fillColor('#FFFFFF');
+
+          // Fondo de headers
+          doc
+            .rect(50, doc.y, 512, 20)
+            .fill('#2563EB');
+
+          let currentY = doc.y + 5;
+          doc
+            .fillColor('#FFFFFF')
+            .text('Fecha/Hora', 55, currentY, { width: colWidths.fecha })
+            .text('Usuario', 145, currentY, { width: colWidths.usuario })
+            .text('Acción', 265, currentY, { width: colWidths.accion })
+            .text('Entidad', 385, currentY, { width: colWidths.entidad })
+            .text('IP', 465, currentY, { width: colWidths.ip });
+
+          doc.moveDown(1.5);
+
+          // Contenido de tabla
+          doc.fontSize(8).font('Helvetica').fillColor('#333333');
+
+          for (const log of logs) {
+            // Verificar si necesitamos nueva página
+            if (doc.y > 700) {
+              doc.addPage();
+              currentY = 50;
+              doc.y = currentY;
+            } else {
+              currentY = doc.y;
+            }
+
+            const fecha = new Date(log.fecha_accion);
+            const fechaStr = `${this.formatDate(fecha)}\n${this.formatTime(fecha)}`;
+            const usuarioStr = log.usuario
+              ? `${log.usuario.nombres} ${log.usuario.apellidos}\n${log.usuario.email}`
+              : 'Sistema';
+            const accionStr = log.accion || '-';
+            const entidadStr = log.entidad || '-';
+            const ipStr = log.ip_address || '-';
+
+            // Calcular altura de la fila
+            const rowHeight = Math.max(
+              this.calculateTextHeight(doc, fechaStr, colWidths.fecha),
+              this.calculateTextHeight(doc, usuarioStr, colWidths.usuario),
+              this.calculateTextHeight(doc, accionStr, colWidths.accion),
+              this.calculateTextHeight(doc, entidadStr, colWidths.entidad),
+              this.calculateTextHeight(doc, ipStr, colWidths.ip)
+            ) + 10;
+
+            // Fondo alternado
+            if (logs.indexOf(log) % 2 === 0) {
+              doc.rect(50, currentY, 512, rowHeight).fill('#F3F4F6');
+            }
+
+            doc.fillColor('#333333');
+            doc.text(fechaStr, 55, currentY + 5, { width: colWidths.fecha });
+            doc.text(usuarioStr, 145, currentY + 5, { width: colWidths.usuario });
+            doc.text(accionStr, 265, currentY + 5, { width: colWidths.accion });
+            doc.text(entidadStr, 385, currentY + 5, { width: colWidths.entidad });
+            doc.text(ipStr, 465, currentY + 5, { width: colWidths.ip });
+
+            doc.y = currentY + rowHeight;
+          }
+
+          // Footer
+          doc.moveDown(2);
+          doc
+            .fontSize(8)
+            .fillColor('#999999')
+            .text(
+              '─────────────────────────────────────────────────────────────────────────',
+              { align: 'center' }
+            )
+            .text('Documento generado automáticamente por el Sistema de Gestión Laboratorio Franz', {
+              align: 'center',
+            })
+            .text(`Página generada el ${this.formatDate(now)} a las ${this.formatTime(now)}`, {
+              align: 'center',
+            });
+
+          doc.end();
+        } catch (error) {
+          reject(error);
+        }
+      });
+    } catch (error) {
+      throw new Error(`Error al generar PDF de auditoría: ${error.message}`);
+    }
   }
+
+  /**
+   * Formatear fecha en español
+   */
+  private formatDate(date: Date): string {
+    return date.toLocaleDateString('es-EC', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  }
+
+  /**
+   * Formatear hora
+   */
+  private formatTime(date: Date): string {
+    return date.toLocaleTimeString('es-EC', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  }
+
+  /**
+   * Calcular altura de texto para tabla
+   */
+  private calculateTextHeight(doc: any, text: string, width: number): number {
+    const fontSize = doc._fontSize || 8;
+    const lineHeight = fontSize * 1.2;
+    const lines = text.split('\n').length;
+    return lines * lineHeight;
+  }
+
+  // ==================== ESTADÍSTICAS ====================
+
+  async getDashboardStats() {
+    try {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const [
+        totalUsers,
+        activeUsers,
+        totalExams,
+        totalAppointments,
+        todayAppointments,
+        completedAppointments,
+        pendingResults,
+        lowStockItems,
+        monthlyRevenue,
+        totalRevenue,
+        totalQuotations,
+        approvedQuotations,
+        pendingQuotations,
+        recentExams,
+      ] = await Promise.all([
+        // Usuarios
+        this.prisma.usuario.count(),
+        this.prisma.usuario.count({ where: { activo: true } }),
+
+        // Exámenes
+        this.prisma.examen.count({ where: { activo: true } }),
+
+        // Citas
+        this.prisma.cita.count(),
+        this.prisma.cita.count({
+          where: {
+            slot: {
+              fecha: {
+                gte: today,
+                lt: new Date(today.getTime() + 24 * 60 * 60 * 1000),
+              },
+            },
+          },
+        }),
+        this.prisma.cita.count({
+          where: { estado: 'COMPLETADA' },
+        }),
+
+        // Resultados pendientes
+        this.prisma.resultado.count({
+          where: { estado: 'EN_PROCESO' },
+        }),
+
+        // Inventario bajo stock (usando raw query porque necesitamos comparar columnas)
+        this.prisma.$queryRaw<[{ count: bigint }]>`
+          SELECT COUNT(*)::int as count
+          FROM inventario.item
+          WHERE activo = true AND stock_actual <= stock_minimo
+        `.then(result => Number(result[0]?.count || 0)).catch(() => 0),
+
+        // Ingresos
+        this.prisma.pago.aggregate({
+          where: {
+            estado: 'COMPLETADO',
+            fecha_pago: { gte: startOfMonth },
+          },
+          _sum: { monto_total: true },
+        }).then(r => Number(r._sum.monto_total || 0)),
+
+        this.prisma.pago.aggregate({
+          where: { estado: 'COMPLETADO' },
+          _sum: { monto_total: true },
+        }).then(r => Number(r._sum.monto_total || 0)),
+
+        // Cotizaciones
+        this.prisma.cotizacion.count(),
+        this.prisma.cotizacion.count({ where: { estado: 'APROBADA' } }),
+        this.prisma.cotizacion.count({ where: { estado: 'PENDIENTE' } }),
+
+        // Últimos exámenes
+        this.prisma.examen.findMany({
+          where: { activo: true },
+          select: {
+            codigo_examen: true,
+            nombre: true,
+            codigo_interno: true,
+            fecha_creacion: true,
+          },
+          orderBy: { fecha_creacion: 'desc' },
+          take: 5,
+        }),
+      ]);
+
+      return {
+        users: {
+          total: totalUsers,
+          active: activeUsers,
+        },
+        exams: {
+          total: totalExams,
+        },
+        appointments: {
+          total: totalAppointments,
+          today: todayAppointments,
+          completed: completedAppointments,
+          completionRate: totalAppointments > 0
+            ? Math.round((completedAppointments / totalAppointments) * 100)
+            : 0,
+        },
+        results: {
+          pending: pendingResults,
+        },
+        inventory: {
+          lowStock: lowStockItems,
+        },
+        revenue: {
+          monthly: monthlyRevenue,
+          total: totalRevenue,
+        },
+        quotations: {
+          total: totalQuotations,
+          approved: approvedQuotations,
+          pending: pendingQuotations,
+          conversionRate: totalQuotations > 0
+            ? Math.round((approvedQuotations / totalQuotations) * 100)
+            : 0,
+        },
+        recentExams: recentExams.map(exam => ({
+          code: exam.codigo_interno,
+          name: exam.nombre,
+          date: exam.fecha_creacion,
+        })),
+      };
+    } catch (error) {
+      this.logger.error('Error getting dashboard stats:', error);
+      // Retornar estructura vacía en caso de error
+      return {
+        users: { total: 0, active: 0 },
+        exams: { total: 0 },
+        appointments: { total: 0, today: 0, completed: 0, completionRate: 0 },
+        results: { pending: 0 },
+        inventory: { lowStock: 0 },
+        revenue: { monthly: 0, total: 0 },
+        quotations: { total: 0, approved: 0, pending: 0, conversionRate: 0 },
+        recentExams: [],
+      };
+    }
+  }
+
+  // ==================== ÓRDENES DE COMPRA ====================
+  // Logic moved to InventarioService
 }

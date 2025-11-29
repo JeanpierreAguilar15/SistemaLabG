@@ -78,6 +78,7 @@ model Usuario {
   movimientos_inventario        Movimiento[]
   conversaciones                Conversacion[] @relation("ConversacionesUsuario")
   conversaciones_atendidas      Conversacion[] @relation("ConversacionesAtendidas")
+  conversaciones_chatbot        ConversacionChatbot[] @relation("ConversacionesChatbot")
   mensajes                      Mensaje[]
   notificaciones                Notificacion[]
   logs_actividad                LogActividad[]
@@ -135,6 +136,21 @@ model PerfilMedico {
   usuario                 Usuario   @relation(fields: [codigo_usuario], references: [codigo_usuario])
 
   @@map("perfil_medico")
+  @@schema("usuarios")
+}
+
+model ConfiguracionSistema {
+  codigo_config       Int       @id @default(autoincrement())
+  clave               String    @unique @db.VarChar(100)
+  valor               String    @db.Text
+  descripcion         String?   @db.Text
+  grupo               String    @db.VarChar(50)
+  tipo_dato           String    @default("STRING") @db.VarChar(20)
+  es_publico          Boolean   @default(false)
+  fecha_creacion      DateTime  @default(now())
+  fecha_actualizacion DateTime  @updatedAt
+
+  @@map("configuracion_sistema")
   @@schema("usuarios")
 }
 
@@ -212,6 +228,7 @@ model Cita {
   codigo_cita           Int       @id @default(autoincrement())
   codigo_slot           Int
   codigo_paciente       Int
+  codigo_cotizacion     Int?      @unique
   estado                String    @default("AGENDADA") @db.VarChar(50)
   observaciones         String?   @db.Text
   motivo_cancelacion    String?   @db.Text
@@ -221,9 +238,21 @@ model Cita {
 
   slot                  Slot      @relation(fields: [codigo_slot], references: [codigo_slot])
   paciente              Usuario   @relation("CitasPaciente", fields: [codigo_paciente], references: [codigo_usuario])
+  cotizacion            Cotizacion? @relation(fields: [codigo_cotizacion], references: [codigo_cotizacion])
   muestras              Muestra[]
 
   @@map("cita")
+  @@schema("agenda")
+}
+
+model Feriado {
+  codigo_feriado Int      @id @default(autoincrement())
+  fecha          DateTime @unique @db.Date
+  descripcion    String   @db.VarChar(200)
+  activo         Boolean  @default(true)
+  fecha_creacion DateTime @default(now())
+
+  @@map("feriado")
   @@schema("agenda")
 }
 
@@ -267,6 +296,7 @@ model Examen {
   detalles_pago                 PagoDetalle[]
   resultados                    Resultado[]
   examenes_en_paquetes          PaqueteExamen[]
+  insumos                       ExamenInsumo[]
 
   @@map("examen")
   @@schema("catalogo")
@@ -332,6 +362,7 @@ model Cotizacion {
   paciente              Usuario   @relation(fields: [codigo_paciente], references: [codigo_usuario])
   detalles              CotizacionDetalle[]
   pagos                 Pago[]
+  cita                  Cita?
 
   @@map("cotizacion")
   @@schema("pagos")
@@ -513,6 +544,7 @@ model Item {
   lotes             Lote[]
   movimientos       Movimiento[]
   detalles_orden    OrdenCompraDetalle[]
+  insumos_examen    ExamenInsumo[]
 
   @@map("item")
   @@schema("inventario")
@@ -610,6 +642,20 @@ model OrdenCompraDetalle {
   @@schema("inventario")
 }
 
+model ExamenInsumo {
+  codigo_examen_insumo Int       @id @default(autoincrement())
+  codigo_examen        Int
+  codigo_item          Int
+  cantidad_requerida   Decimal   @db.Decimal(10, 2)
+  activo               Boolean   @default(true)
+
+  examen               Examen    @relation(fields: [codigo_examen], references: [codigo_examen])
+  item                 Item      @relation(fields: [codigo_item], references: [codigo_item])
+
+  @@map("examen_insumo")
+  @@schema("inventario")
+}
+
 // =====================================================
 // ESQUEMA: comunicaciones
 // =====================================================
@@ -687,6 +733,7 @@ model LogActividad {
   descripcion         String?   @db.Text
   ip_address          String?   @db.VarChar(45)
   user_agent          String?   @db.Text
+  request_id          String?   @db.VarChar(100)
   datos_anteriores    Json?
   datos_nuevos        Json?
   fecha_accion        DateTime  @default(now())
@@ -707,10 +754,61 @@ model LogError {
   metodo              String?   @db.VarChar(10)
   ip_address          String?   @db.VarChar(45)
   user_agent          String?   @db.Text
+  request_id          String?   @db.VarChar(100)
   fecha_error         DateTime  @default(now())
 
   usuario             Usuario?  @relation(fields: [codigo_usuario], references: [codigo_usuario])
 
   @@map("log_error")
+  @@schema("auditoria")
+}
+
+// =====================================================
+// CHATBOT - LOGGING DE CONVERSACIONES
+// =====================================================
+
+model ConfiguracionChatbot {
+  codigo_configuracion      Int      @id @default(autoincrement())
+  activo                    Boolean  @default(true)
+  umbral_confianza          Decimal  @default(0.7) @db.Decimal(3, 2)
+  mensaje_bienvenida        String?  @db.Text
+  mensaje_fallo             String   @default("Lo siento, no entendí tu consulta. ¿Podrías reformularla?") @db.Text
+  permitir_acceso_resultados Boolean @default(false)
+  fecha_actualizacion       DateTime @default(now()) @updatedAt
+
+  @@map("configuracion_chatbot")
+  @@schema("auditoria")
+}
+
+model ConversacionChatbot {
+  codigo_conversacion Int      @id @default(autoincrement())
+  codigo_paciente     Int?
+  session_id          String   @unique @db.VarChar(200)
+  fecha_inicio        DateTime @default(now())
+  fecha_ultimo_msg    DateTime @default(now())
+  activa              Boolean  @default(true)
+
+  paciente Usuario?         @relation("ConversacionesChatbot", fields: [codigo_paciente], references: [codigo_usuario])
+  mensajes MensajeChatbot[]
+
+  @@index([codigo_paciente])
+  @@index([session_id])
+  @@map("conversacion_chatbot")
+  @@schema("auditoria")
+}
+
+model MensajeChatbot {
+  codigo_mensaje      Int      @id @default(autoincrement())
+  codigo_conversacion Int
+  remitente           String   @db.VarChar(10)
+  contenido           String   @db.Text
+  intent              String?  @db.VarChar(200)
+  confianza           Decimal? @db.Decimal(3, 2)
+  timestamp           DateTime @default(now())
+
+  conversacion ConversacionChatbot @relation(fields: [codigo_conversacion], references: [codigo_conversacion], onDelete: Cascade)
+
+  @@index([codigo_conversacion])
+  @@map("mensaje_chatbot")
   @@schema("auditoria")
 }
