@@ -303,16 +303,20 @@ export class AgendaService {
    * Obtener slots disponibles (Público)
    */
   async getAvailableSlots(filters: QuerySlotsDto) {
+    // Fecha actual al inicio del día para comparaciones
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const where: any = {
       activo: true,
       cupos_disponibles: { gt: 0 },
       fecha: {
-        gte: new Date(), // Solo futuros
+        gte: today, // Solo desde hoy en adelante
       },
     };
 
     if (filters.fecha) {
-      const searchDate = new Date(filters.fecha);
+      const searchDate = new Date(filters.fecha + 'T00:00:00');
       const nextDate = new Date(searchDate);
       nextDate.setDate(nextDate.getDate() + 1);
 
