@@ -47,6 +47,28 @@ export class AuthController {
   }
 
   @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Solicitar recuperación de contraseña' })
+  @ApiResponse({ status: 200, description: 'Email de recuperación enviado' })
+  async forgotPassword(@Body() body: { email: string }) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { email: body.email },
+    });
+
+    // Siempre retornamos éxito para no revelar si el email existe
+    if (!usuario) {
+      return { message: 'Si el correo existe, recibirás instrucciones para restablecer tu contraseña' };
+    }
+
+    // TODO: Implementar envío de email con token de recuperación
+    // Por ahora solo retornamos mensaje de éxito
+    // En producción: generar token, guardarlo en DB, enviar email con enlace
+
+    return { message: 'Si el correo existe, recibirás instrucciones para restablecer tu contraseña' };
+  }
+
+  @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Renovar token de acceso' })

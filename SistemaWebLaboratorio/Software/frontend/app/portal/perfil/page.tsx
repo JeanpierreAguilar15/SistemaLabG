@@ -71,12 +71,6 @@ export default function PerfilPage() {
     },
   ])
 
-  const [changePassword, setChangePassword] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  })
-
   // Cargar datos del perfil
   useEffect(() => {
     loadProfile()
@@ -173,47 +167,6 @@ export default function PerfilPage() {
         setMessage({ type: 'success', text: 'Consentimientos actualizados correctamente' })
       } else {
         setMessage({ type: 'error', text: 'Error al actualizar los consentimientos' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleChangePassword = async () => {
-    if (changePassword.newPassword !== changePassword.confirmPassword) {
-      setMessage({ type: 'error', text: 'Las contraseñas no coinciden' })
-      return
-    }
-
-    if (changePassword.newPassword.length < 8) {
-      setMessage({ type: 'error', text: 'La contraseña debe tener al menos 8 caracteres' })
-      return
-    }
-
-    try {
-      setSaving(true)
-      setMessage(null)
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/cambiar-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          currentPassword: changePassword.currentPassword,
-          newPassword: changePassword.newPassword,
-        }),
-      })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Contraseña cambiada correctamente' })
-        setChangePassword({ currentPassword: '', newPassword: '', confirmPassword: '' })
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al cambiar la contraseña' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
@@ -418,54 +371,26 @@ export default function PerfilPage() {
         </CardContent>
       </Card>
 
-      {/* Cambiar Contraseña */}
+      {/* Seguridad - Link a recuperar contraseña */}
       <Card>
         <CardHeader>
-          <CardTitle>Cambiar Contraseña</CardTitle>
-          <CardDescription>Actualiza tu contraseña de acceso</CardDescription>
+          <CardTitle>Seguridad</CardTitle>
+          <CardDescription>Gestiona la seguridad de tu cuenta</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="current_password">Contraseña Actual *</Label>
-              <Input
-                id="current_password"
-                type="password"
-                value={changePassword.currentPassword}
-                onChange={(e) => setChangePassword({ ...changePassword, currentPassword: e.target.value })}
-              />
+        <CardContent>
+          <div className="flex items-center justify-between p-4 rounded-lg bg-lab-neutral-50 border border-lab-neutral-200">
+            <div>
+              <h4 className="font-medium text-lab-neutral-900">Cambiar Contraseña</h4>
+              <p className="text-sm text-lab-neutral-600">
+                Si deseas cambiar tu contraseña, puedes hacerlo desde la pantalla de inicio de sesión
+              </p>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="new_password">Nueva Contraseña *</Label>
-              <Input
-                id="new_password"
-                type="password"
-                value={changePassword.newPassword}
-                onChange={(e) => setChangePassword({ ...changePassword, newPassword: e.target.value })}
-              />
-              <p className="text-xs text-lab-neutral-500">Mínimo 8 caracteres</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirm_password">Confirmar Nueva Contraseña *</Label>
-              <Input
-                id="confirm_password"
-                type="password"
-                value={changePassword.confirmPassword}
-                onChange={(e) => setChangePassword({ ...changePassword, confirmPassword: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button
-              onClick={handleChangePassword}
-              disabled={saving || !changePassword.currentPassword || !changePassword.newPassword}
-              className="min-w-[150px]"
+            <a
+              href="/auth/forgot-password"
+              className="px-4 py-2 text-sm font-medium text-lab-primary-600 hover:text-lab-primary-700 hover:underline"
             >
-              {saving ? 'Cambiando...' : 'Cambiar Contraseña'}
-            </Button>
+              Cambiar contraseña
+            </a>
           </div>
         </CardContent>
       </Card>

@@ -71,6 +71,7 @@ export default function CotizacionesPage() {
   const [availableSlots, setAvailableSlots] = useState<any[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
+  const [tipoPago, setTipoPago] = useState<'VENTANILLA' | 'ONLINE'>('VENTANILLA')
 
   useEffect(() => {
     loadExamenes()
@@ -583,6 +584,41 @@ export default function CotizacionesPage() {
                 </div>
               )}
 
+              {/* Tipo de Pago */}
+              <div className="space-y-2">
+                <Label>¿Cómo desea pagar?</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setTipoPago('VENTANILLA')}
+                    className={`p-4 rounded-lg border-2 text-left transition-all ${
+                      tipoPago === 'VENTANILLA'
+                        ? 'border-lab-primary-600 bg-lab-primary-50'
+                        : 'border-lab-neutral-200 hover:border-lab-primary-300'
+                    }`}
+                  >
+                    <div className="font-semibold text-lab-neutral-900">🏦 En Ventanilla</div>
+                    <div className="text-sm text-lab-neutral-600 mt-1">
+                      Pague al llegar al laboratorio
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTipoPago('ONLINE')}
+                    className={`p-4 rounded-lg border-2 text-left transition-all ${
+                      tipoPago === 'ONLINE'
+                        ? 'border-lab-primary-600 bg-lab-primary-50'
+                        : 'border-lab-neutral-200 hover:border-lab-primary-300'
+                    }`}
+                  >
+                    <div className="font-semibold text-lab-neutral-900">💳 Pago en Línea</div>
+                    <div className="text-sm text-lab-neutral-600 mt-1">
+                      Pague ahora con tarjeta
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Observaciones (Opcional)</Label>
                 <Input
@@ -600,7 +636,7 @@ export default function CotizacionesPage() {
                 onClick={handleConfirmarCita}
                 disabled={!selectedSlot}
               >
-                Confirmar Cita
+                {tipoPago === 'ONLINE' ? 'Proceder al Pago' : 'Confirmar Cita'}
               </Button>
             </div>
           </div>
