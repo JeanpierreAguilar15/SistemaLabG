@@ -85,6 +85,20 @@ export default function CotizacionesPage() {
     }
   }, [fechaCita, showAgendarCitaModal])
 
+  // Formatear hora desde ISO string
+  const formatTime = (isoString: string) => {
+    if (!isoString) return ''
+    try {
+      if (isoString.includes('T')) {
+        const date = new Date(isoString)
+        return date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hour12: false })
+      }
+      return isoString.substring(0, 5)
+    } catch {
+      return isoString
+    }
+  }
+
   const loadExamenes = async () => {
     try {
       setLoading(true)
@@ -576,7 +590,7 @@ export default function CotizacionesPage() {
                             : 'bg-white text-lab-neutral-700 border-lab-neutral-300 hover:border-lab-primary-500'
                             }`}
                         >
-                          {slot.hora_inicio.substring(0, 5)}
+                          {formatTime(slot.hora_inicio)}
                         </button>
                       ))}
                     </div>
@@ -597,7 +611,12 @@ export default function CotizacionesPage() {
                         : 'border-lab-neutral-200 hover:border-lab-primary-300'
                     }`}
                   >
-                    <div className="font-semibold text-lab-neutral-900">🏦 En Ventanilla</div>
+                    <div className="flex items-center gap-2 font-semibold text-lab-neutral-900">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                      En Ventanilla
+                    </div>
                     <div className="text-sm text-lab-neutral-600 mt-1">
                       Pague al llegar al laboratorio
                     </div>
@@ -611,7 +630,12 @@ export default function CotizacionesPage() {
                         : 'border-lab-neutral-200 hover:border-lab-primary-300'
                     }`}
                   >
-                    <div className="font-semibold text-lab-neutral-900">💳 Pago en Línea</div>
+                    <div className="flex items-center gap-2 font-semibold text-lab-neutral-900">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      Pago en Linea
+                    </div>
                     <div className="text-sm text-lab-neutral-600 mt-1">
                       Pague ahora con tarjeta
                     </div>
