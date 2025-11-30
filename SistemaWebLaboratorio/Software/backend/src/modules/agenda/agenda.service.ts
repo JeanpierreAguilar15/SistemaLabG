@@ -310,12 +310,11 @@ export class AgendaService {
     const where: any = {
       activo: true,
       cupos_disponibles: { gt: 0 },
-      fecha: {
-        gte: today, // Solo desde hoy en adelante
-      },
     };
 
+    // Handle different date filter combinations
     if (filters.fecha) {
+      // Single date filter (YYYY-MM-DD)
       const searchDate = new Date(filters.fecha + 'T00:00:00');
       const nextDate = new Date(searchDate);
       nextDate.setDate(nextDate.getDate() + 1);
@@ -323,6 +322,34 @@ export class AgendaService {
       where.fecha = {
         gte: searchDate,
         lt: nextDate,
+      };
+    } else if (filters.fecha_desde || filters.fecha_hasta) {
+      // Date range filter
+      where.fecha = {};
+
+      if (filters.fecha_desde) {
+        // Parse fecha_desde - handle both YYYY-MM-DD and YYYY-MM-DDTHH:mm:ss formats
+        const fechaDesdeStr = filters.fecha_desde.includes('T')
+          ? filters.fecha_desde.split('T')[0]
+          : filters.fecha_desde;
+        const fechaDesde = new Date(fechaDesdeStr + 'T00:00:00');
+        where.fecha.gte = fechaDesde;
+      }
+
+      if (filters.fecha_hasta) {
+        // Parse fecha_hasta - handle both YYYY-MM-DD and YYYY-MM-DDTHH:mm:ss formats
+        const fechaHastaStr = filters.fecha_hasta.includes('T')
+          ? filters.fecha_hasta.split('T')[0]
+          : filters.fecha_hasta;
+        const fechaHasta = new Date(fechaHastaStr + 'T00:00:00');
+        const nextDate = new Date(fechaHasta);
+        nextDate.setDate(nextDate.getDate() + 1);
+        where.fecha.lt = nextDate;
+      }
+    } else {
+      // No date filter - only show from today onwards
+      where.fecha = {
+        gte: today,
       };
     }
 
@@ -334,15 +361,18 @@ export class AgendaService {
       where.codigo_sede = filters.codigo_sede;
     }
 
+    this.logger.log(`getAvailableSlots filters: ${JSON.stringify(filters)}, where: ${JSON.stringify(where)}`);
+
     return this.prisma.slot.findMany({
       where,
       include: {
         servicio: true,
         sede: true,
       },
-      orderBy: {
-        hora_inicio: 'asc',
-      },
+      orderBy: [
+        { fecha: 'asc' },
+        { hora_inicio: 'asc' },
+      ],
     });
   }
 
