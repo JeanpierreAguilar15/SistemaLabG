@@ -338,47 +338,6 @@ export class ChatbotService implements OnModuleInit {
     }
 
     /**
-     * Consultar paquetes de exámenes disponibles
-     */
-    async consultarPaquetes() {
-        this.logger.log('Consultando paquetes de exámenes');
-
-        const paquetes = await this.prisma.paquete.findMany({
-            where: { activo: true },
-            include: {
-                examenes: {
-                    include: {
-                        examen: {
-                            select: { nombre: true },
-                        },
-                    },
-                },
-            },
-            orderBy: { nombre: 'asc' },
-        });
-
-        if (paquetes.length === 0) {
-            return { mensaje: 'No hay paquetes disponibles actualmente.', paquetes: [] };
-        }
-
-        const listaPaquetes = paquetes.map((paq) => {
-            const precio = paq.precio_paquete ? `S/. ${paq.precio_paquete}` : 'Consultar';
-            const examenes = paq.examenes.map((e) => e.examen.nombre).join(', ');
-            return `* ${paq.nombre} - ${precio}\n   Incluye: ${examenes}`;
-        }).join('\n\n');
-
-        return {
-            mensaje: `Tenemos ${paquetes.length} paquete(s) disponibles:\n\n${listaPaquetes}`,
-            paquetes: paquetes.map((p) => ({
-                nombre: p.nombre,
-                descripcion: p.descripcion,
-                precio: p.precio_paquete,
-                examenes: p.examenes.map((e) => e.examen.nombre),
-            })),
-        };
-    }
-
-    /**
      * Consultar disponibilidad de citas para una fecha
      */
     async consultarDisponibilidad(fecha?: string) {

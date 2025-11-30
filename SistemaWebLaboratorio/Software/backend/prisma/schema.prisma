@@ -257,7 +257,6 @@ model Examen {
   activo                    Boolean             @default(true)
   fecha_creacion            DateTime            @default(now())
   categoria                 CategoriaExamen?    @relation(fields: [codigo_categoria], references: [codigo_categoria])
-  examenes_en_paquetes      PaqueteExamen[]
   precios                   Precio[]
   insumos                   ExamenInsumo[]
   detalles_cotizacion       CotizacionDetalle[]
@@ -278,31 +277,6 @@ model Precio {
   examen        Examen    @relation(fields: [codigo_examen], references: [codigo_examen])
 
   @@map("precio")
-  @@schema("catalogo")
-}
-
-model Paquete {
-  codigo_paquete Int             @id @default(autoincrement())
-  nombre         String          @db.VarChar(200)
-  descripcion    String?
-  precio_paquete Decimal         @db.Decimal(10, 2)
-  descuento      Decimal         @default(0) @db.Decimal(5, 2)
-  activo         Boolean         @default(true)
-  fecha_creacion DateTime        @default(now())
-  examenes       PaqueteExamen[]
-
-  @@map("paquete")
-  @@schema("catalogo")
-}
-
-model PaqueteExamen {
-  codigo_paquete_examen Int     @id @default(autoincrement())
-  codigo_paquete        Int
-  codigo_examen         Int
-  examen                Examen  @relation(fields: [codigo_examen], references: [codigo_examen])
-  paquete               Paquete @relation(fields: [codigo_paquete], references: [codigo_paquete], onDelete: Cascade)
-
-  @@map("paquete_examen")
   @@schema("catalogo")
 }
 

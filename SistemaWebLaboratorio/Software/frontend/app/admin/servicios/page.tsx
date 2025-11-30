@@ -194,7 +194,7 @@ export default function ServicesManagement() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: '✅ Servicio eliminado correctamente' })
+        setMessage({ type: 'success', text: 'Servicio eliminado correctamente' })
         loadServices()
       } else {
         const error = await response.json()
@@ -205,6 +205,30 @@ export default function ServicesManagement() {
       }
     } catch (error) {
       console.error('Error deleting service:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleToggleActive = async (serviceId: number, activate: boolean) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/services/${serviceId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ activo: activate }),
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: activate ? 'Servicio activado correctamente' : 'Servicio desactivado correctamente' })
+        loadServices()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al actualizar el servicio' })
+      }
+    } catch (error) {
+      console.error('Error toggling service:', error)
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
@@ -336,6 +360,20 @@ export default function ServicesManagement() {
                 Creado: {new Date(service.fecha_creacion).toLocaleDateString('es-ES')}
               </span>
               <div className="flex items-center space-x-2">
+                {!service.activo && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleToggleActive(service.codigo_servicio, true)}
+                    className="text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50"
+                    title="Reactivar servicio"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Activar
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
