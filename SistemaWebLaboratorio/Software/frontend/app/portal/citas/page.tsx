@@ -24,6 +24,7 @@ interface Cita {
 interface Servicio {
   codigo_servicio: number
   nombre: string
+  descripcion?: string
   duracion_estimada_minutos: number
   requiere_preparacion: boolean
   instrucciones_preparacion?: string
@@ -137,6 +138,10 @@ export default function CitasPage() {
       if (response.ok) {
         const data = await response.json()
         setServicios(data)
+        // Si solo hay 1 servicio, auto-seleccionarlo
+        if (data.length === 1) {
+          setSelectedServicio(data[0].codigo_servicio.toString())
+        }
       }
     } catch (error) {
       console.error('Error loading servicios:', error)
@@ -537,19 +542,28 @@ export default function CitasPage() {
               <div className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="servicio">Servicio *</Label>
-                  <select
-                    id="servicio"
-                    value={selectedServicio}
-                    onChange={(e) => setSelectedServicio(e.target.value)}
-                    className="w-full h-10 px-3 rounded-md border border-lab-neutral-300 focus:outline-none focus:ring-2 focus:ring-lab-primary-500"
-                  >
-                    <option value="">Selecciona un servicio</option>
-                    {servicios.map((servicio) => (
-                      <option key={servicio.codigo_servicio} value={servicio.codigo_servicio}>
-                        {servicio.nombre}
-                      </option>
-                    ))}
-                  </select>
+                  {servicios.length === 1 ? (
+                    <div className="p-3 bg-lab-primary-50 border border-lab-primary-200 rounded-lg">
+                      <p className="font-medium text-lab-primary-800">{servicios[0].nombre}</p>
+                      {servicios[0].descripcion && (
+                        <p className="text-sm text-lab-primary-600 mt-1">{servicios[0].descripcion}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <select
+                      id="servicio"
+                      value={selectedServicio}
+                      onChange={(e) => setSelectedServicio(e.target.value)}
+                      className="w-full h-10 px-3 rounded-md border border-lab-neutral-300 focus:outline-none focus:ring-2 focus:ring-lab-primary-500"
+                    >
+                      <option value="">Selecciona un servicio</option>
+                      {servicios.map((servicio) => (
+                        <option key={servicio.codigo_servicio} value={servicio.codigo_servicio}>
+                          {servicio.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 {selectedServicio && (

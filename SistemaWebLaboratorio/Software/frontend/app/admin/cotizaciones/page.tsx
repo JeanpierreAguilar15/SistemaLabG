@@ -8,6 +8,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatDate } from '@/lib/utils'
 
+interface DetalleCotizacion {
+  codigo_detalle_cotizacion: number
+  cantidad: number
+  precio_unitario: number
+  total_linea: number
+  examen: {
+    codigo_examen: number
+    nombre: string
+    codigo_interno: string
+  }
+}
+
 interface Cotizacion {
   codigo_cotizacion: number
   numero_cotizacion: string
@@ -22,12 +34,7 @@ interface Cotizacion {
     apellidos: string
     email: string
   }
-  items?: Array<{
-    examen: string
-    cantidad: number
-    precio_unitario: number
-    total_linea: number
-  }>
+  detalles?: DetalleCotizacion[]
 }
 
 export default function CotizacionesAdminPage() {
@@ -218,7 +225,7 @@ export default function CotizacionesAdminPage() {
                     <td className="p-4 text-sm text-lab-neutral-700">
                       {formatDate(new Date(cotizacion.fecha_cotizacion))}
                     </td>
-                    <td className="p-4 text-sm text-lab-neutral-700">{cotizacion.items?.length || 0} examen(es)</td>
+                    <td className="p-4 text-sm text-lab-neutral-700">{cotizacion.detalles?.length || 0} examen(es)</td>
                     <td className="p-4 font-semibold text-lab-neutral-900">${Number(cotizacion.total).toFixed(2)}</td>
                     <td className="p-4">
                       <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(cotizacion.estado)}`}>
@@ -272,21 +279,21 @@ export default function CotizacionesAdminPage() {
               <div>
                 <h3 className="font-semibold text-lab-neutral-900 mb-3">Exámenes Solicitados</h3>
                 <div className="space-y-2">
-                  {selectedCotizacion.items && selectedCotizacion.items.length > 0 ? (
-                    selectedCotizacion.items.map((item, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-lab-neutral-50 rounded-lg">
+                  {selectedCotizacion.detalles && selectedCotizacion.detalles.length > 0 ? (
+                    selectedCotizacion.detalles.map((detalle) => (
+                      <div key={detalle.codigo_detalle_cotizacion} className="flex justify-between items-center p-3 bg-lab-neutral-50 rounded-lg">
                         <div>
-                          <p className="font-medium text-lab-neutral-900">{item.examen}</p>
+                          <p className="font-medium text-lab-neutral-900">{detalle.examen.nombre}</p>
                           <p className="text-sm text-lab-neutral-600">
-                            {item.cantidad} x ${Number(item.precio_unitario).toFixed(2)}
+                            {detalle.examen.codigo_interno} - {detalle.cantidad} x ${Number(detalle.precio_unitario).toFixed(2)}
                           </p>
                         </div>
-                        <p className="font-semibold text-lab-neutral-900">${Number(item.total_linea).toFixed(2)}</p>
+                        <p className="font-semibold text-lab-neutral-900">${Number(detalle.total_linea).toFixed(2)}</p>
                       </div>
                     ))
                   ) : (
                     <div className="text-center py-4 text-lab-neutral-500">
-                      No hay items disponibles para esta cotización
+                      No hay exámenes disponibles para esta cotización
                     </div>
                   )}
                 </div>
