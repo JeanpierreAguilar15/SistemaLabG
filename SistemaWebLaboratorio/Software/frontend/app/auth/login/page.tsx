@@ -22,15 +22,13 @@ export default function LoginPage() {
   const [success, setSuccess] = useState(false)
   const [mounted, setMounted] = useState(false)
 
-  // Animación de entrada
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Limpiar shake después de la animación
   useEffect(() => {
     if (shake) {
-      const timer = setTimeout(() => setShake(false), 500)
+      const timer = setTimeout(() => setShake(false), 400)
       return () => clearTimeout(timer)
     }
   }, [shake])
@@ -43,14 +41,10 @@ export default function LoginPage() {
     try {
       const data = await authApi.login(identifier, password)
       setAuth(data.user, data.access_token, data.refresh_token)
-
-      // Animación de éxito antes de redirigir
       setSuccess(true)
 
-      // Pequeño delay para mostrar la animación de éxito
-      await new Promise(resolve => setTimeout(resolve, 800))
+      await new Promise(resolve => setTimeout(resolve, 600))
 
-      // Redirigir según el rol del usuario
       if (data.user.rol === 'ADMIN' || data.user.rol === 'Administrador') {
         router.push('/admin')
       } else {
@@ -69,25 +63,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-lab-primary-50 via-white to-lab-success-50 p-4 overflow-hidden">
-      {/* Círculos decorativos animados */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-lab-primary-100 rounded-full opacity-50 animate-pulse" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-lab-success-100 rounded-full opacity-40 animate-pulse" style={{ animationDelay: '1s' }} />
-      </div>
-
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-lab-primary-50 via-white to-lab-success-50 p-4">
       <div
-        className={`w-full max-w-md space-y-6 relative z-10 transition-all duration-700 ease-out ${
-          mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+        className={`w-full max-w-md space-y-6 transition-opacity duration-500 ${
+          mounted ? 'opacity-100' : 'opacity-0'
         }`}
       >
         {/* Logo y Header */}
-        <div className={`text-center space-y-2 transition-all duration-500 delay-100 ${
-          mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
-        }`}>
+        <div className="text-center space-y-2">
           <div className="flex justify-center mb-4">
-            <div className={`bg-lab-primary-600 text-white rounded-2xl p-4 shadow-lg transition-transform duration-300 hover:scale-105 ${
-              success ? 'animate-bounce' : ''
+            <div className={`bg-lab-primary-600 text-white rounded-2xl p-4 shadow-lg transition-colors duration-300 ${
+              success ? 'bg-green-500' : ''
             }`}>
               <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
@@ -99,14 +85,14 @@ export default function LoginPage() {
         </div>
 
         {/* Login Card */}
-        <Card className={`border-lab-neutral-200 shadow-xl backdrop-blur-sm bg-white/95 transition-all duration-500 delay-200 ${
-          mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-        } ${shake ? 'animate-shake' : ''} ${success ? 'ring-2 ring-green-500 ring-opacity-50' : ''}`}>
+        <Card className={`border-lab-neutral-200 shadow-xl transition-all duration-300 ${
+          shake ? 'animate-shake' : ''
+        } ${success ? 'border-green-300' : ''}`}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               {success ? (
                 <>
-                  <svg className="w-5 h-5 text-green-500 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span className="text-green-600">¡Bienvenido!</span>
@@ -121,8 +107,8 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Mensaje de error con animación */}
-              <div className={`overflow-hidden transition-all duration-300 ease-out ${
+              {/* Mensaje de error */}
+              <div className={`overflow-hidden transition-all duration-200 ${
                 error ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'
               }`}>
                 <div className="p-3 rounded-lg bg-lab-danger-50 border border-lab-danger-200 text-lab-danger-700 text-sm flex items-center gap-2">
@@ -134,7 +120,7 @@ export default function LoginPage() {
               </div>
 
               {/* Mensaje de éxito */}
-              <div className={`overflow-hidden transition-all duration-300 ease-out ${
+              <div className={`overflow-hidden transition-all duration-200 ${
                 success ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'
               }`}>
                 <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm flex items-center gap-2">
@@ -156,8 +142,8 @@ export default function LoginPage() {
                     onChange={(e) => setIdentifier(e.target.value)}
                     required
                     disabled={loading || success}
-                    className={`pl-10 transition-all duration-200 ${
-                      error ? 'border-lab-danger-300 focus:border-lab-danger-500' : ''
+                    className={`pl-10 transition-colors duration-200 ${
+                      error ? 'border-lab-danger-300' : ''
                     } ${success ? 'border-green-300 bg-green-50/30' : ''}`}
                   />
                   <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -171,7 +157,7 @@ export default function LoginPage() {
                   <Label htmlFor="password">Contraseña</Label>
                   <Link
                     href="/auth/forgot-password"
-                    className="text-sm text-lab-primary-600 hover:text-lab-primary-700 hover:underline transition-colors"
+                    className="text-sm text-lab-primary-600 hover:text-lab-primary-700 hover:underline"
                   >
                     ¿Olvidaste tu contraseña?
                   </Link>
@@ -185,8 +171,8 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     disabled={loading || success}
-                    className={`pl-10 pr-10 transition-all duration-200 ${
-                      error ? 'border-lab-danger-300 focus:border-lab-danger-500' : ''
+                    className={`pl-10 pr-10 transition-colors duration-200 ${
+                      error ? 'border-lab-danger-300' : ''
                     } ${success ? 'border-green-300 bg-green-50/30' : ''}`}
                   />
                   <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -214,10 +200,8 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                className={`w-full h-11 text-base font-medium transition-all duration-300 ${
-                  success
-                    ? 'bg-green-500 hover:bg-green-600'
-                    : 'bg-lab-primary-600 hover:bg-lab-primary-700 hover:shadow-lg hover:shadow-lab-primary-200'
+                className={`w-full h-11 text-base font-medium transition-colors duration-200 ${
+                  success ? 'bg-green-500 hover:bg-green-600' : ''
                 }`}
                 disabled={loading || success}
               >
@@ -227,27 +211,27 @@ export default function LoginPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    <span>Verificando credenciales...</span>
+                    <span>Verificando...</span>
                   </div>
                 ) : success ? (
                   <div className="flex items-center justify-center gap-2">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    <span>¡Acceso concedido!</span>
+                    <span>Acceso concedido</span>
                   </div>
                 ) : (
                   'Iniciar Sesión'
                 )}
               </Button>
 
-              <div className={`text-center text-sm text-lab-neutral-600 transition-opacity duration-300 ${
+              <div className={`text-center text-sm text-lab-neutral-600 transition-opacity duration-200 ${
                 success ? 'opacity-50' : ''
               }`}>
                 ¿No tienes una cuenta?{' '}
                 <Link
                   href="/auth/register"
-                  className="text-lab-primary-600 hover:text-lab-primary-700 font-medium hover:underline transition-colors"
+                  className="text-lab-primary-600 hover:text-lab-primary-700 font-medium hover:underline"
                 >
                   Regístrate aquí
                 </Link>
@@ -257,22 +241,20 @@ export default function LoginPage() {
         </Card>
 
         {/* Footer */}
-        <p className={`text-center text-sm text-lab-neutral-500 transition-all duration-500 delay-300 ${
-          mounted ? 'opacity-100' : 'opacity-0'
-        }`}>
+        <p className="text-center text-sm text-lab-neutral-500">
           © 2025 Laboratorio Clínico Franz. Todos los derechos reservados.
         </p>
       </div>
 
-      {/* Estilos para la animación de shake */}
+      {/* Animación sutil de shake */}
       <style jsx global>{`
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
-          10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-          20%, 40%, 60%, 80% { transform: translateX(4px); }
+          25% { transform: translateX(-3px); }
+          75% { transform: translateX(3px); }
         }
         .animate-shake {
-          animation: shake 0.5s ease-in-out;
+          animation: shake 0.3s ease-in-out;
         }
       `}</style>
     </div>
