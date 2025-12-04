@@ -164,6 +164,39 @@ export class EventsGateway
   }
 
   /**
+   * Notificar alertas de seguridad en tiempo real
+   * Se dispara desde SecurityLoggingService cuando detecta:
+   * - Ataques de fuerza bruta
+   * - Cuentas bloqueadas
+   * - Accesos sospechosos
+   */
+  notifySecurityAlert(data: {
+    alertId: number;
+    type: string;
+    level: string;
+    description: string;
+    ipAddress?: string;
+    timestamp: Date;
+  }) {
+    this.logger.warn(`🚨 Security Alert [${data.level}]: ${data.type}`);
+
+    // Solo enviar a administradores
+    this.server.to('role:Administrador').emit('security:alert', {
+      ...data,
+      timestamp: new Date(),
+    });
+
+    // Si es crítico, también hacer broadcast a todos los admins conectados
+    if (data.level === 'CRITICAL') {
+      this.server.to('role:Administrador').emit('system:message', {
+        type: 'error',
+        message: `🚨 ALERTA CRÍTICA DE SEGURIDAD: ${data.description}`,
+        timestamp: new Date(),
+      });
+    }
+  }
+
+  /**
    * Notificar actualizaciones de citas
    * Bidireccional: Admin crea/modifica → Paciente notificado
    *                Paciente agenda → Admin notificado

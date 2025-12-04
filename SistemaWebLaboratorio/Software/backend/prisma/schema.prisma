@@ -84,6 +84,7 @@ model Usuario {
   logs_actividad                LogActividad[]
   logs_error                    LogError[]
   ordenes_compra_creadas        OrdenCompra[]
+  intentos_login                LogIntentoLogin[] @relation("IntentosLogin")
 
   @@map("usuario")
   @@schema("usuarios")
@@ -810,5 +811,69 @@ model MensajeChatbot {
 
   @@index([codigo_conversacion])
   @@map("mensaje_chatbot")
+  @@schema("auditoria")
+}
+
+// =====================================================
+// ESQUEMA: auditoria - LOGS DE SEGURIDAD
+// =====================================================
+
+model LogIntentoLogin {
+  codigo_intento      Int       @id @default(autoincrement())
+  identificador       String    @db.VarChar(100)  // email o cédula usada
+  ip_address          String    @db.VarChar(45)
+  user_agent          String?   @db.Text
+  exitoso             Boolean   @default(false)
+  motivo_fallo        String?   @db.VarChar(100)  // CREDENCIALES_INVALIDAS, CUENTA_BLOQUEADA, etc.
+  codigo_usuario      Int?                        // Si se encontró el usuario
+  pais                String?   @db.VarChar(50)
+  ciudad              String?   @db.VarChar(100)
+  fecha_intento       DateTime  @default(now())
+
+  usuario             Usuario?  @relation("IntentosLogin", fields: [codigo_usuario], references: [codigo_usuario])
+
+  @@index([ip_address])
+  @@index([identificador])
+  @@index([fecha_intento])
+  @@map("log_intento_login")
+  @@schema("auditoria")
+}
+
+model AlertaSeguridad {
+  codigo_alerta       Int       @id @default(autoincrement())
+  tipo_alerta         String    @db.VarChar(50)   // FUERZA_BRUTA, MULTIPLES_IPS, CUENTA_BLOQUEADA, etc.
+  nivel               String    @db.VarChar(20)   // INFO, WARNING, CRITICAL
+  descripcion         String    @db.Text
+  ip_address          String?   @db.VarChar(45)
+  codigo_usuario      Int?
+  datos_adicionales   Json?                       // Información extra en JSON
+  resuelta            Boolean   @default(false)
+  fecha_resolucion    DateTime?
+  resuelta_por        Int?
+  fecha_alerta        DateTime  @default(now())
+
+  @@index([tipo_alerta])
+  @@index([nivel])
+  @@index([fecha_alerta])
+  @@index([resuelta])
+  @@map("alerta_seguridad")
+  @@schema("auditoria")
+}
+
+model AuditoriaTabla {
+  codigo_auditoria    Int       @id @default(autoincrement())
+  tabla               String    @db.VarChar(100)
+  operacion           String    @db.VarChar(10)   // INSERT, UPDATE, DELETE
+  codigo_registro     Int?
+  datos_anteriores    Json?                       // old_value
+  datos_nuevos        Json?                       // new_value
+  codigo_usuario      Int?
+  ip_address          String?   @db.VarChar(45)
+  fecha_operacion     DateTime  @default(now())
+
+  @@index([tabla])
+  @@index([operacion])
+  @@index([fecha_operacion])
+  @@map("auditoria_tabla")
   @@schema("auditoria")
 }
