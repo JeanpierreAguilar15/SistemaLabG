@@ -34,8 +34,8 @@ export class AdminEventsListener {
           entidad: payload.entityType,
           codigo_entidad: payload.entityId,
           descripcion: JSON.stringify(payload.data || {}),
-          ip_address: null, // TODO: Obtener del request
-          user_agent: null, // TODO: Obtener del request
+          ip_address: payload.ipAddress || null,
+          user_agent: payload.userAgent || null,
           fecha_accion: payload.timestamp,
         },
       });
@@ -64,8 +64,8 @@ export class AdminEventsListener {
           stack_trace: error.stack,
           endpoint: `admin.${payload.entityType}.${payload.action}`,
           metodo: 'EVENT',
-          ip_address: null,
-          user_agent: null,
+          ip_address: payload.ipAddress || null,
+          user_agent: payload.userAgent || null,
           codigo_usuario: payload.userId,
         },
       }).catch(err => {

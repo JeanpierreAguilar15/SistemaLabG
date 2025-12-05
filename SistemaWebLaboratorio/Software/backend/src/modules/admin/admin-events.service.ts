@@ -65,6 +65,11 @@ export enum AdminEventType {
   PURCHASE_ORDER_CANCELLED = 'admin.purchase_order.cancelled',
 }
 
+export interface RequestContext {
+  ipAddress?: string;
+  userAgent?: string;
+}
+
 export interface AdminEventPayload {
   entityType: string;
   entityId: number;
@@ -72,6 +77,8 @@ export interface AdminEventPayload {
   userId: number; // Usuario admin que realizó la acción
   data?: any; // Datos adicionales del evento
   timestamp: Date;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 @Injectable()
@@ -96,7 +103,7 @@ export class AdminEventsService {
    */
 
   // Usuarios
-  emitUserCreated(userId: number, adminId: number, data?: any) {
+  emitUserCreated(userId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.USER_CREATED, {
       entityType: 'user',
       entityId: userId,
@@ -104,10 +111,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitUserUpdated(userId: number, adminId: number, data?: any) {
+  emitUserUpdated(userId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.USER_UPDATED, {
       entityType: 'user',
       entityId: userId,
@@ -115,21 +124,25 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitUserDeleted(userId: number, adminId: number) {
+  emitUserDeleted(userId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.USER_DELETED, {
       entityType: 'user',
       entityId: userId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Exámenes
-  emitExamCreated(examId: number, adminId: number, data?: any) {
+  emitExamCreated(examId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.EXAM_CREATED, {
       entityType: 'exam',
       entityId: examId,
@@ -137,10 +150,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitExamUpdated(examId: number, adminId: number, data?: any) {
+  emitExamUpdated(examId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.EXAM_UPDATED, {
       entityType: 'exam',
       entityId: examId,
@@ -148,21 +163,25 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitExamDeleted(examId: number, adminId: number) {
+  emitExamDeleted(examId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.EXAM_DELETED, {
       entityType: 'exam',
       entityId: examId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Precios
-  emitPriceCreated(priceId: number, examId: number, adminId: number, data?: any) {
+  emitPriceCreated(priceId: number, examId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PRICE_CREATED, {
       entityType: 'price',
       entityId: priceId,
@@ -170,10 +189,12 @@ export class AdminEventsService {
       userId: adminId,
       data: { ...data, examId },
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitPriceUpdated(priceId: number, examId: number, adminId: number, data?: any) {
+  emitPriceUpdated(priceId: number, examId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PRICE_UPDATED, {
       entityType: 'price',
       entityId: priceId,
@@ -181,10 +202,12 @@ export class AdminEventsService {
       userId: adminId,
       data: { ...data, examId },
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitPriceDeleted(priceId: number, examId: number, adminId: number) {
+  emitPriceDeleted(priceId: number, examId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PRICE_DELETED, {
       entityType: 'price',
       entityId: priceId,
@@ -192,11 +215,13 @@ export class AdminEventsService {
       userId: adminId,
       data: { examId },
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Servicios
-  emitServiceCreated(serviceId: number, adminId: number, data?: any) {
+  emitServiceCreated(serviceId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.SERVICE_CREATED, {
       entityType: 'service',
       entityId: serviceId,
@@ -204,10 +229,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitServiceUpdated(serviceId: number, adminId: number, data?: any) {
+  emitServiceUpdated(serviceId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.SERVICE_UPDATED, {
       entityType: 'service',
       entityId: serviceId,
@@ -215,21 +242,25 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitServiceDeleted(serviceId: number, adminId: number) {
+  emitServiceDeleted(serviceId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.SERVICE_DELETED, {
       entityType: 'service',
       entityId: serviceId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Sedes
-  emitLocationCreated(locationId: number, adminId: number, data?: any) {
+  emitLocationCreated(locationId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.LOCATION_CREATED, {
       entityType: 'location',
       entityId: locationId,
@@ -237,10 +268,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitLocationUpdated(locationId: number, adminId: number, data?: any) {
+  emitLocationUpdated(locationId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.LOCATION_UPDATED, {
       entityType: 'location',
       entityId: locationId,
@@ -248,21 +281,25 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitLocationDeleted(locationId: number, adminId: number) {
+  emitLocationDeleted(locationId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.LOCATION_DELETED, {
       entityType: 'location',
       entityId: locationId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Paquetes
-  emitPackageCreated(packageId: number, adminId: number, data?: any) {
+  emitPackageCreated(packageId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PACKAGE_CREATED, {
       entityType: 'package',
       entityId: packageId,
@@ -270,10 +307,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitPackageUpdated(packageId: number, adminId: number, data?: any) {
+  emitPackageUpdated(packageId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PACKAGE_UPDATED, {
       entityType: 'package',
       entityId: packageId,
@@ -281,21 +320,25 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitPackageDeleted(packageId: number, adminId: number) {
+  emitPackageDeleted(packageId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PACKAGE_DELETED, {
       entityType: 'package',
       entityId: packageId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Roles
-  emitRoleCreated(roleId: number, adminId: number, data?: any) {
+  emitRoleCreated(roleId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.ROLE_CREATED, {
       entityType: 'role',
       entityId: roleId,
@@ -303,10 +346,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitRoleUpdated(roleId: number, adminId: number, data?: any) {
+  emitRoleUpdated(roleId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.ROLE_UPDATED, {
       entityType: 'role',
       entityId: roleId,
@@ -314,21 +359,25 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitRoleDeleted(roleId: number, adminId: number) {
+  emitRoleDeleted(roleId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.ROLE_DELETED, {
       entityType: 'role',
       entityId: roleId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Categorías
-  emitCategoryCreated(categoryId: number, adminId: number, data?: any) {
+  emitCategoryCreated(categoryId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.CATEGORY_CREATED, {
       entityType: 'category',
       entityId: categoryId,
@@ -336,10 +385,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitCategoryUpdated(categoryId: number, adminId: number, data?: any) {
+  emitCategoryUpdated(categoryId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.CATEGORY_UPDATED, {
       entityType: 'category',
       entityId: categoryId,
@@ -347,21 +398,25 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitCategoryDeleted(categoryId: number, adminId: number) {
+  emitCategoryDeleted(categoryId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.CATEGORY_DELETED, {
       entityType: 'category',
       entityId: categoryId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Inventario
-  emitInventoryItemCreated(itemId: number, adminId: number, data?: any) {
+  emitInventoryItemCreated(itemId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.INVENTORY_ITEM_CREATED, {
       entityType: 'inventory_item',
       entityId: itemId,
@@ -369,10 +424,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitInventoryItemUpdated(itemId: number, adminId: number, data?: any) {
+  emitInventoryItemUpdated(itemId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.INVENTORY_ITEM_UPDATED, {
       entityType: 'inventory_item',
       entityId: itemId,
@@ -380,21 +437,25 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitInventoryItemDeleted(itemId: number, adminId: number) {
+  emitInventoryItemDeleted(itemId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.INVENTORY_ITEM_DELETED, {
       entityType: 'inventory_item',
       entityId: itemId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Movimientos de Stock
-  emitStockMovementCreated(movimiento: any, adminId: number) {
+  emitStockMovementCreated(movimiento: any, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.STOCK_MOVEMENT_CREATED, {
       entityType: 'stock_movement',
       entityId: movimiento.codigo_movimiento,
@@ -409,11 +470,13 @@ export class AdminEventsService {
         motivo: movimiento.motivo,
       },
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Proveedores
-  emitSupplierCreated(supplierId: number, adminId: number, data?: any) {
+  emitSupplierCreated(supplierId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.SUPPLIER_CREATED, {
       entityType: 'supplier',
       entityId: supplierId,
@@ -421,10 +484,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitSupplierUpdated(supplierId: number, adminId: number, data?: any) {
+  emitSupplierUpdated(supplierId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.SUPPLIER_UPDATED, {
       entityType: 'supplier',
       entityId: supplierId,
@@ -432,21 +497,25 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitSupplierDeleted(supplierId: number, adminId: number) {
+  emitSupplierDeleted(supplierId: number, adminId: number, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.SUPPLIER_DELETED, {
       entityType: 'supplier',
       entityId: supplierId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
   // Órdenes de Compra
-  emitPurchaseOrderCreated(purchaseOrderId: number, adminId: number, data?: any) {
+  emitPurchaseOrderCreated(purchaseOrderId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PURCHASE_ORDER_CREATED, {
       entityType: 'purchase_order',
       entityId: purchaseOrderId,
@@ -454,10 +523,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitPurchaseOrderUpdated(purchaseOrderId: number, adminId: number, data?: any) {
+  emitPurchaseOrderUpdated(purchaseOrderId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PURCHASE_ORDER_UPDATED, {
       entityType: 'purchase_order',
       entityId: purchaseOrderId,
@@ -465,10 +536,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitPurchaseOrderDeleted(purchaseOrderId: number, adminId: number, data?: any) {
+  emitPurchaseOrderDeleted(purchaseOrderId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PURCHASE_ORDER_DELETED, {
       entityType: 'purchase_order',
       entityId: purchaseOrderId,
@@ -476,10 +549,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitPurchaseOrderEmitted(purchaseOrderId: number, adminId: number, data?: any) {
+  emitPurchaseOrderEmitted(purchaseOrderId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PURCHASE_ORDER_EMITTED, {
       entityType: 'purchase_order',
       entityId: purchaseOrderId,
@@ -487,10 +562,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitPurchaseOrderReceived(purchaseOrderId: number, adminId: number, data?: any) {
+  emitPurchaseOrderReceived(purchaseOrderId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PURCHASE_ORDER_RECEIVED, {
       entityType: 'purchase_order',
       entityId: purchaseOrderId,
@@ -498,10 +575,12 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 
-  emitPurchaseOrderCancelled(purchaseOrderId: number, adminId: number, data?: any) {
+  emitPurchaseOrderCancelled(purchaseOrderId: number, adminId: number, data?: any, ctx?: RequestContext) {
     this.emitEvent(AdminEventType.PURCHASE_ORDER_CANCELLED, {
       entityType: 'purchase_order',
       entityId: purchaseOrderId,
@@ -509,6 +588,8 @@ export class AdminEventsService {
       userId: adminId,
       data,
       timestamp: new Date(),
+      ipAddress: ctx?.ipAddress,
+      userAgent: ctx?.userAgent,
     });
   }
 }
