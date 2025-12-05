@@ -16,6 +16,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { EventsModule } from './modules/events/events.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { FeriadosModule } from './modules/feriados/feriados.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { FeriadosModule } from './modules/feriados/feriados.module';
     AuditoriaModule,
     SystemConfigModule,
     FeriadosModule,
+    ReportsModule,
   ],
 })
 export class AppModule { }
