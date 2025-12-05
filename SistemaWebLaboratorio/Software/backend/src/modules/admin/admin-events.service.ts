@@ -31,6 +31,7 @@ export enum AdminEventType {
   // Precios
   PRICE_CREATED = 'admin.price.created',
   PRICE_UPDATED = 'admin.price.updated',
+  PRICE_DELETED = 'admin.price.deleted',
 
   // Categorías
   CATEGORY_CREATED = 'admin.category.created',
@@ -179,6 +180,17 @@ export class AdminEventsService {
       action: 'updated',
       userId: adminId,
       data: { ...data, examId },
+      timestamp: new Date(),
+    });
+  }
+
+  emitPriceDeleted(priceId: number, examId: number, adminId: number) {
+    this.emitEvent(AdminEventType.PRICE_DELETED, {
+      entityType: 'price',
+      entityId: priceId,
+      action: 'deleted',
+      userId: adminId,
+      data: { examId },
       timestamp: new Date(),
     });
   }

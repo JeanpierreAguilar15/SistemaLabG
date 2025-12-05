@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Save, Bot, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { api, ApiError } from '@/lib/api';
 
 interface ChatbotConfig {
     codigo_configuracion: number;
@@ -27,21 +28,13 @@ export default function ChatbotConfigPage() {
 
     const fetchConfig = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch('http://localhost:3001/chatbot/config', {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setConfig(data);
-            } else {
-                throw new Error('Error al cargar configuración');
-            }
+            const token = localStorage.getItem('token') || '';
+            const data = await api.get<ChatbotConfig>('/chatbot/config', { token });
+            setConfig(data);
         } catch (error) {
             console.error(error);
-            setMessage({ type: 'error', text: 'No se pudo cargar la configuración.' });
+            const message = error instanceof ApiError ? error.message : 'No se pudo cargar la configuración.';
+            setMessage({ type: 'error', text: message });
         } finally {
             setLoading(false);
         }
@@ -53,23 +46,12 @@ export default function ChatbotConfigPage() {
         setMessage(null);
 
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch('http://localhost:3001/chatbot/config', {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(config),
-            });
-
-            if (res.ok) {
-                setMessage({ type: 'success', text: 'Configuración guardada exitosamente.' });
-            } else {
-                throw new Error('Error al guardar');
-            }
+            const token = localStorage.getItem('token') || '';
+            await api.put('/chatbot/config', config, { token });
+            setMessage({ type: 'success', text: 'Configuración guardada exitosamente.' });
         } catch (error) {
-            setMessage({ type: 'error', text: 'Error al guardar los cambios.' });
+            const message = error instanceof ApiError ? error.message : 'Error al guardar los cambios.';
+            setMessage({ type: 'error', text: message });
         } finally {
             setSaving(false);
         }

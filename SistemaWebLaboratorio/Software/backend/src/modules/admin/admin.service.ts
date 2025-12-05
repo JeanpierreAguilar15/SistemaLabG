@@ -61,7 +61,7 @@ export class AdminService {
     // Emitir evento de creación de rol
     this.eventsService.emitRoleCreated(
       role.codigo_rol,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { nombre: role.nombre, nivel_acceso: role.nivel_acceso },
     );
 
@@ -85,7 +85,7 @@ export class AdminService {
     // Emitir evento de actualización de rol
     this.eventsService.emitRoleUpdated(
       codigo_rol,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { changedFields: Object.keys(data) },
     );
 
@@ -160,7 +160,7 @@ export class AdminService {
     // Emitir evento de creación de servicio
     this.eventsService.emitServiceCreated(
       service.codigo_servicio,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { nombre: service.nombre, activo: service.activo },
     );
 
@@ -184,7 +184,7 @@ export class AdminService {
     // Emitir evento de actualización de servicio
     this.eventsService.emitServiceUpdated(
       codigo_servicio,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { changedFields: Object.keys(data) },
     );
 
@@ -252,7 +252,7 @@ export class AdminService {
     // Emitir evento de creación de sede
     this.eventsService.emitLocationCreated(
       location.codigo_sede,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { nombre: location.nombre, direccion: location.direccion, activo: location.activo },
     );
 
@@ -276,7 +276,7 @@ export class AdminService {
     // Emitir evento de actualización de sede
     this.eventsService.emitLocationUpdated(
       codigo_sede,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { changedFields: Object.keys(data) },
     );
 
@@ -398,7 +398,7 @@ export class AdminService {
     // Emitir evento de creación de examen
     this.eventsService.emitExamCreated(
       exam.codigo_examen,
-      0,
+      adminId,
       { nombre: exam.nombre, codigo_interno: exam.codigo_interno, activo: exam.activo },
     );
 
@@ -436,7 +436,7 @@ export class AdminService {
     // Emitir evento de actualización de examen
     this.eventsService.emitExamUpdated(
       codigo_examen,
-      0,
+      adminId,
       { changedFields: Object.keys(data) },
     );
 
@@ -466,6 +466,64 @@ export class AdminService {
 
   // ==================== PRECIOS ====================
 
+  async getAllPrices(page: number = 1, limit: number = 50, filters?: any) {
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.PrecioWhereInput = {};
+
+    if (filters?.codigo_examen) {
+      where.codigo_examen = parseInt(filters.codigo_examen);
+    }
+
+    if (filters?.activo !== undefined) {
+      where.activo = filters.activo === 'true';
+    }
+
+    const [prices, total] = await Promise.all([
+      this.prisma.precio.findMany({
+        where,
+        include: {
+          examen: {
+            select: {
+              codigo_examen: true,
+              nombre: true,
+              codigo_interno: true,
+            },
+          },
+        },
+        orderBy: { fecha_inicio: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.precio.count({ where }),
+    ]);
+
+    return {
+      data: prices,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getPriceById(codigo_precio: number) {
+    const price = await this.prisma.precio.findUnique({
+      where: { codigo_precio },
+      include: {
+        examen: true,
+      },
+    });
+
+    if (!price) {
+      throw new NotFoundException('Precio no encontrado');
+    }
+
+    return price;
+  }
+
   async createPrice(data: any, adminId: number) {
     const price = await this.prisma.precio.create({
       data: {
@@ -486,7 +544,7 @@ export class AdminService {
     this.eventsService.emitPriceCreated(
       price.codigo_precio,
       data.codigo_examen,
-      0,
+      adminId,
       { precio: price.precio, fecha_inicio: price.fecha_inicio },
     );
 
@@ -520,11 +578,32 @@ export class AdminService {
     this.eventsService.emitPriceUpdated(
       codigo_precio,
       price.codigo_examen,
-      0,
+      adminId,
       { changedFields: Object.keys(updateData) },
     );
 
     return updatedPrice;
+  }
+
+  async deletePrice(codigo_precio: number, adminId: number) {
+    const price = await this.prisma.precio.findUnique({
+      where: { codigo_precio },
+    });
+
+    if (!price) {
+      throw new NotFoundException('Precio no encontrado');
+    }
+
+    // Desactivar en lugar de eliminar (soft delete)
+    const result = await this.prisma.precio.update({
+      where: { codigo_precio },
+      data: { activo: false },
+    });
+
+    // Emitir evento de eliminación de precio
+    this.eventsService.emitPriceDeleted(codigo_precio, price.codigo_examen, adminId);
+
+    return result;
   }
 
   // ==================== CATEGORIAS ====================
@@ -548,7 +627,7 @@ export class AdminService {
     // Emitir evento de creación de categoría
     this.eventsService.emitCategoryCreated(
       category.codigo_categoria,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { nombre: category.nombre, descripcion: category.descripcion },
     );
 
@@ -572,7 +651,7 @@ export class AdminService {
     // Emitir evento de actualización de categoría
     this.eventsService.emitCategoryUpdated(
       codigo_categoria,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { changedFields: Object.keys(data) },
     );
 
@@ -674,7 +753,7 @@ export class AdminService {
     // Emitir evento de creación de paquete
     this.eventsService.emitPackageCreated(
       package_.codigo_paquete,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { nombre: package_.nombre, precio_paquete: package_.precio_paquete, examenesCount: examenes?.length || 0 },
     );
 
@@ -722,7 +801,7 @@ export class AdminService {
     // Emitir evento de actualización de paquete
     this.eventsService.emitPackageUpdated(
       codigo_paquete,
-      0, // TODO: Obtener del contexto de autenticación
+      adminId,
       { changedFields: Object.keys(data), examenesUpdated: examenes !== undefined },
     );
 

@@ -299,6 +299,24 @@ export class AdminController {
 
   // ==================== PRECIOS ====================
 
+  @Get('prices')
+  async getAllPrices(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query() filters?: any,
+  ) {
+    return this.adminService.getAllPrices(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+      filters,
+    );
+  }
+
+  @Get('prices/:id')
+  async getPriceById(@Param('id', ParseIntPipe) id: number) {
+    return this.adminService.getPriceById(id);
+  }
+
   @Post('prices')
   @HttpCode(HttpStatus.CREATED)
   async createPrice(
@@ -315,6 +333,15 @@ export class AdminController {
     @Body() data: UpdatePriceDto,
   ) {
     return this.adminService.updatePrice(id, data, adminId);
+  }
+
+  @Delete('prices/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deletePrice(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deletePrice(id, adminId);
   }
 
   // ==================== CATEGORIAS ====================
