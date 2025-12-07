@@ -908,4 +908,114 @@ export class AgendaService {
       }))
     };
   }
+
+  /**
+   * Obtener estadísticas del dashboard del paciente
+   * Datos dinámicos para el portal del paciente
+   */
+  async getPatientDashboardStats(codigoPaciente: number) {
+    const ahora = new Date();
+    const en30Dias = new Date();
+    en30Dias.setDate(en30Dias.getDate() + 30);
+
+    // Ejecutar todas las queries en paralelo
+    const [
+      citasProximas,
+      resultadosListos,
+      resultadosEnProceso,
+      cotizacionesPendientes,
+      proximasCitas,
+      resultadosRecientes,
+    ] = await Promise.all([
+      // Citas próximas (30 días)
+      this.prisma.cita.count({
+        where: {
+          codigo_paciente: codigoPaciente,
+          estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+          slot: {
+            fecha: { gte: ahora, lte: en30Dias },
+          },
+        },
+      }),
+
+      // Resultados listos para descargar
+      this.prisma.resultado.count({
+        where: {
+          muestra: { codigo_paciente: codigoPaciente },
+          estado: 'COMPLETADO',
+        },
+      }),
+
+      // Resultados en proceso
+      this.prisma.resultado.count({
+        where: {
+          muestra: { codigo_paciente: codigoPaciente },
+          estado: { in: ['PENDIENTE', 'EN_PROCESO'] },
+        },
+      }),
+
+      // Cotizaciones pendientes de pago
+      this.prisma.cotizacion.count({
+        where: {
+          codigo_paciente: codigoPaciente,
+          estado: 'APROBADA', // Aprobada pero no pagada
+        },
+      }),
+
+      // Detalle de próximas citas (máximo 3)
+      this.prisma.cita.findMany({
+        where: {
+          codigo_paciente: codigoPaciente,
+          estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+          slot: { fecha: { gte: ahora } },
+        },
+        include: {
+          slot: {
+            include: {
+              servicio: true,
+              sede: true,
+            },
+          },
+        },
+        orderBy: { slot: { fecha: 'asc' } },
+        take: 3,
+      }),
+
+      // Resultados recientes (máximo 3)
+      this.prisma.resultado.findMany({
+        where: {
+          muestra: { codigo_paciente: codigoPaciente },
+        },
+        include: {
+          examen: true,
+          muestra: true,
+        },
+        orderBy: { fecha_resultado: 'desc' },
+        take: 3,
+      }),
+    ]);
+
+    return {
+      stats: {
+        citasProximas,
+        resultadosListos,
+        resultadosEnProceso,
+        cotizacionesPendientes,
+      },
+      proximasCitas: proximasCitas.map((cita) => ({
+        codigo_cita: cita.codigo_cita,
+        fecha: cita.slot.fecha,
+        hora: cita.slot.hora_inicio,
+        servicio: cita.slot.servicio.nombre,
+        sede: cita.slot.sede.nombre,
+        estado: cita.estado,
+      })),
+      resultadosRecientes: resultadosRecientes.map((resultado) => ({
+        codigo_resultado: resultado.codigo_resultado,
+        examen: resultado.examen.nombre,
+        fecha: resultado.fecha_resultado,
+        estado: resultado.estado,
+      })),
+    };
+  }
 }

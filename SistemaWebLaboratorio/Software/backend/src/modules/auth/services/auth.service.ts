@@ -137,11 +137,49 @@ export class AuthService {
   }
 
   /**
+   * Obtiene la configuración de seguridad del sistema
+   */
+  private async getSecurityConfig(): Promise<{ maxIntentos: number; minutosBloqueo: number }> {
+    try {
+      const [maxIntentosConfig, minutosBloqueoConfig] = await Promise.all([
+        this.prisma.configuracionSistema.findUnique({
+          where: { clave: 'LOGIN_MAX_INTENTOS' },
+        }),
+        this.prisma.configuracionSistema.findUnique({
+          where: { clave: 'LOGIN_MINUTOS_BLOQUEO' },
+        }),
+      ]);
+
+      return {
+        maxIntentos: maxIntentosConfig ? parseInt(maxIntentosConfig.valor) : 5,
+        minutosBloqueo: minutosBloqueoConfig ? parseInt(minutosBloqueoConfig.valor) : 5,
+      };
+    } catch {
+      return { maxIntentos: 5, minutosBloqueo: 5 };
+    }
+  }
+
+  /**
+   * Verifica si el bloqueo temporal ha expirado
+   */
+  private isBlockExpired(fechaBloqueo: Date | null, minutos: number): boolean {
+    if (!fechaBloqueo) return true;
+    const tiempoBloqueo = new Date(fechaBloqueo);
+    const ahora = new Date();
+    const diferenciaMins = (ahora.getTime() - tiempoBloqueo.getTime()) / (1000 * 60);
+    return diferenciaMins >= minutos;
+  }
+
+  /**
    * Login user (email or cedula + password)
    * Incluye logging de seguridad para detectar ataques de fuerza bruta
+   * Bloqueo temporal configurable: después de X intentos, bloquea por Y minutos
    */
   async login(loginDto: LoginDto, ipAddress?: string, userAgent?: string) {
     const { identifier, password } = loginDto;
+
+    // Obtener configuración de seguridad
+    const { maxIntentos, minutosBloqueo } = await this.getSecurityConfig();
 
     // Find user by email or cedula
     const usuario = await this.prisma.usuario.findFirst({
@@ -165,20 +203,40 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    // Check if account is blocked
+    // Check if account is blocked - AHORA CON BLOQUEO TEMPORAL
     if (usuario.cuenta_bloqueada) {
-      // Registrar intento fallido - cuenta bloqueada
-      await this.securityLogging.logLoginAttempt({
-        identificador: identifier,
-        ipAddress: ipAddress || 'unknown',
-        userAgent,
-        exitoso: false,
-        motivoFallo: LoginFailReason.CUENTA_BLOQUEADA,
-        codigoUsuario: usuario.codigo_usuario,
-      });
-      throw new UnauthorizedException(
-        'Cuenta bloqueada. Contacte al administrador o espere 30 minutos',
-      );
+      // Verificar si el bloqueo ya expiró
+      if (this.isBlockExpired(usuario.fecha_bloqueo, minutosBloqueo)) {
+        // Desbloquear automáticamente y resetear intentos
+        await this.prisma.usuario.update({
+          where: { codigo_usuario: usuario.codigo_usuario },
+          data: {
+            cuenta_bloqueada: false,
+            intentos_fallidos: 0,
+            fecha_bloqueo: null,
+          },
+        });
+        // Continuar con el login normal (no lanzar error)
+      } else {
+        // Calcular tiempo restante
+        const tiempoRestante = Math.ceil(
+          minutosBloqueo -
+          (new Date().getTime() - new Date(usuario.fecha_bloqueo!).getTime()) / (1000 * 60)
+        );
+
+        // Registrar intento fallido - cuenta bloqueada
+        await this.securityLogging.logLoginAttempt({
+          identificador: identifier,
+          ipAddress: ipAddress || 'unknown',
+          userAgent,
+          exitoso: false,
+          motivoFallo: LoginFailReason.CUENTA_BLOQUEADA,
+          codigoUsuario: usuario.codigo_usuario,
+        });
+        throw new UnauthorizedException(
+          `Cuenta bloqueada temporalmente. Intente nuevamente en ${tiempoRestante} minuto(s)`,
+        );
+      }
     }
 
     // Check if account is active
@@ -199,9 +257,9 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, usuario.password_hash);
 
     if (!isPasswordValid) {
-      // Increment failed attempts
+      // Increment failed attempts usando configuración dinámica
       const intentos = usuario.intentos_fallidos + 1;
-      const bloqueado = intentos >= 5;
+      const bloqueado = intentos >= maxIntentos;
 
       await this.prisma.usuario.update({
         where: { codigo_usuario: usuario.codigo_usuario },

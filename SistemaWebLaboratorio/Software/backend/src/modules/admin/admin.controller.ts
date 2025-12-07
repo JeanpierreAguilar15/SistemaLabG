@@ -681,4 +681,51 @@ export class AdminController {
   ) {
     return this.inventarioService.cancelarOrdenCompra(id, adminId);
   }
+
+  // ==================== CONFIGURACIÓN DEL SISTEMA ====================
+
+  @Get('config')
+  @ApiOperation({ summary: 'Obtener todas las configuraciones del sistema' })
+  async getSystemConfig(@Query('grupo') grupo?: string) {
+    return this.adminService.getSystemConfig(grupo);
+  }
+
+  @Get('config/security')
+  @ApiOperation({ summary: 'Obtener configuración de seguridad de login' })
+  async getSecurityConfig() {
+    return this.adminService.getSecurityConfig();
+  }
+
+  @Put('config/:clave')
+  @ApiOperation({ summary: 'Actualizar una configuración del sistema' })
+  async updateSystemConfig(
+    @Param('clave') clave: string,
+    @Body('valor') valor: string,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.updateSystemConfig(clave, valor, adminId);
+  }
+
+  @Post('config/security/init')
+  @ApiOperation({ summary: 'Inicializar configuraciones de seguridad por defecto' })
+  async initSecurityConfigs() {
+    return this.adminService.ensureSecurityConfigs();
+  }
+
+  // ==================== GESTIÓN DE CUENTAS BLOQUEADAS ====================
+
+  @Get('users/blocked')
+  @ApiOperation({ summary: 'Obtener usuarios con cuentas bloqueadas' })
+  async getBlockedUsers() {
+    return this.adminService.getBlockedUsers();
+  }
+
+  @Post('users/:id/unlock')
+  @ApiOperation({ summary: 'Desbloquear cuenta de usuario' })
+  async unlockUserAccount(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.unlockUserAccount(id, adminId);
+  }
 }

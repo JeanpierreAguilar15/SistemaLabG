@@ -1359,4 +1359,184 @@ export class AdminService {
 
   // ==================== ÓRDENES DE COMPRA ====================
   // Logic moved to InventarioService
+
+  // ==================== CONFIGURACIÓN DEL SISTEMA ====================
+
+  /**
+   * Obtiene todas las configuraciones del sistema agrupadas
+   */
+  async getSystemConfig(grupo?: string) {
+    const where: any = {};
+    if (grupo) {
+      where.grupo = grupo;
+    }
+
+    const configs = await this.prisma.configuracionSistema.findMany({
+      where,
+      orderBy: [{ grupo: 'asc' }, { clave: 'asc' }],
+    });
+
+    // Agrupar por grupo
+    const grouped = configs.reduce((acc, config) => {
+      if (!acc[config.grupo]) {
+        acc[config.grupo] = [];
+      }
+      acc[config.grupo].push({
+        codigo: config.codigo_config,
+        clave: config.clave,
+        valor: config.valor,
+        descripcion: config.descripcion,
+        tipo_dato: config.tipo_dato,
+        es_publico: config.es_publico,
+      });
+      return acc;
+    }, {} as Record<string, any[]>);
+
+    return grouped;
+  }
+
+  /**
+   * Obtiene la configuración de seguridad de login
+   */
+  async getSecurityConfig() {
+    const configs = await this.prisma.configuracionSistema.findMany({
+      where: { grupo: 'SEGURIDAD' },
+    });
+
+    // Valores por defecto
+    let maxIntentos = 5;
+    let minutosBloqueo = 5;
+
+    configs.forEach(config => {
+      if (config.clave === 'LOGIN_MAX_INTENTOS') {
+        maxIntentos = parseInt(config.valor) || 5;
+      }
+      if (config.clave === 'LOGIN_MINUTOS_BLOQUEO') {
+        minutosBloqueo = parseInt(config.valor) || 5;
+      }
+    });
+
+    return {
+      maxIntentos,
+      minutosBloqueo,
+      configs: configs.map(c => ({
+        codigo: c.codigo_config,
+        clave: c.clave,
+        valor: c.valor,
+        descripcion: c.descripcion,
+      })),
+    };
+  }
+
+  /**
+   * Actualiza una configuración del sistema
+   */
+  async updateSystemConfig(clave: string, valor: string, adminId: number) {
+    const config = await this.prisma.configuracionSistema.findUnique({
+      where: { clave },
+    });
+
+    if (!config) {
+      throw new NotFoundException(`Configuración '${clave}' no encontrada`);
+    }
+
+    // Validar valor según tipo de dato
+    if (config.tipo_dato === 'INTEGER') {
+      const numValue = parseInt(valor);
+      if (isNaN(numValue) || numValue < 1) {
+        throw new BadRequestException('El valor debe ser un número entero positivo');
+      }
+    }
+
+    const updated = await this.prisma.configuracionSistema.update({
+      where: { clave },
+      data: { valor },
+    });
+
+    this.logger.log(`Config '${clave}' actualizada a '${valor}' por admin ${adminId}`);
+
+    return {
+      codigo: updated.codigo_config,
+      clave: updated.clave,
+      valor: updated.valor,
+      descripcion: updated.descripcion,
+    };
+  }
+
+  /**
+   * Inicializa las configuraciones de seguridad si no existen
+   */
+  async ensureSecurityConfigs() {
+    const defaultConfigs = [
+      {
+        clave: 'LOGIN_MAX_INTENTOS',
+        valor: '5',
+        descripcion: 'Número máximo de intentos de login fallidos antes de bloquear la cuenta temporalmente',
+        grupo: 'SEGURIDAD',
+        tipo_dato: 'INTEGER',
+      },
+      {
+        clave: 'LOGIN_MINUTOS_BLOQUEO',
+        valor: '5',
+        descripcion: 'Minutos de bloqueo temporal después de exceder los intentos máximos',
+        grupo: 'SEGURIDAD',
+        tipo_dato: 'INTEGER',
+      },
+    ];
+
+    for (const config of defaultConfigs) {
+      await this.prisma.configuracionSistema.upsert({
+        where: { clave: config.clave },
+        update: {},
+        create: config,
+      });
+    }
+
+    return { message: 'Configuraciones de seguridad inicializadas' };
+  }
+
+  /**
+   * Desbloquea una cuenta de usuario manualmente
+   */
+  async unlockUserAccount(codigoUsuario: number, adminId: number) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { codigo_usuario: codigoUsuario },
+    });
+
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    await this.prisma.usuario.update({
+      where: { codigo_usuario: codigoUsuario },
+      data: {
+        cuenta_bloqueada: false,
+        intentos_fallidos: 0,
+        fecha_bloqueo: null,
+      },
+    });
+
+    this.logger.log(`Cuenta ${codigoUsuario} desbloqueada por admin ${adminId}`);
+
+    return { message: 'Cuenta desbloqueada exitosamente' };
+  }
+
+  /**
+   * Obtiene usuarios con cuentas bloqueadas
+   */
+  async getBlockedUsers() {
+    return this.prisma.usuario.findMany({
+      where: { cuenta_bloqueada: true },
+      select: {
+        codigo_usuario: true,
+        cedula: true,
+        email: true,
+        nombres: true,
+        apellidos: true,
+        intentos_fallidos: true,
+        fecha_bloqueo: true,
+      },
+      orderBy: { fecha_bloqueo: 'desc' },
+    });
+  }
 }
