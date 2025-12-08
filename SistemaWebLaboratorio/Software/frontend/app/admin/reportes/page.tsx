@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-type ReportType = 'dashboard' | 'ventas' | 'examenes' | 'citas' | 'cotizaciones' | 'kardex' | 'pacientes'
+type ReportType = 'dashboard' | 'ventas' | 'examenes' | 'citas' | 'cotizaciones' | 'kardex' | 'pacientes' | 'resultados'
 
 interface DashboardData {
   ingresos_mes_actual: number
@@ -64,6 +64,7 @@ export default function ReportesPage() {
   const reports = [
     { id: 'dashboard', label: 'Dashboard', icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z' },
     { id: 'ventas', label: 'Ventas', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+    { id: 'resultados', label: 'Resultados', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
     { id: 'examenes', label: 'Examenes', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
     { id: 'citas', label: 'Citas', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
     { id: 'cotizaciones', label: 'Cotizaciones', icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z' },
@@ -479,6 +480,172 @@ export default function ReportesPage() {
     </div>
   )
 
+  const renderResultados = (data: any) => (
+    <div className="space-y-6">
+      {/* Resumen Principal */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+          <CardContent className="pt-4 pb-3">
+            <div className="text-2xl font-bold">{data.resumen?.total_resultados || 0}</div>
+            <div className="text-xs opacity-80">Total Resultados</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
+          <CardContent className="pt-4 pb-3">
+            <div className="text-2xl font-bold">{data.resumen?.validados || 0}</div>
+            <div className="text-xs opacity-80">Validados</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white">
+          <CardContent className="pt-4 pb-3">
+            <div className="text-2xl font-bold">{data.resumen?.en_proceso || 0}</div>
+            <div className="text-xs opacity-80">En Proceso</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
+          <CardContent className="pt-4 pb-3">
+            <div className="text-2xl font-bold">{data.resumen?.pendientes || 0}</div>
+            <div className="text-xs opacity-80">Pendientes</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-red-500 to-red-600 text-white">
+          <CardContent className="pt-4 pb-3">
+            <div className="text-2xl font-bold">{data.resumen?.fuera_de_rango || 0}</div>
+            <div className="text-xs opacity-80">Fuera de Rango</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+          <CardContent className="pt-4 pb-3">
+            <div className="text-2xl font-bold">{data.resumen?.total_descargas_pdf || 0}</div>
+            <div className="text-xs opacity-80">Descargas PDF</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white">
+          <CardContent className="pt-4 pb-3">
+            <div className="text-2xl font-bold">{data.resumen?.tiempo_promedio_horas || 0}h</div>
+            <div className="text-xs opacity-80">Tiempo Promedio</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Estados y Top Exámenes */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Distribución por Estado</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {data.por_estado?.map((e: any, i: number) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-lab-neutral-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${
+                      e.estado === 'VALIDADO' ? 'bg-green-500' :
+                      e.estado === 'EN_PROCESO' ? 'bg-yellow-500' :
+                      e.estado === 'PENDIENTE' ? 'bg-orange-500' : 'bg-gray-500'
+                    }`}></div>
+                    <span className="font-medium">{e.estado}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-lg">{e.cantidad}</span>
+                    <span className="text-sm text-lab-neutral-500 ml-2">({e.porcentaje})</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Top 10 Exámenes Procesados</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {data.top_examenes?.map((e: any, i: number) => (
+                <div key={i} className="flex items-center justify-between p-2 bg-lab-neutral-50 rounded">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+                      i === 0 ? 'bg-yellow-500' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-amber-600' : 'bg-lab-neutral-400'
+                    }`}>{i + 1}</span>
+                    <div>
+                      <div className="font-medium text-sm">{e.nombre}</div>
+                      <div className="text-xs text-lab-neutral-500">{e.codigo_interno}</div>
+                    </div>
+                  </div>
+                  <span className="font-bold text-blue-600">{e.cantidad}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Descargas y Bioquímicos */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Descargas PDF - Últimos 30 Días</CardTitle>
+            <CardDescription>Número de descargas de resultados por día</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {data.descargas_por_dia?.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2">Fecha</th>
+                      <th className="text-right p-2">Descargas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.descargas_por_dia?.slice(0, 10).map((d: any, i: number) => (
+                      <tr key={i} className="border-b border-lab-neutral-100">
+                        <td className="p-2">{new Date(d.fecha).toLocaleDateString('es-ES')}</td>
+                        <td className="text-right p-2 font-medium text-purple-600">{d.cantidad}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-lab-neutral-500">No hay descargas en este período</div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Productividad por Bioquímico</CardTitle>
+            <CardDescription>Resultados validados por cada profesional</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {data.por_bioquimico?.length > 0 ? (
+              <div className="space-y-3">
+                {data.por_bioquimico?.map((b: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-lab-neutral-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-lab-primary-100 text-lab-primary-700 flex items-center justify-center font-bold">
+                        {b.nombre.split(' ').map((n: string) => n[0]).slice(0, 2).join('')}
+                      </div>
+                      <span className="font-medium">{b.nombre}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-lg text-green-600">{b.cantidad_validados}</span>
+                      <span className="text-xs text-lab-neutral-500 block">validados</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-lab-neutral-500">No hay datos de validación</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+
   const renderReport = () => {
     if (loading) {
       return (
@@ -497,6 +664,8 @@ export default function ReportesPage() {
         return renderDashboard(reportData)
       case 'ventas':
         return renderVentas(reportData)
+      case 'resultados':
+        return renderResultados(reportData)
       case 'examenes':
         return renderExamenes(reportData)
       case 'citas':

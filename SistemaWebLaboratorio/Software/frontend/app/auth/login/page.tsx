@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,9 @@ export default function LoginPage() {
   const [shake, setShake] = useState(false)
   const [success, setSuccess] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [isBlocked, setIsBlocked] = useState(false)
+  const [blockTimeRemaining, setBlockTimeRemaining] = useState(0)
+  const [failedAttempts, setFailedAttempts] = useState(0)
 
   useEffect(() => {
     setMounted(true)
@@ -33,8 +36,58 @@ export default function LoginPage() {
     }
   }, [shake])
 
+  // Countdown timer for blocked account
+  useEffect(() => {
+    if (blockTimeRemaining > 0) {
+      const timer = setInterval(() => {
+        setBlockTimeRemaining((prev) => {
+          if (prev <= 1) {
+            setIsBlocked(false)
+            setError('')
+            setFailedAttempts(0)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      return () => clearInterval(timer)
+    }
+  }, [blockTimeRemaining])
+
+  // Parse error message to detect account blocking
+  const parseBlockMessage = useCallback((message: string) => {
+    // Check for Spanish or English block messages
+    const blockPatterns = [
+      /bloqueada.*?(\d+)\s*minuto/i,
+      /bloqueado.*?(\d+)\s*minuto/i,
+      /blocked.*?(\d+)\s*minute/i,
+      /intente.*?(\d+)\s*minuto/i,
+      /try.*?(\d+)\s*minute/i,
+    ]
+
+    for (const pattern of blockPatterns) {
+      const match = message.match(pattern)
+      if (match) {
+        return parseInt(match[1], 10) * 60 // Convert minutes to seconds
+      }
+    }
+
+    // Check for seconds-based messages
+    const secondsPattern = /(\d+)\s*segundo/i
+    const secondsMatch = message.match(secondsPattern)
+    if (secondsMatch) {
+      return parseInt(secondsMatch[1], 10)
+    }
+
+    return 0
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Don't allow submission if blocked
+    if (isBlocked) return
+
     setError('')
     setLoading(true)
 
@@ -42,6 +95,7 @@ export default function LoginPage() {
       const data = await authApi.login(identifier, password)
       setAuth(data.user, data.access_token, data.refresh_token)
       setSuccess(true)
+      setFailedAttempts(0)
 
       await new Promise(resolve => setTimeout(resolve, 600))
 
@@ -52,14 +106,31 @@ export default function LoginPage() {
       }
     } catch (err) {
       setShake(true)
+      setFailedAttempts((prev) => prev + 1)
+
       if (err instanceof ApiError) {
-        setError(err.message)
+        const errorMessage = err.message
+        setError(errorMessage)
+
+        // Check if account is blocked
+        const blockSeconds = parseBlockMessage(errorMessage)
+        if (blockSeconds > 0) {
+          setIsBlocked(true)
+          setBlockTimeRemaining(blockSeconds)
+        }
       } else {
         setError('Error al iniciar sesión. Por favor intenta de nuevo.')
       }
     } finally {
       setLoading(false)
     }
+  }
+
+  // Format remaining time as MM:SS
+  const formatTimeRemaining = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   return (
@@ -107,15 +178,69 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Mensaje de error */}
+              {/* Mensaje de cuenta bloqueada con temporizador */}
+              {isBlocked && (
+                <div className="p-4 rounded-lg bg-red-50 border-2 border-red-300 animate-pulse-border">
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-shrink-0">
+                      <svg className="w-12 h-12 text-red-200" viewBox="0 0 100 100">
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="45"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="8"
+                        />
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="45"
+                          fill="none"
+                          stroke="rgb(239 68 68)"
+                          strokeWidth="8"
+                          strokeLinecap="round"
+                          strokeDasharray="283"
+                          strokeDashoffset={283 - (blockTimeRemaining / 300) * 283}
+                          transform="rotate(-90 50 50)"
+                          className="transition-all duration-1000"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-red-800">Cuenta bloqueada temporalmente</p>
+                      <p className="text-sm text-red-600 mt-1">
+                        Demasiados intentos fallidos. Intente de nuevo en:
+                      </p>
+                      <p className="text-2xl font-bold text-red-700 mt-1 font-mono">
+                        {formatTimeRemaining(blockTimeRemaining)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Mensaje de error normal (no bloqueado) */}
               <div className={`overflow-hidden transition-all duration-200 ${
-                error ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'
+                error && !isBlocked ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'
               }`}>
-                <div className="p-3 rounded-lg bg-lab-danger-50 border border-lab-danger-200 text-lab-danger-700 text-sm flex items-center gap-2">
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>{error}</span>
+                <div className="p-3 rounded-lg bg-lab-danger-50 border border-lab-danger-200 text-lab-danger-700 text-sm">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{error}</span>
+                  </div>
+                  {failedAttempts >= 3 && failedAttempts < 5 && (
+                    <p className="mt-2 text-xs text-red-500 font-medium">
+                      Advertencia: {5 - failedAttempts} intentos restantes antes del bloqueo
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -202,8 +327,8 @@ export default function LoginPage() {
                 type="submit"
                 className={`w-full h-11 text-base font-medium transition-colors duration-200 ${
                   success ? 'bg-green-500 hover:bg-green-600' : ''
-                }`}
-                disabled={loading || success}
+                } ${isBlocked ? 'bg-gray-400 cursor-not-allowed' : ''}`}
+                disabled={loading || success || isBlocked}
               >
                 {loading ? (
                   <div className="flex items-center justify-center gap-2">
@@ -219,6 +344,13 @@ export default function LoginPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     <span>Acceso concedido</span>
+                  </div>
+                ) : isBlocked ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>Cuenta bloqueada</span>
                   </div>
                 ) : (
                   'Iniciar Sesión'

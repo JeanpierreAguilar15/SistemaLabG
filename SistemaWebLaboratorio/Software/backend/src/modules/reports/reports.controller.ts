@@ -96,4 +96,16 @@ export class ReportsController {
   ) {
     return this.reportsService.getPacientesReport(fecha_desde, fecha_hasta);
   }
+
+  @Get('resultados')
+  @ApiOperation({ summary: 'Reporte de resultados y descargas PDF' })
+  @ApiQuery({ name: 'fecha_desde', required: false })
+  @ApiQuery({ name: 'fecha_hasta', required: false })
+  @ApiResponse({ status: 200, description: 'Estadisticas de resultados y descargas' })
+  async getResultadosReport(
+    @Query('fecha_desde') fecha_desde?: string,
+    @Query('fecha_hasta') fecha_hasta?: string,
+  ) {
+    return this.reportsService.getResultadosReport(fecha_desde, fecha_hasta);
+  }
 }

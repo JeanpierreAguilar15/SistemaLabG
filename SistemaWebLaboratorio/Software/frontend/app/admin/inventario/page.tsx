@@ -1338,16 +1338,46 @@ export default function InventarioPage() {
 
   return (
     <div className="space-y-6">
-      {/* Messages */}
+      {/* Messages - Fixed position toast */}
       {message && (
-        <div
-          className={`p-4 rounded-lg ${
-            message.type === 'success'
-              ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
-              : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
-          }`}
-        >
-          {message.text}
+        <div className="fixed top-4 right-4 z-50 max-w-md animate-slide-in-right">
+          <div
+            className={`p-4 rounded-lg shadow-lg flex items-start gap-3 ${
+              message.type === 'success'
+                ? 'bg-white border-l-4 border-green-500'
+                : 'bg-white border-l-4 border-red-500'
+            }`}
+          >
+            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+              message.type === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+            }`}>
+              {message.type === 'success' ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`font-medium text-sm ${
+                message.type === 'success' ? 'text-green-800' : 'text-red-800'
+              }`}>
+                {message.type === 'success' ? 'Operación exitosa' : 'Error'}
+              </p>
+              <p className="text-sm text-gray-600 mt-1">{message.text}</p>
+            </div>
+            <button
+              onClick={() => setMessage(null)}
+              className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
 

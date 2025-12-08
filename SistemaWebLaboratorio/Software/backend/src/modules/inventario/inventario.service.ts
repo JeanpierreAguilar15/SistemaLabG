@@ -153,7 +153,7 @@ export class InventarioService {
 
   /**
    * Kardex Global - Resumen de todos los items con sus movimientos
-   * Retorna un resumen completo del inventario con:
+   * OPTIMIZADO: Usa consultas batch en lugar de N+1
    * - Total de entradas y salidas por item
    * - Stock actual y valor
    * - Último movimiento
@@ -164,7 +164,7 @@ export class InventarioService {
     fecha_hasta?: string;
     categoria?: number;
   }) {
-    // Obtener todos los items activos con su categoría
+    // 1. Obtener todos los items activos con su categoría (1 query)
     const items = await this.prisma.item.findMany({
       where: {
         activo: true,
@@ -176,8 +176,27 @@ export class InventarioService {
       orderBy: { nombre: 'asc' },
     });
 
+    if (items.length === 0) {
+      return {
+        resumen: {
+          total_items: 0,
+          items_criticos: 0,
+          items_bajos: 0,
+          items_agotados: 0,
+          valor_total_inventario: 0,
+          total_entradas: 0,
+          total_salidas: 0,
+        },
+        items: [],
+      };
+    }
+
+    const itemIds = items.map(i => i.codigo_item);
+
     // Construir filtro de fechas para movimientos
-    const whereMovimiento: any = {};
+    const whereMovimiento: any = {
+      codigo_item: { in: itemIds },
+    };
     if (filters?.fecha_desde) {
       whereMovimiento.fecha_movimiento = {
         ...whereMovimiento.fecha_movimiento,
@@ -191,73 +210,86 @@ export class InventarioService {
       };
     }
 
-    // Obtener resumen de movimientos por item
-    const kardexItems = await Promise.all(
-      items.map(async (item) => {
-        // Obtener movimientos del item
-        const movimientos = await this.prisma.movimiento.findMany({
-          where: {
-            codigo_item: item.codigo_item,
-            ...whereMovimiento,
-          },
-          orderBy: { fecha_movimiento: 'desc' },
-          take: 1, // Solo el último movimiento
-          select: {
-            fecha_movimiento: true,
-            tipo_movimiento: true,
-            cantidad: true,
-          },
-        });
+    // 2. Obtener TODOS los totales de movimientos en UNA sola query
+    const allTotales = await this.prisma.movimiento.groupBy({
+      by: ['codigo_item', 'tipo_movimiento'],
+      where: whereMovimiento,
+      _sum: { cantidad: true },
+      _count: true,
+    });
 
-        // Calcular totales de entradas y salidas
-        const totales = await this.prisma.movimiento.groupBy({
-          by: ['tipo_movimiento'],
-          where: {
-            codigo_item: item.codigo_item,
-            ...whereMovimiento,
-          },
-          _sum: { cantidad: true },
-          _count: true,
-        });
+    // 3. Obtener último movimiento por item usando raw query para eficiencia
+    // Usamos una subquery con DISTINCT ON (PostgreSQL)
+    const ultimosMovimientos = await this.prisma.$queryRaw<Array<{
+      codigo_item: number;
+      fecha_movimiento: Date;
+      tipo_movimiento: string;
+      cantidad: number;
+    }>>`
+      SELECT DISTINCT ON (codigo_item)
+        codigo_item, fecha_movimiento, tipo_movimiento, cantidad
+      FROM inventario.movimiento
+      WHERE codigo_item = ANY(${itemIds})
+      ${filters?.fecha_desde ? Prisma.sql`AND fecha_movimiento >= ${new Date(filters.fecha_desde)}` : Prisma.empty}
+      ${filters?.fecha_hasta ? Prisma.sql`AND fecha_movimiento <= ${new Date(filters.fecha_hasta)}` : Prisma.empty}
+      ORDER BY codigo_item, fecha_movimiento DESC
+    `;
 
-        const entradas = totales
-          .filter(t => ['ENTRADA', 'AJUSTE_POSITIVO', 'COMPRA'].includes(t.tipo_movimiento))
-          .reduce((sum, t) => sum + (t._sum.cantidad || 0), 0);
+    // Crear mapas para acceso O(1)
+    const totalesMap = new Map<number, { entradas: number; salidas: number; total: number }>();
+    for (const t of allTotales) {
+      const current = totalesMap.get(t.codigo_item) || { entradas: 0, salidas: 0, total: 0 };
 
-        const salidas = totales
-          .filter(t => ['SALIDA', 'AJUSTE_NEGATIVO', 'USO_EXAMEN', 'VENCIMIENTO'].includes(t.tipo_movimiento))
-          .reduce((sum, t) => sum + (t._sum.cantidad || 0), 0);
+      if (['ENTRADA', 'AJUSTE_POSITIVO', 'COMPRA'].includes(t.tipo_movimiento)) {
+        current.entradas += t._sum.cantidad || 0;
+      } else if (['SALIDA', 'AJUSTE_NEGATIVO', 'USO_EXAMEN', 'VENCIMIENTO'].includes(t.tipo_movimiento)) {
+        current.salidas += t._sum.cantidad || 0;
+      }
+      current.total += t._count;
 
-        const totalMovimientos = totales.reduce((sum, t) => sum + t._count, 0);
+      totalesMap.set(t.codigo_item, current);
+    }
 
-        // Determinar estado del stock
-        let estadoStock: 'NORMAL' | 'BAJO' | 'CRITICO' | 'AGOTADO' = 'NORMAL';
-        if (item.stock_actual <= 0) {
-          estadoStock = 'AGOTADO';
-        } else if (item.stock_actual <= item.stock_minimo) {
-          estadoStock = 'CRITICO';
-        } else if (item.stock_actual <= item.stock_minimo * 1.5) {
-          estadoStock = 'BAJO';
-        }
-
-        return {
-          codigo_item: item.codigo_item,
-          codigo_interno: item.codigo_interno,
-          nombre: item.nombre,
-          categoria: item.categoria?.nombre || 'Sin categoría',
-          unidad_medida: item.unidad_medida,
-          stock_actual: item.stock_actual,
-          stock_minimo: item.stock_minimo,
-          costo_unitario: item.costo_unitario,
-          valor_inventario: item.stock_actual * (item.costo_unitario ? parseFloat(item.costo_unitario.toString()) : 0),
-          total_entradas: entradas,
-          total_salidas: salidas,
-          total_movimientos: totalMovimientos,
-          ultimo_movimiento: movimientos[0] || null,
-          estado_stock: estadoStock,
-        };
-      })
+    const ultimoMovMap = new Map(
+      ultimosMovimientos.map(m => [m.codigo_item, m])
     );
+
+    // 4. Construir resultado final (sin queries adicionales)
+    const kardexItems = items.map(item => {
+      const totales = totalesMap.get(item.codigo_item) || { entradas: 0, salidas: 0, total: 0 };
+      const ultimoMov = ultimoMovMap.get(item.codigo_item);
+
+      // Determinar estado del stock
+      let estadoStock: 'NORMAL' | 'BAJO' | 'CRITICO' | 'AGOTADO' = 'NORMAL';
+      if (item.stock_actual <= 0) {
+        estadoStock = 'AGOTADO';
+      } else if (item.stock_actual <= item.stock_minimo) {
+        estadoStock = 'CRITICO';
+      } else if (item.stock_actual <= item.stock_minimo * 1.5) {
+        estadoStock = 'BAJO';
+      }
+
+      return {
+        codigo_item: item.codigo_item,
+        codigo_interno: item.codigo_interno,
+        nombre: item.nombre,
+        categoria: item.categoria?.nombre || 'Sin categoría',
+        unidad_medida: item.unidad_medida,
+        stock_actual: item.stock_actual,
+        stock_minimo: item.stock_minimo,
+        costo_unitario: item.costo_unitario,
+        valor_inventario: item.stock_actual * (item.costo_unitario ? parseFloat(item.costo_unitario.toString()) : 0),
+        total_entradas: totales.entradas,
+        total_salidas: totales.salidas,
+        total_movimientos: totales.total,
+        ultimo_movimiento: ultimoMov ? {
+          fecha_movimiento: ultimoMov.fecha_movimiento,
+          tipo_movimiento: ultimoMov.tipo_movimiento,
+          cantidad: ultimoMov.cantidad,
+        } : null,
+        estado_stock: estadoStock,
+      };
+    });
 
     // Calcular totales generales
     const totalesGenerales = {

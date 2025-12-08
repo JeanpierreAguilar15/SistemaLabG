@@ -106,7 +106,13 @@ INSERT INTO usuarios.configuracion_sistema (clave, valor, descripcion, grupo, ti
 ('HORA_INICIO_CITAS', '07:00', 'Hora de inicio para agendar citas', 'AGENDA', 'TIME', false),
 ('HORA_FIN_CITAS', '18:00', 'Hora de fin para agendar citas', 'AGENDA', 'TIME', false),
 ('DURACION_SLOT_MINUTOS', '15', 'Duración de cada slot de citas en minutos', 'AGENDA', 'INTEGER', false),
-('DIAS_ANTICIPACION_CITAS', '30', 'Días máximos de anticipación para agendar', 'AGENDA', 'INTEGER', false)
+('DIAS_ANTICIPACION_CITAS', '30', 'Días máximos de anticipación para agendar', 'AGENDA', 'INTEGER', false),
+-- Configuración de Seguridad
+('LOGIN_MAX_INTENTOS', '5', 'Número máximo de intentos de login antes de bloquear', 'SEGURIDAD', 'INTEGER', false),
+('LOGIN_MINUTOS_BLOQUEO', '5', 'Minutos de bloqueo después de exceder intentos', 'SEGURIDAD', 'INTEGER', false),
+('SESSION_TIMEOUT_MINUTOS', '30', 'Minutos de inactividad antes de cerrar sesión', 'SEGURIDAD', 'INTEGER', false),
+('PASSWORD_MIN_LENGTH', '8', 'Longitud mínima de contraseña', 'SEGURIDAD', 'INTEGER', false),
+('REQUIRE_EMAIL_VERIFICATION', 'false', 'Requiere verificación de email para login', 'SEGURIDAD', 'BOOLEAN', false)
 ON CONFLICT (clave) DO NOTHING;
 
 -- =====================================================

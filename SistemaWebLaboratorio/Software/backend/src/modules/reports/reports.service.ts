@@ -460,4 +460,149 @@ export class ReportsService {
       cotizaciones_pendientes: cotizacionesPendientes,
     };
   }
+
+  // ==================== REPORTE DE RESULTADOS ====================
+
+  async getResultadosReport(fecha_desde?: string, fecha_hasta?: string) {
+    const whereClause: Prisma.ResultadoWhereInput = {};
+
+    if (fecha_desde) {
+      whereClause.fecha_resultado = { ...whereClause.fecha_resultado as any, gte: new Date(fecha_desde) };
+    }
+    if (fecha_hasta) {
+      whereClause.fecha_resultado = { ...whereClause.fecha_resultado as any, lte: new Date(fecha_hasta + 'T23:59:59') };
+    }
+
+    // Conteo por estado
+    const porEstado = await this.prisma.resultado.groupBy({
+      by: ['estado'],
+      where: whereClause,
+      _count: { codigo_resultado: true },
+    });
+
+    // Total de resultados
+    const totalResultados = porEstado.reduce((sum, e) => sum + e._count.codigo_resultado, 0);
+
+    // Resultados validados
+    const validados = porEstado.find(e => e.estado === 'VALIDADO')?._count.codigo_resultado || 0;
+    const enProceso = porEstado.find(e => e.estado === 'EN_PROCESO')?._count.codigo_resultado || 0;
+    const pendientes = porEstado.find(e => e.estado === 'PENDIENTE')?._count.codigo_resultado || 0;
+
+    // Descargas de resultados
+    const whereDescarga: Prisma.DescargaResultadoWhereInput = {};
+    if (fecha_desde) {
+      whereDescarga.fecha_descarga = { ...whereDescarga.fecha_descarga as any, gte: new Date(fecha_desde) };
+    }
+    if (fecha_hasta) {
+      whereDescarga.fecha_descarga = { ...whereDescarga.fecha_descarga as any, lte: new Date(fecha_hasta + 'T23:59:59') };
+    }
+
+    const totalDescargas = await this.prisma.descargaResultado.count({ where: whereDescarga });
+
+    // Descargas por día (últimos 30 días)
+    const hace30Dias = new Date();
+    hace30Dias.setDate(hace30Dias.getDate() - 30);
+
+    const descargasPorDia = await this.prisma.$queryRaw<Array<{ fecha: Date; cantidad: number }>>`
+      SELECT DATE(fecha_descarga) as fecha, COUNT(*) as cantidad
+      FROM resultados.descarga_resultado
+      WHERE fecha_descarga >= ${hace30Dias}
+      GROUP BY DATE(fecha_descarga)
+      ORDER BY fecha DESC
+    `;
+
+    // Top exámenes con más resultados
+    const topExamenes = await this.prisma.resultado.groupBy({
+      by: ['codigo_examen'],
+      where: whereClause,
+      _count: { codigo_resultado: true },
+      orderBy: { _count: { codigo_resultado: 'desc' } },
+      take: 10,
+    });
+
+    // Obtener nombres de exámenes
+    const examenIds = topExamenes.map(e => e.codigo_examen);
+    const examenes = await this.prisma.examen.findMany({
+      where: { codigo_examen: { in: examenIds } },
+      select: { codigo_examen: true, nombre: true, codigo_interno: true },
+    });
+
+    const examenesMap = new Map(examenes.map(e => [e.codigo_examen, e]));
+
+    // Resultados fuera de rango
+    const fueraDeRango = await this.prisma.resultado.count({
+      where: {
+        ...whereClause,
+        dentro_rango_normal: false,
+      },
+    });
+
+    // Tiempo promedio de procesamiento (desde muestra hasta validación)
+    const tiemposProcesamiento = await this.prisma.$queryRaw<[{ promedio_horas: number }]>`
+      SELECT AVG(EXTRACT(EPOCH FROM (r.fecha_validacion - m.fecha_toma)) / 3600) as promedio_horas
+      FROM resultados.resultado r
+      JOIN resultados.muestra m ON r.codigo_muestra = m.codigo_muestra
+      WHERE r.estado = 'VALIDADO'
+        AND r.fecha_validacion IS NOT NULL
+        ${fecha_desde ? Prisma.sql`AND r.fecha_resultado >= ${new Date(fecha_desde)}` : Prisma.empty}
+        ${fecha_hasta ? Prisma.sql`AND r.fecha_resultado <= ${new Date(fecha_hasta + 'T23:59:59')}` : Prisma.empty}
+    `;
+
+    // Resultados por bioquímico (validador)
+    const porBioquimico = await this.prisma.resultado.groupBy({
+      by: ['validado_por'],
+      where: {
+        ...whereClause,
+        validado_por: { not: null },
+      },
+      _count: { codigo_resultado: true },
+    });
+
+    const validadorIds = porBioquimico.map(b => b.validado_por!).filter(Boolean);
+    const validadores = await this.prisma.usuario.findMany({
+      where: { codigo_usuario: { in: validadorIds } },
+      select: { codigo_usuario: true, nombres: true, apellidos: true },
+    });
+    const validadoresMap = new Map(validadores.map(v => [v.codigo_usuario, v]));
+
+    return {
+      resumen: {
+        total_resultados: totalResultados,
+        validados,
+        en_proceso: enProceso,
+        pendientes,
+        fuera_de_rango: fueraDeRango,
+        total_descargas_pdf: totalDescargas,
+        tiempo_promedio_horas: Number(tiemposProcesamiento[0]?.promedio_horas || 0).toFixed(1),
+      },
+      por_estado: porEstado.map(e => ({
+        estado: e.estado,
+        cantidad: e._count.codigo_resultado,
+        porcentaje: totalResultados > 0
+          ? ((e._count.codigo_resultado / totalResultados) * 100).toFixed(1) + '%'
+          : '0%',
+      })),
+      top_examenes: topExamenes.map(e => {
+        const examen = examenesMap.get(e.codigo_examen);
+        return {
+          codigo_examen: e.codigo_examen,
+          nombre: examen?.nombre || 'Desconocido',
+          codigo_interno: examen?.codigo_interno || '',
+          cantidad: e._count.codigo_resultado,
+        };
+      }),
+      descargas_por_dia: descargasPorDia.map(d => ({
+        fecha: d.fecha,
+        cantidad: Number(d.cantidad),
+      })),
+      por_bioquimico: porBioquimico.map(b => {
+        const validador = validadoresMap.get(b.validado_por!);
+        return {
+          codigo_usuario: b.validado_por,
+          nombre: validador ? `${validador.nombres} ${validador.apellidos}` : 'Sistema',
+          cantidad_validados: b._count.codigo_resultado,
+        };
+      }).sort((a, b) => b.cantidad_validados - a.cantidad_validados),
+    };
+  }
 }
