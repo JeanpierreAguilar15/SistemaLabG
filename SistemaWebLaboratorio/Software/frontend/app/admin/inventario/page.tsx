@@ -111,7 +111,18 @@ const PRIORIDAD_CONFIG = {
   BAJA: { label: 'Baja', color: 'bg-lab-neutral-400 text-white' },
 }
 
-type Tab = 'items' | 'movimientos' | 'alertas' | 'lotes' | 'kardex'
+type Tab = 'items' | 'movimientos' | 'alertas' | 'lotes' | 'kardex' | 'categorias'
+
+// Interface for Categories
+interface Categoria {
+  codigo_categoria: number
+  nombre: string
+  descripcion: string | null
+  activo: boolean
+  _count?: {
+    items: number
+  }
+}
 
 // Interface for Lots
 interface Lote {
@@ -161,12 +172,19 @@ interface KardexResponse {
     nombre: string
     stock_actual: number
     unidad_medida: string
+    categoria?: { nombre: string } | null
   }
+  stock_actual: number
   movimientos: KardexEntry[]
+  totales: {
+    entradas: number
+    salidas: number
+    ajustes_positivos: number
+    ajustes_negativos: number
+  }
   resumen: {
-    total_entradas: number
-    total_salidas: number
-    total_ajustes: number
+    total_movimientos: number
+    balance: number
   }
 }
 
@@ -186,6 +204,7 @@ export default function InventarioPage() {
     codigo_interno: '',
     nombre: '',
     descripcion: '',
+    codigo_categoria: '',
     unidad_medida: '',
     stock_actual: '0',
     stock_minimo: '0',
@@ -244,6 +263,22 @@ export default function InventarioPage() {
   // Proveedores for lote form
   const [proveedores, setProveedores] = useState<{ codigo_proveedor: number; razon_social: string }[]>([])
 
+  // Categorias state
+  const [categorias, setCategorias] = useState<Categoria[]>([])
+  const [categoriasLoading, setCategoriasLoading] = useState(false)
+  const [showCategoriaForm, setShowCategoriaForm] = useState(false)
+  const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null)
+  const [categoriaFormData, setCategoriaFormData] = useState({
+    nombre: '',
+    descripcion: '',
+  })
+
+  // Quick Kardex Modal state
+  const [showQuickKardex, setShowQuickKardex] = useState(false)
+  const [quickKardexItem, setQuickKardexItem] = useState<ItemInventario | null>(null)
+  const [quickKardexData, setQuickKardexData] = useState<KardexResponse | null>(null)
+  const [quickKardexLoading, setQuickKardexLoading] = useState(false)
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -265,6 +300,14 @@ export default function InventarioPage() {
   useEffect(() => {
     if (activeTab === 'items' || activeTab === 'movimientos') {
       loadItems()
+      loadCategorias() // Load categories for the item form dropdown
+    }
+  }, [activeTab])
+
+  // Load categories when switching to categories tab
+  useEffect(() => {
+    if (activeTab === 'categorias') {
+      loadCategorias()
     }
   }, [activeTab])
 
@@ -330,6 +373,7 @@ export default function InventarioPage() {
         codigo_interno: item.codigo_interno,
         nombre: item.nombre,
         descripcion: item.descripcion || '',
+        codigo_categoria: item.codigo_categoria?.toString() || '',
         unidad_medida: item.unidad_medida,
         stock_actual: item.stock_actual.toString(),
         stock_minimo: item.stock_minimo.toString(),
@@ -344,6 +388,7 @@ export default function InventarioPage() {
         codigo_interno: '',
         nombre: '',
         descripcion: '',
+        codigo_categoria: '',
         unidad_medida: '',
         stock_actual: '0',
         stock_minimo: '0',
@@ -363,6 +408,7 @@ export default function InventarioPage() {
       codigo_interno: '',
       nombre: '',
       descripcion: '',
+      codigo_categoria: '',
       unidad_medida: '',
       stock_actual: '0',
       stock_minimo: '0',
@@ -427,6 +473,10 @@ export default function InventarioPage() {
         stock_actual: stockActual,
         stock_minimo: stockMinimo,
         activo: itemFormData.activo,
+      }
+
+      if (itemFormData.codigo_categoria) {
+        payload.codigo_categoria = parseInt(itemFormData.codigo_categoria)
       }
 
       if (stockMaximo !== undefined) {
@@ -688,6 +738,152 @@ export default function InventarioPage() {
     if (filterAlertPrioridad && alerta.prioridad !== filterAlertPrioridad) return false
     return true
   })
+
+  // ==================== CATEGORIAS FUNCTIONS ====================
+  const loadCategorias = async () => {
+    try {
+      setCategoriasLoading(true)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setCategorias(data)
+      } else {
+        console.error('Error al cargar categorías')
+      }
+    } catch (error) {
+      console.error('Error de conexión:', error)
+    } finally {
+      setCategoriasLoading(false)
+    }
+  }
+
+  const handleOpenCategoriaForm = (categoria?: Categoria) => {
+    if (categoria) {
+      setEditingCategoria(categoria)
+      setCategoriaFormData({
+        nombre: categoria.nombre,
+        descripcion: categoria.descripcion || '',
+      })
+    } else {
+      setEditingCategoria(null)
+      setCategoriaFormData({
+        nombre: '',
+        descripcion: '',
+      })
+    }
+    setShowCategoriaForm(true)
+  }
+
+  const handleCloseCategoriaForm = () => {
+    setShowCategoriaForm(false)
+    setEditingCategoria(null)
+    setCategoriaFormData({ nombre: '', descripcion: '' })
+  }
+
+  const handleCategoriaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!categoriaFormData.nombre.trim()) {
+      setMessage({ type: 'error', text: 'El nombre de la categoría es requerido' })
+      return
+    }
+
+    try {
+      const url = editingCategoria
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories/${editingCategoria.codigo_categoria}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories`
+
+      const response = await fetch(url, {
+        method: editingCategoria ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          nombre: categoriaFormData.nombre.trim(),
+          descripcion: categoriaFormData.descripcion.trim() || null,
+        }),
+      })
+
+      if (response.ok) {
+        setMessage({
+          type: 'success',
+          text: editingCategoria ? 'Categoría actualizada correctamente' : 'Categoría creada correctamente',
+        })
+        handleCloseCategoriaForm()
+        loadCategorias()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al guardar categoría' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleDeleteCategoria = async (codigo_categoria: number) => {
+    if (!confirm('¿Está seguro de eliminar esta categoría? Si tiene items asociados, será desactivada.')) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories/${codigo_categoria}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Categoría eliminada correctamente' })
+        loadCategorias()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al eliminar categoría' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  // ==================== QUICK KARDEX MODAL ====================
+  const openQuickKardex = async (item: ItemInventario) => {
+    setQuickKardexItem(item)
+    setShowQuickKardex(true)
+    setQuickKardexLoading(true)
+    setQuickKardexData(null)
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items/${item.codigo_item}/kardex`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setQuickKardexData(data)
+      } else {
+        setMessage({ type: 'error', text: 'Error al cargar kardex del item' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setQuickKardexLoading(false)
+    }
+  }
+
+  const closeQuickKardex = () => {
+    setShowQuickKardex(false)
+    setQuickKardexItem(null)
+    setQuickKardexData(null)
+  }
 
   // ==================== LOTES FUNCTIONS ====================
   const loadLotes = async () => {
@@ -971,6 +1167,14 @@ export default function InventarioPage() {
             Nuevo Lote
           </Button>
         )}
+        {activeTab === 'categorias' && (
+          <Button onClick={() => handleOpenCategoriaForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
+            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nueva Categoría
+          </Button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -1025,6 +1229,16 @@ export default function InventarioPage() {
             }`}
           >
             Kardex
+          </button>
+          <button
+            onClick={() => setActiveTab('categorias')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'categorias'
+                ? 'border-lab-primary-600 text-lab-primary-600'
+                : 'border-transparent text-lab-neutral-500 hover:text-lab-neutral-700 hover:border-lab-neutral-300'
+            }`}
+          >
+            Categorías
           </button>
         </nav>
       </div>
@@ -1103,6 +1317,7 @@ export default function InventarioPage() {
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Nombre</th>
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Stock Actual</th>
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Mín/Máx</th>
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Categoría</th>
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Unidad</th>
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Estado</th>
                         <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
@@ -1124,13 +1339,27 @@ export default function InventarioPage() {
                             <td className="p-4 text-sm text-lab-neutral-600">
                               {item.stock_minimo} / {item.stock_maximo || '-'}
                             </td>
+                            <td className="p-4 text-sm text-lab-neutral-600">
+                              {item.categoria?.nombre || <span className="text-lab-neutral-400">Sin categoría</span>}
+                            </td>
                             <td className="p-4 text-sm text-lab-neutral-600">{item.unidad_medida}</td>
                             <td className="p-4">
                               <span className={`text-xs px-2 py-1 rounded ${stockStatus.color}`}>
                                 {stockStatus.label}
                               </span>
                             </td>
-                            <td className="p-4 text-right space-x-2">
+                            <td className="p-4 text-right space-x-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openQuickKardex(item)}
+                                className="text-lab-primary-600 hover:text-lab-primary-700"
+                                title="Ver Kardex"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1217,6 +1446,26 @@ export default function InventarioPage() {
                         rows={2}
                         className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
                       />
+                    </div>
+
+                    <div>
+                      <label htmlFor="codigo_categoria" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Categoría
+                      </label>
+                      <select
+                        id="codigo_categoria"
+                        name="codigo_categoria"
+                        value={itemFormData.codigo_categoria}
+                        onChange={handleItemInputChange}
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                      >
+                        <option value="">Sin categoría</option>
+                        {categorias.filter(c => c.activo).map((cat) => (
+                          <option key={cat.codigo_categoria} value={cat.codigo_categoria}>
+                            {cat.nombre}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
@@ -2316,18 +2565,24 @@ export default function InventarioPage() {
                     <CardTitle className="text-lg">Resumen de Movimientos</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-3 gap-4 text-center">
+                    <div className="grid grid-cols-4 gap-4 text-center">
                       <div>
-                        <div className="text-2xl font-bold text-lab-success-600">{kardexData.resumen.total_entradas}</div>
+                        <div className="text-2xl font-bold text-lab-success-600">{kardexData.totales?.entradas || 0}</div>
                         <div className="text-sm text-lab-neutral-600">Entradas</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-lab-danger-600">{kardexData.resumen.total_salidas}</div>
+                        <div className="text-2xl font-bold text-lab-danger-600">{kardexData.totales?.salidas || 0}</div>
                         <div className="text-sm text-lab-neutral-600">Salidas</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-lab-warning-600">{kardexData.resumen.total_ajustes}</div>
+                        <div className="text-2xl font-bold text-lab-warning-600">
+                          {(kardexData.totales?.ajustes_positivos || 0) + (kardexData.totales?.ajustes_negativos || 0)}
+                        </div>
                         <div className="text-sm text-lab-neutral-600">Ajustes</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-lab-primary-600">{kardexData.resumen?.total_movimientos || 0}</div>
+                        <div className="text-sm text-lab-neutral-600">Total</div>
                       </div>
                     </div>
                   </CardContent>
@@ -2417,6 +2672,262 @@ export default function InventarioPage() {
             </Card>
           )}
         </>
+      )}
+
+      {/* ==================== CATEGORIAS TAB ==================== */}
+      {activeTab === 'categorias' && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Categorías de Items ({categorias.length})</CardTitle>
+              <CardDescription>Organiza los items del inventario por categoría</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {categoriasLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-lab-neutral-200">
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">ID</th>
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Nombre</th>
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Descripción</th>
+                        <th className="text-center p-4 font-semibold text-lab-neutral-900">Items</th>
+                        <th className="text-center p-4 font-semibold text-lab-neutral-900">Estado</th>
+                        <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {categorias.map((cat) => (
+                        <tr key={cat.codigo_categoria} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
+                          <td className="p-4 text-sm font-mono text-lab-neutral-600">{cat.codigo_categoria}</td>
+                          <td className="p-4 font-medium text-lab-neutral-900">{cat.nombre}</td>
+                          <td className="p-4 text-sm text-lab-neutral-600 max-w-xs truncate">
+                            {cat.descripcion || <span className="text-lab-neutral-400">-</span>}
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className="text-sm font-semibold text-lab-primary-600">
+                              {cat._count?.items || 0}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              cat.activo
+                                ? 'bg-lab-success-100 text-lab-success-800'
+                                : 'bg-lab-neutral-100 text-lab-neutral-600'
+                            }`}>
+                              {cat.activo ? 'Activo' : 'Inactivo'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenCategoriaForm(cat)}
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDeleteCategoria(cat.codigo_categoria)}
+                              className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                            >
+                              Eliminar
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {categorias.length === 0 && (
+                    <div className="text-center py-12 text-lab-neutral-500">
+                      No hay categorías registradas. Cree la primera categoría para organizar su inventario.
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Categoria Form Modal */}
+          {showCategoriaForm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+                <div className="p-6 border-b border-lab-neutral-200">
+                  <h2 className="text-2xl font-bold text-lab-neutral-900">
+                    {editingCategoria ? 'Editar Categoría' : 'Nueva Categoría'}
+                  </h2>
+                </div>
+
+                <form onSubmit={handleCategoriaSubmit} className="p-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Nombre *
+                      </label>
+                      <input
+                        type="text"
+                        value={categoriaFormData.nombre}
+                        onChange={(e) => setCategoriaFormData({ ...categoriaFormData, nombre: e.target.value })}
+                        required
+                        placeholder="Ej: Reactivos, Materiales, Equipos..."
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Descripción
+                      </label>
+                      <textarea
+                        value={categoriaFormData.descripcion}
+                        onChange={(e) => setCategoriaFormData({ ...categoriaFormData, descripcion: e.target.value })}
+                        rows={3}
+                        placeholder="Descripción opcional de la categoría..."
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-lab-neutral-200">
+                    <Button type="button" onClick={handleCloseCategoriaForm} variant="outline">
+                      Cancelar
+                    </Button>
+                    <Button type="submit" className="bg-lab-primary-600 hover:bg-lab-primary-700">
+                      {editingCategoria ? 'Actualizar' : 'Crear'} Categoría
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ==================== QUICK KARDEX MODAL ==================== */}
+      {showQuickKardex && quickKardexItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full my-8 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-lab-neutral-900">Kardex del Item</h2>
+                <p className="text-sm text-lab-neutral-600 mt-1">
+                  <span className="font-mono">{quickKardexItem.codigo_interno}</span> - {quickKardexItem.nombre}
+                </p>
+              </div>
+              <Button variant="outline" onClick={closeQuickKardex}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {quickKardexLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
+                </div>
+              ) : quickKardexData ? (
+                <div className="space-y-4">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-lab-neutral-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-lab-primary-600">{quickKardexData.stock_actual}</div>
+                      <div className="text-sm text-lab-neutral-600">Stock Actual</div>
+                    </div>
+                    <div className="bg-lab-success-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-lab-success-600">{quickKardexData.totales?.entradas || 0}</div>
+                      <div className="text-sm text-lab-neutral-600">Entradas</div>
+                    </div>
+                    <div className="bg-lab-danger-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-lab-danger-600">{quickKardexData.totales?.salidas || 0}</div>
+                      <div className="text-sm text-lab-neutral-600">Salidas</div>
+                    </div>
+                    <div className="bg-lab-warning-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-lab-warning-600">
+                        {(quickKardexData.totales?.ajustes_positivos || 0) + (quickKardexData.totales?.ajustes_negativos || 0)}
+                      </div>
+                      <div className="text-sm text-lab-neutral-600">Ajustes</div>
+                    </div>
+                  </div>
+
+                  {/* Movements Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-lab-neutral-200">
+                          <th className="text-left p-3 font-semibold text-lab-neutral-900">Fecha</th>
+                          <th className="text-left p-3 font-semibold text-lab-neutral-900">Tipo</th>
+                          <th className="text-center p-3 font-semibold text-lab-neutral-900">Cant.</th>
+                          <th className="text-center p-3 font-semibold text-lab-neutral-900">Stock</th>
+                          <th className="text-left p-3 font-semibold text-lab-neutral-900">Motivo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {quickKardexData.movimientos.slice(0, 15).map((mov) => {
+                          const tipoStyle = getTipoMovimientoStyle(mov.tipo_movimiento)
+                          return (
+                            <tr key={mov.codigo_movimiento} className="border-b border-lab-neutral-100">
+                              <td className="p-3 text-lab-neutral-600">{formatDateTime(mov.fecha_movimiento)}</td>
+                              <td className="p-3">
+                                <span className={`text-xs px-2 py-1 rounded ${tipoStyle.color}`}>
+                                  {tipoStyle.label}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center font-semibold">
+                                <span className={
+                                  mov.tipo_movimiento === 'ENTRADA' || mov.tipo_movimiento === 'AJUSTE_POSITIVO'
+                                    ? 'text-lab-success-600'
+                                    : 'text-lab-danger-600'
+                                }>
+                                  {mov.tipo_movimiento === 'ENTRADA' || mov.tipo_movimiento === 'AJUSTE_POSITIVO' ? '+' : '-'}
+                                  {mov.cantidad}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className="text-lab-neutral-500">{mov.stock_anterior}</span>
+                                <span className="mx-1">→</span>
+                                <span className="font-semibold">{mov.stock_nuevo}</span>
+                              </td>
+                              <td className="p-3 text-lab-neutral-600 truncate max-w-xs">{mov.motivo || '-'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+
+                    {quickKardexData.movimientos.length === 0 && (
+                      <div className="text-center py-8 text-lab-neutral-500">
+                        No hay movimientos registrados para este item
+                      </div>
+                    )}
+
+                    {quickKardexData.movimientos.length > 15 && (
+                      <div className="text-center py-4 text-sm text-lab-neutral-500">
+                        Mostrando los últimos 15 movimientos.
+                        <button
+                          onClick={() => { closeQuickKardex(); setActiveTab('kardex'); setSelectedItemKardex(quickKardexItem.codigo_item.toString()); }}
+                          className="ml-2 text-lab-primary-600 hover:underline"
+                        >
+                          Ver historial completo →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-lab-neutral-500">
+                  Error al cargar el kardex
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
