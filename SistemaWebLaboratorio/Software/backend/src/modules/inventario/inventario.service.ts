@@ -879,6 +879,283 @@ export class InventarioService {
     };
   }
 
+  /**
+   * Verifica si hay stock suficiente para realizar un examen
+   * @returns objeto con disponibilidad y detalles de insumos faltantes
+   */
+  async verificarStockExamen(codigo_examen: number): Promise<{
+    disponible: boolean;
+    insumosFaltantes: { item: string; requerido: number; disponible: number }[];
+  }> {
+    const insumos = await this.prisma.examenInsumo.findMany({
+      where: { codigo_examen, activo: true },
+      include: { item: true },
+    });
+
+    const insumosFaltantes: { item: string; requerido: number; disponible: number }[] = [];
+
+    for (const insumo of insumos) {
+      const cantidadRequerida = Number(insumo.cantidad_requerida);
+      if (insumo.item.stock_actual < cantidadRequerida) {
+        insumosFaltantes.push({
+          item: insumo.item.nombre,
+          requerido: cantidadRequerida,
+          disponible: insumo.item.stock_actual,
+        });
+      }
+    }
+
+    return {
+      disponible: insumosFaltantes.length === 0,
+      insumosFaltantes,
+    };
+  }
+
+  /**
+   * Verifica stock para múltiples exámenes (ej: cotización con varios exámenes)
+   */
+  async verificarStockExamenes(codigos_examenes: number[]): Promise<{
+    disponible: boolean;
+    detalles: { codigo_examen: number; disponible: boolean; faltantes: any[] }[];
+  }> {
+    const detalles: { codigo_examen: number; disponible: boolean; faltantes: any[] }[] = [];
+
+    for (const codigo_examen of codigos_examenes) {
+      const resultado = await this.verificarStockExamen(codigo_examen);
+      detalles.push({
+        codigo_examen,
+        disponible: resultado.disponible,
+        faltantes: resultado.insumosFaltantes,
+      });
+    }
+
+    return {
+      disponible: detalles.every(d => d.disponible),
+      detalles,
+    };
+  }
+
+  /**
+   * Descuenta los insumos del inventario al completar un examen
+   * Registra movimientos en el Kardex con trazabilidad
+   */
+  async descontarInsumosExamen(
+    codigo_examen: number,
+    codigo_cita: number,
+    userId: number,
+  ): Promise<{
+    success: boolean;
+    movimientos: any[];
+    mensaje: string;
+  }> {
+    // Obtener insumos requeridos para el examen
+    const insumos = await this.prisma.examenInsumo.findMany({
+      where: { codigo_examen, activo: true },
+      include: {
+        item: true,
+        examen: { select: { nombre: true } },
+      },
+    });
+
+    if (insumos.length === 0) {
+      return {
+        success: true,
+        movimientos: [],
+        mensaje: 'Este examen no tiene insumos configurados',
+      };
+    }
+
+    // Verificar stock antes de descontar
+    const verificacion = await this.verificarStockExamen(codigo_examen);
+    if (!verificacion.disponible) {
+      const faltantes = verificacion.insumosFaltantes
+        .map(f => `${f.item} (requiere: ${f.requerido}, disponible: ${f.disponible})`)
+        .join(', ');
+      throw new BadRequestException(
+        `Stock insuficiente para completar el examen. Faltantes: ${faltantes}`,
+      );
+    }
+
+    // Ejecutar descuento en transacción
+    const movimientos: any[] = [];
+
+    await this.prisma.$transaction(async (prisma) => {
+      for (const insumo of insumos) {
+        const cantidadRequerida = Number(insumo.cantidad_requerida);
+        const item = insumo.item;
+
+        // Crear movimiento de salida
+        const movimiento = await prisma.movimiento.create({
+          data: {
+            codigo_item: item.codigo_item,
+            tipo_movimiento: 'SALIDA',
+            cantidad: cantidadRequerida,
+            motivo: `Uso en examen: ${insumo.examen.nombre} - Cita #${codigo_cita}`,
+            stock_anterior: item.stock_actual,
+            stock_nuevo: item.stock_actual - cantidadRequerida,
+            realizado_por: userId,
+          },
+        });
+
+        // Actualizar stock del item
+        await prisma.item.update({
+          where: { codigo_item: item.codigo_item },
+          data: { stock_actual: { decrement: cantidadRequerida } },
+        });
+
+        // Descontar de lotes (FIFO - primero los más próximos a vencer)
+        let cantidadPendiente = cantidadRequerida;
+        const lotes = await prisma.lote.findMany({
+          where: {
+            codigo_item: item.codigo_item,
+            cantidad_actual: { gt: 0 },
+          },
+          orderBy: { fecha_vencimiento: 'asc' },
+        });
+
+        for (const lote of lotes) {
+          if (cantidadPendiente <= 0) break;
+
+          const cantidadADescontar = Math.min(cantidadPendiente, lote.cantidad_actual);
+          await prisma.lote.update({
+            where: { codigo_lote: lote.codigo_lote },
+            data: { cantidad_actual: { decrement: cantidadADescontar } },
+          });
+
+          cantidadPendiente -= cantidadADescontar;
+        }
+
+        movimientos.push({
+          codigo_movimiento: movimiento.codigo_movimiento,
+          item: item.nombre,
+          cantidad: cantidadRequerida,
+          stock_anterior: item.stock_actual,
+          stock_nuevo: item.stock_actual - cantidadRequerida,
+        });
+      }
+    });
+
+    this.logger.log(
+      `Insumos descontados para examen ${codigo_examen}, cita ${codigo_cita}. ${movimientos.length} items afectados.`,
+    );
+
+    return {
+      success: true,
+      movimientos,
+      mensaje: `Se descontaron ${movimientos.length} insumos del inventario`,
+    };
+  }
+
+  /**
+   * Descuenta insumos para múltiples exámenes (cotización completa)
+   */
+  async descontarInsumosMultiplesExamenes(
+    codigos_examenes: number[],
+    codigo_cita: number,
+    userId: number,
+  ): Promise<{
+    success: boolean;
+    resultados: any[];
+    totalMovimientos: number;
+  }> {
+    const resultados: any[] = [];
+    let totalMovimientos = 0;
+
+    for (const codigo_examen of codigos_examenes) {
+      try {
+        const resultado = await this.descontarInsumosExamen(
+          codigo_examen,
+          codigo_cita,
+          userId,
+        );
+        resultados.push({
+          codigo_examen,
+          ...resultado,
+        });
+        totalMovimientos += resultado.movimientos.length;
+      } catch (error) {
+        resultados.push({
+          codigo_examen,
+          success: false,
+          mensaje: error.message,
+        });
+      }
+    }
+
+    return {
+      success: resultados.every(r => r.success),
+      resultados,
+      totalMovimientos,
+    };
+  }
+
+  /**
+   * Obtiene el kardex completo de un item (historial de movimientos)
+   */
+  async getKardexCompletoItem(codigo_item: number, filters?: {
+    fecha_desde?: string;
+    fecha_hasta?: string;
+    tipo_movimiento?: string;
+  }) {
+    const item = await this.prisma.item.findUnique({
+      where: { codigo_item },
+      include: { categoria: true },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Item no encontrado');
+    }
+
+    const where: any = { codigo_item };
+
+    if (filters?.fecha_desde) {
+      where.fecha_movimiento = { ...where.fecha_movimiento, gte: new Date(filters.fecha_desde) };
+    }
+    if (filters?.fecha_hasta) {
+      where.fecha_movimiento = { ...where.fecha_movimiento, lte: new Date(filters.fecha_hasta) };
+    }
+    if (filters?.tipo_movimiento) {
+      where.tipo_movimiento = filters.tipo_movimiento;
+    }
+
+    const movimientos = await this.prisma.movimiento.findMany({
+      where,
+      include: {
+        lote: { select: { numero_lote: true, fecha_vencimiento: true } },
+        usuario: { select: { nombres: true, apellidos: true } },
+      },
+      orderBy: { fecha_movimiento: 'desc' },
+    });
+
+    // Calcular totales
+    const totales = {
+      entradas: 0,
+      salidas: 0,
+      ajustes_positivos: 0,
+      ajustes_negativos: 0,
+    };
+
+    for (const mov of movimientos) {
+      switch (mov.tipo_movimiento) {
+        case 'ENTRADA': totales.entradas += mov.cantidad; break;
+        case 'SALIDA': totales.salidas += mov.cantidad; break;
+        case 'AJUSTE_POSITIVO': totales.ajustes_positivos += mov.cantidad; break;
+        case 'AJUSTE_NEGATIVO': totales.ajustes_negativos += mov.cantidad; break;
+      }
+    }
+
+    return {
+      item,
+      stock_actual: item.stock_actual,
+      movimientos,
+      totales,
+      resumen: {
+        total_movimientos: movimientos.length,
+        balance: totales.entradas + totales.ajustes_positivos - totales.salidas - totales.ajustes_negativos,
+      },
+    };
+  }
+
   // ==================== ÓRDENES DE COMPRA ====================
 
   async createOrdenCompra(data: any, adminId: number) {

@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { InventarioService } from '../inventario/inventario.service';
 import {
   CreateSlotDto,
   CreateCitaDto,
@@ -23,6 +24,7 @@ export class AgendaService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => EventsGateway))
     private readonly eventsGateway: EventsGateway,
+    private readonly inventarioService: InventarioService,
   ) { }
 
   // ==================== SLOTS ====================
@@ -777,7 +779,7 @@ export class AgendaService {
       },
     });
 
-    // Si se completó la cita y tiene cotización, generar muestra y resultados pendientes
+    // Si se completó la cita y tiene cotización, generar muestra, resultados pendientes y descontar inventario
     if (data.estado === 'COMPLETADA' && cita.estado !== 'COMPLETADA' && (updatedCita as any).codigo_cotizacion) {
       const cotizacion = await this.prisma.cotizacion.findUnique({
         where: { codigo_cotizacion: (updatedCita as any).codigo_cotizacion },
@@ -798,6 +800,7 @@ export class AgendaService {
         });
 
         // Crear Resultados Pendientes
+        const codigosExamenes: number[] = [];
         for (const detalle of cotizacion.detalles) {
           await this.prisma.resultado.create({
             data: {
@@ -808,9 +811,34 @@ export class AgendaService {
               fecha_resultado: new Date(),
             }
           });
+          codigosExamenes.push(detalle.codigo_examen);
         }
 
         this.logger.log(`Generados resultados pendientes para cita ${codigo_cita}`);
+
+        // KARDEX: Descontar insumos del inventario para todos los exámenes
+        if (codigosExamenes.length > 0) {
+          try {
+            const resultadoInventario = await this.inventarioService.descontarInsumosMultiplesExamenes(
+              codigosExamenes,
+              codigo_cita,
+              userId,
+            );
+
+            if (resultadoInventario.success) {
+              this.logger.log(
+                `Kardex: Descontados ${resultadoInventario.totalMovimientos} insumos para cita ${codigo_cita}`,
+              );
+            } else {
+              this.logger.warn(
+                `Kardex: Algunos insumos no pudieron descontarse para cita ${codigo_cita}`,
+              );
+            }
+          } catch (error) {
+            // Log error pero no falla la operación completa (los exámenes pueden no tener insumos configurados)
+            this.logger.warn(`Kardex: Error al descontar insumos - ${error.message}`);
+          }
+        }
       }
     }
 

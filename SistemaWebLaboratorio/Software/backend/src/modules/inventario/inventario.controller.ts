@@ -287,6 +287,74 @@ export class InventarioController {
     return this.inventarioService.getLotesByItem(itemId);
   }
 
+  // ==================== KARDEX Y EXAMEN-INSUMO ====================
+
+  @Get('inventory/items/:itemId/kardex')
+  @ApiOperation({ summary: 'Obtener kardex completo de un item (historial de movimientos)' })
+  async getKardexCompletoItem(
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Query('fecha_desde') fecha_desde?: string,
+    @Query('fecha_hasta') fecha_hasta?: string,
+    @Query('tipo_movimiento') tipo_movimiento?: string,
+  ) {
+    return this.inventarioService.getKardexCompletoItem(itemId, {
+      fecha_desde,
+      fecha_hasta,
+      tipo_movimiento,
+    });
+  }
+
+  @Get('examenes/:examenId/insumos')
+  @ApiOperation({ summary: 'Obtener insumos requeridos para un examen' })
+  async getExamenInsumos(@Param('examenId', ParseIntPipe) examenId: number) {
+    return this.inventarioService.getExamenInsumos(examenId);
+  }
+
+  @Post('examenes/:examenId/insumos')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Asignar insumo a un examen' })
+  async createExamenInsumo(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('examenId', ParseIntPipe) examenId: number,
+    @Body() data: { codigo_item: number; cantidad_requerida: number },
+  ) {
+    return this.inventarioService.createExamenInsumo(
+      { ...data, codigo_examen: examenId },
+      adminId,
+    );
+  }
+
+  @Put('examenes/insumos/:id')
+  @ApiOperation({ summary: 'Actualizar cantidad de insumo requerido' })
+  async updateExamenInsumo(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: { cantidad_requerida?: number; activo?: boolean },
+  ) {
+    return this.inventarioService.updateExamenInsumo(id, data, adminId);
+  }
+
+  @Delete('examenes/insumos/:id')
+  @ApiOperation({ summary: 'Eliminar insumo de un examen' })
+  async deleteExamenInsumo(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.inventarioService.deleteExamenInsumo(id, adminId);
+  }
+
+  @Get('examenes/:examenId/verificar-stock')
+  @ApiOperation({ summary: 'Verificar si hay stock suficiente para un examen' })
+  async verificarStockExamen(@Param('examenId', ParseIntPipe) examenId: number) {
+    return this.inventarioService.verificarStockExamen(examenId);
+  }
+
+  @Post('examenes/verificar-stock-multiple')
+  @ApiOperation({ summary: 'Verificar stock para múltiples exámenes' })
+  async verificarStockExamenes(@Body() data: { codigos_examenes: number[] }) {
+    return this.inventarioService.verificarStockExamenes(data.codigos_examenes);
+  }
+
   // ==================== ÓRDENES DE COMPRA ====================
 
   @Post('purchase-orders')
