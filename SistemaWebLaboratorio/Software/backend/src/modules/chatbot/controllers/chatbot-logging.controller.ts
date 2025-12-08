@@ -20,7 +20,7 @@ export class ChatbotLoggingController {
 
     @Get('admin/conversations')
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('ADMINISTRADOR')
+    @Roles('ADMIN')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Listar todas las conversaciones (Admin)' })
     @ApiQuery({ name: 'page', required: false, type: Number })
@@ -43,7 +43,7 @@ export class ChatbotLoggingController {
 
     @Get('admin/conversations/:id/messages')
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('ADMINISTRADOR')
+    @Roles('ADMIN')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Obtener mensajes de una conversación específica (Admin)' })
     async getConversationMessages(@Param('id', ParseIntPipe) id: number) {
@@ -52,7 +52,7 @@ export class ChatbotLoggingController {
 
     @Get('admin/analytics')
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('ADMINISTRADOR')
+    @Roles('ADMIN')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Obtener estadísticas del chatbot (Admin)' })
     async getAnalytics() {
