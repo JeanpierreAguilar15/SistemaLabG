@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, X, Send, Bot, Clock, MapPin, DollarSign, FlaskConical, RefreshCw } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
+import { MessageCircle, X, Send, Bot, Clock, MapPin, DollarSign, FlaskConical, RefreshCw, User, Phone } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
 interface Message {
     id: string;
     content: string;
-    sender: 'user' | 'bot';
+    sender: 'user' | 'bot' | 'operator' | 'system';
     timestamp: Date;
     intent?: string;
 }
@@ -20,10 +21,14 @@ interface QuickAction {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001';
+
+type ChatMode = 'BOT' | 'WAITING' | 'HUMAN';
 
 /**
  * PublicChatWidget - Widget de chat accesible para todos los usuarios
  * Cumple con HU-23: Acceso al agente virtual desde la página principal
+ * Cumple con HU-24: Handoff a operador humano
  */
 export default function PublicChatWidget() {
     const { user, isAuthenticated } = useAuthStore();
@@ -34,6 +39,12 @@ export default function PublicChatWidget() {
     const [sessionId, setSessionId] = useState<string>('');
     const [showQuickActions, setShowQuickActions] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // WebSocket y modo de chat (HU-24)
+    const [socket, setSocket] = useState<Socket | null>(null);
+    const [chatMode, setChatMode] = useState<ChatMode>('BOT');
+    const [queuePosition, setQueuePosition] = useState<number | null>(null);
+    const [operatorName, setOperatorName] = useState<string>('');
 
     // Quick actions for FAQ
     const quickActions: QuickAction[] = [
@@ -50,12 +61,115 @@ export default function PublicChatWidget() {
             storedSession = `anon-${Date.now()}-${Math.random().toString(36).substring(7)}`;
             localStorage.setItem('chatbot-public-session', storedSession);
         }
-        // If user is authenticated, use their ID
         if (isAuthenticated && user) {
             storedSession = `user-${user.codigo_usuario}-${Date.now()}`;
         }
         setSessionId(storedSession);
     }, [isAuthenticated, user]);
+
+    // Initialize WebSocket connection when chat is opened
+    useEffect(() => {
+        if (!isOpen || !sessionId) return;
+
+        const newSocket = io(`${WS_URL}/chatbot`, {
+            transports: ['websocket'],
+        });
+
+        newSocket.on('connect', () => {
+            console.log('Connected to chat server');
+            // Register with session ID
+            newSocket.emit('register', {
+                sessionId,
+                userId: user?.codigo_usuario,
+                userName: user ? `${user.nombres} ${user.apellidos}` : 'Usuario',
+            });
+        });
+
+        newSocket.on('registered', (data: any) => {
+            console.log('Registered with session:', data.sessionId);
+        });
+
+        // Handoff events
+        newSocket.on('handoff_queued', (data: any) => {
+            setChatMode('WAITING');
+            setQueuePosition(data.position);
+            addMessage({
+                id: Date.now().toString(),
+                content: data.message,
+                sender: 'system',
+                timestamp: new Date(),
+            });
+        });
+
+        newSocket.on('operator_joined', (data: any) => {
+            setChatMode('HUMAN');
+            setOperatorName(data.operatorName);
+            addMessage({
+                id: Date.now().toString(),
+                content: data.message,
+                sender: 'system',
+                timestamp: new Date(),
+            });
+        });
+
+        newSocket.on('new_message', (data: any) => {
+            // Message from operator
+            addMessage({
+                id: data.id?.toString() || Date.now().toString(),
+                content: data.content,
+                sender: data.senderType === 'OPERATOR' ? 'operator' : 'user',
+                timestamp: new Date(data.timestamp),
+            });
+        });
+
+        newSocket.on('conversation_closed', (data: any) => {
+            setChatMode('BOT');
+            setOperatorName('');
+            addMessage({
+                id: Date.now().toString(),
+                content: data.message,
+                sender: 'system',
+                timestamp: new Date(),
+            });
+        });
+
+        newSocket.on('handoff_cancelled', (data: any) => {
+            setChatMode('BOT');
+            addMessage({
+                id: Date.now().toString(),
+                content: data.message,
+                sender: 'system',
+                timestamp: new Date(),
+            });
+        });
+
+        newSocket.on('user_disconnected', (data: any) => {
+            addMessage({
+                id: Date.now().toString(),
+                content: data.message,
+                sender: 'system',
+                timestamp: new Date(),
+            });
+        });
+
+        // Bot response (when in BOT mode using WebSocket)
+        newSocket.on('response', (data: any) => {
+            setIsTyping(false);
+            addMessage({
+                id: Date.now().toString(),
+                content: data.text,
+                sender: 'bot',
+                timestamp: new Date(),
+                intent: data.intent,
+            });
+        });
+
+        setSocket(newSocket);
+
+        return () => {
+            newSocket.close();
+        };
+    }, [isOpen, sessionId, user]);
 
     useEffect(() => {
         scrollToBottom();
@@ -84,6 +198,14 @@ export default function PublicChatWidget() {
 
         addMessage(userMsg);
         setInputValue('');
+
+        // If in HUMAN mode, send via WebSocket
+        if (chatMode === 'HUMAN' && socket) {
+            socket.emit('message', { content, sessionId });
+            return;
+        }
+
+        // BOT mode: use REST API for reliability
         setIsTyping(true);
 
         try {
@@ -136,13 +258,60 @@ export default function PublicChatWidget() {
         sendMessage(action.message);
     };
 
+    const requestHumanAgent = () => {
+        if (!socket) return;
+
+        socket.emit('request_handoff', {
+            sessionId,
+            reason: 'Usuario solicitó hablar con un operador',
+        });
+    };
+
+    const cancelHandoff = () => {
+        if (!socket) return;
+        socket.emit('cancel_handoff');
+        setChatMode('BOT');
+        setQueuePosition(null);
+    };
+
     const resetConversation = () => {
         setMessages([]);
         setShowQuickActions(true);
+        setChatMode('BOT');
+        setOperatorName('');
+        setQueuePosition(null);
         const newSession = `anon-${Date.now()}-${Math.random().toString(36).substring(7)}`;
         localStorage.setItem('chatbot-public-session', newSession);
         setSessionId(newSession);
     };
+
+    const getHeaderInfo = () => {
+        switch (chatMode) {
+            case 'WAITING':
+                return {
+                    title: 'En espera...',
+                    subtitle: queuePosition ? `Posición en cola: ${queuePosition}` : 'Conectando con un operador',
+                    icon: <Clock size={24} />,
+                    bgClass: 'from-yellow-500 to-yellow-600',
+                };
+            case 'HUMAN':
+                return {
+                    title: operatorName || 'Operador',
+                    subtitle: 'Chat en vivo',
+                    icon: <User size={24} />,
+                    bgClass: 'from-green-500 to-green-600',
+                };
+            default:
+                return {
+                    title: 'AgenteVLab',
+                    subtitle: isAuthenticated ? `Hola, ${user?.nombres}` : 'Asistente Virtual',
+                    icon: <Bot size={24} />,
+                    bgClass: 'from-blue-600 to-blue-700',
+                };
+        }
+    };
+
+    const headerInfo = getHeaderInfo();
 
     return (
         <div className="fixed bottom-6 right-6 z-50">
@@ -155,19 +324,26 @@ export default function PublicChatWidget() {
                         className="mb-4 w-[350px] sm:w-[400px] h-[550px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-100"
                     >
                         {/* Header */}
-                        <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 flex items-center justify-between text-white">
+                        <div className={`bg-gradient-to-r ${headerInfo.bgClass} p-4 flex items-center justify-between text-white`}>
                             <div className="flex items-center gap-3">
                                 <div className="bg-white/20 p-2 rounded-full">
-                                    <Bot size={24} />
+                                    {headerInfo.icon}
                                 </div>
                                 <div>
-                                    <h3 className="font-bold">AgenteVLab</h3>
-                                    <p className="text-xs text-blue-100">
-                                        {isAuthenticated ? `Hola, ${user?.nombres}` : 'Asistente Virtual'}
-                                    </p>
+                                    <h3 className="font-bold">{headerInfo.title}</h3>
+                                    <p className="text-xs opacity-80">{headerInfo.subtitle}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
+                                {chatMode === 'WAITING' && (
+                                    <button
+                                        onClick={cancelHandoff}
+                                        className="hover:bg-white/20 p-1.5 rounded-full transition-colors text-xs"
+                                        title="Cancelar"
+                                    >
+                                        Cancelar
+                                    </button>
+                                )}
                                 <button
                                     onClick={resetConversation}
                                     className="hover:bg-white/20 p-1.5 rounded-full transition-colors"
@@ -197,7 +373,7 @@ export default function PublicChatWidget() {
                             )}
 
                             {/* Quick Actions */}
-                            {showQuickActions && messages.length === 0 && (
+                            {showQuickActions && messages.length === 0 && chatMode === 'BOT' && (
                                 <div className="grid grid-cols-2 gap-2 mt-2">
                                     {quickActions.map((action, index) => (
                                         <button
@@ -215,22 +391,37 @@ export default function PublicChatWidget() {
                             {messages.map((msg) => (
                                 <div
                                     key={msg.id}
-                                    className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                                    className={`flex ${
+                                        msg.sender === 'user' ? 'justify-end' :
+                                        msg.sender === 'system' ? 'justify-center' : 'justify-start'
+                                    }`}
                                 >
-                                    <div
-                                        className={`max-w-[85%] p-3 rounded-2xl text-sm ${
-                                            msg.sender === 'user'
-                                                ? 'bg-blue-600 text-white rounded-br-md'
-                                                : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md'
-                                        }`}
-                                    >
-                                        <p className="whitespace-pre-wrap">{msg.content}</p>
-                                        <span className={`text-[10px] mt-1 block ${
-                                            msg.sender === 'user' ? 'text-blue-200' : 'text-gray-400'
-                                        }`}>
-                                            {msg.timestamp.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    </div>
+                                    {msg.sender === 'system' ? (
+                                        <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1.5 rounded-full max-w-[80%] text-center">
+                                            {msg.content}
+                                        </div>
+                                    ) : (
+                                        <div
+                                            className={`max-w-[85%] p-3 rounded-2xl text-sm ${
+                                                msg.sender === 'user'
+                                                    ? 'bg-blue-600 text-white rounded-br-md'
+                                                    : msg.sender === 'operator'
+                                                    ? 'bg-green-600 text-white rounded-bl-md'
+                                                    : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md'
+                                            }`}
+                                        >
+                                            {msg.sender === 'operator' && (
+                                                <p className="text-xs opacity-80 mb-1">{operatorName}</p>
+                                            )}
+                                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                                            <span className={`text-[10px] mt-1 block ${
+                                                msg.sender === 'user' ? 'text-blue-200' :
+                                                msg.sender === 'operator' ? 'text-green-200' : 'text-gray-400'
+                                            }`}>
+                                                {msg.timestamp.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
 
@@ -248,19 +439,34 @@ export default function PublicChatWidget() {
 
                         {/* Input Area */}
                         <div className="p-4 bg-white border-t border-gray-100">
+                            {/* Talk to Human Button (only in BOT mode) */}
+                            {chatMode === 'BOT' && messages.length > 0 && (
+                                <button
+                                    onClick={requestHumanAgent}
+                                    className="w-full mb-3 flex items-center justify-center gap-2 py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-sm transition-colors"
+                                >
+                                    <Phone size={16} />
+                                    Hablar con un operador
+                                </button>
+                            )}
+
                             <div className="flex items-center gap-2">
                                 <input
                                     type="text"
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                     onKeyPress={handleKeyPress}
-                                    placeholder="Escribe tu consulta..."
+                                    placeholder={
+                                        chatMode === 'WAITING' ? 'Esperando operador...' :
+                                        chatMode === 'HUMAN' ? 'Escribe al operador...' :
+                                        'Escribe tu consulta...'
+                                    }
                                     className="flex-1 bg-gray-100 border-0 rounded-full px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-400"
-                                    disabled={isTyping}
+                                    disabled={isTyping || chatMode === 'WAITING'}
                                 />
                                 <button
                                     onClick={handleSend}
-                                    disabled={!inputValue.trim() || isTyping}
+                                    disabled={!inputValue.trim() || isTyping || chatMode === 'WAITING'}
                                     className="bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Send size={18} />
@@ -268,7 +474,7 @@ export default function PublicChatWidget() {
                             </div>
                             <div className="text-center mt-2">
                                 <p className="text-[10px] text-gray-400">
-                                    Laboratorio Clínico Franz - Asistente Virtual
+                                    Laboratorio Clínico Franz - {chatMode === 'HUMAN' ? 'Chat en Vivo' : 'Asistente Virtual'}
                                 </p>
                             </div>
                         </div>
@@ -282,10 +488,15 @@ export default function PublicChatWidget() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 className={`${
-                    isOpen ? 'bg-gray-600' : 'bg-blue-600'
-                } text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center`}
+                    isOpen ? 'bg-gray-600' :
+                    chatMode === 'HUMAN' ? 'bg-green-600' :
+                    chatMode === 'WAITING' ? 'bg-yellow-500' : 'bg-blue-600'
+                } text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center relative`}
             >
                 {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
+                {chatMode === 'WAITING' && !isOpen && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full animate-pulse" />
+                )}
             </motion.button>
         </div>
     );
