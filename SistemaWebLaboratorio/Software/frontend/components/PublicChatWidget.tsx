@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io, Socket } from 'socket.io-client';
-import { MessageCircle, X, Send, Bot, Clock, MapPin, DollarSign, FlaskConical, RefreshCw, User, Phone } from 'lucide-react';
+import { MessageCircle, X, Send, Bot, Clock, MapPin, DollarSign, FlaskConical, RefreshCw, User, Phone, CalendarPlus, Calendar, LogIn } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
 interface Message {
@@ -46,12 +46,15 @@ export default function PublicChatWidget() {
     const [queuePosition, setQueuePosition] = useState<number | null>(null);
     const [operatorName, setOperatorName] = useState<string>('');
 
-    // Quick actions for FAQ
+    // Estado para mostrar prompt de login
+    const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+
+    // Quick actions para FAQ y Citas (HU-26)
     const quickActions: QuickAction[] = [
+        { icon: <CalendarPlus size={16} />, label: 'Agendar Cita', message: 'Quiero agendar una cita' },
+        { icon: <Calendar size={16} />, label: 'Mis Citas', message: 'Ver mis citas' },
         { icon: <DollarSign size={16} />, label: 'Precios', message: '¿Cuáles son los precios de los exámenes?' },
-        { icon: <MapPin size={16} />, label: 'Sedes', message: '¿Dónde están ubicadas sus sedes?' },
         { icon: <Clock size={16} />, label: 'Horarios', message: '¿Cuál es el horario de atención?' },
-        { icon: <FlaskConical size={16} />, label: 'Servicios', message: '¿Qué servicios ofrecen?' },
     ];
 
     // Initialize session ID
@@ -209,15 +212,21 @@ export default function PublicChatWidget() {
         setIsTyping(true);
 
         try {
+            // Incluir userId si está autenticado (HU-26)
+            const requestBody: any = {
+                sessionId,
+                content,
+            };
+            if (isAuthenticated && user) {
+                requestBody.userId = user.codigo_usuario;
+            }
+
             const response = await fetch(`${API_URL}/chatbot/message`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    sessionId,
-                    content,
-                }),
+                body: JSON.stringify(requestBody),
             });
 
             const data = await response.json();
@@ -230,6 +239,13 @@ export default function PublicChatWidget() {
                 timestamp: new Date(),
                 intent: data.intent,
             });
+
+            // Manejar requerimiento de autenticación (HU-26)
+            if (data.requiresAuth && !isAuthenticated) {
+                setShowLoginPrompt(true);
+            } else {
+                setShowLoginPrompt(false);
+            }
 
         } catch (error) {
             console.error('Error sending message:', error);
@@ -280,9 +296,15 @@ export default function PublicChatWidget() {
         setChatMode('BOT');
         setOperatorName('');
         setQueuePosition(null);
+        setShowLoginPrompt(false);
         const newSession = `anon-${Date.now()}-${Math.random().toString(36).substring(7)}`;
         localStorage.setItem('chatbot-public-session', newSession);
         setSessionId(newSession);
+    };
+
+    const handleLoginClick = () => {
+        // Redirigir a login con URL de retorno
+        window.location.href = '/login?redirect=/';
     };
 
     const getHeaderInfo = () => {
@@ -439,8 +461,19 @@ export default function PublicChatWidget() {
 
                         {/* Input Area */}
                         <div className="p-4 bg-white border-t border-gray-100">
+                            {/* Login Prompt (HU-26) */}
+                            {showLoginPrompt && !isAuthenticated && (
+                                <button
+                                    onClick={handleLoginClick}
+                                    className="w-full mb-3 flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-sm transition-colors font-medium shadow-sm"
+                                >
+                                    <LogIn size={16} />
+                                    Iniciar sesión para continuar
+                                </button>
+                            )}
+
                             {/* Talk to Human Button (only in BOT mode) */}
-                            {chatMode === 'BOT' && messages.length > 0 && (
+                            {chatMode === 'BOT' && messages.length > 0 && !showLoginPrompt && (
                                 <button
                                     onClick={requestHumanAgent}
                                     className="w-full mb-3 flex items-center justify-center gap-2 py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-sm transition-colors"

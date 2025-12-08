@@ -1,9 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SessionsClient } from '@google-cloud/dialogflow';
 import { PrismaService } from '@prisma/prisma.service';
 import { v4 as uuidv4 } from 'uuid';
 import { UpdateChatbotConfigDto } from '../dto/chatbot.dto';
+import { ChatbotAgendaService } from './chatbot-agenda.service';
 
 /**
  * Patrones de intents para detección local cuando Dialogflow no está configurado
@@ -85,11 +86,59 @@ export class ChatbotService implements OnModuleInit {
             ],
             handler: 'handleDespedidaIntent',
         },
+        // HU-26: Intents de gestión de turnos
+        {
+            intent: 'agendar_cita',
+            patterns: [
+                /(?:agendar|reservar|sacar|pedir|solicitar).*(?:cita|turno|hora)/i,
+                /(?:quiero|necesito|deseo).*(?:cita|turno|hora)/i,
+                /(?:cita|turno|hora).*(?:nueva|nuevo)/i,
+            ],
+            handler: 'handleAgendarCitaIntent',
+        },
+        {
+            intent: 'consultar_citas',
+            patterns: [
+                /(?:mis|ver|consultar|listar).*(?:cita|turno|hora)s?/i,
+                /(?:tengo).*(?:cita|turno)s?/i,
+                /(?:cuándo|cuando) (?:es|son) mi(?:s)? (?:cita|turno)s?/i,
+            ],
+            handler: 'handleConsultarCitasIntent',
+        },
+        {
+            intent: 'cancelar_cita',
+            patterns: [
+                /(?:cancelar|anular|eliminar).*(?:cita|turno)/i,
+                /(?:no puedo|no voy).*(?:ir|asistir)/i,
+            ],
+            handler: 'handleCancelarCitaIntent',
+        },
+        {
+            intent: 'ver_disponibilidad',
+            patterns: [
+                /(?:disponibilidad|horarios? disponibles?|hay (?:citas?|turnos?|horas?))/i,
+                /(?:cuándo|cuando) (?:puedo|hay)/i,
+            ],
+            handler: 'handleDisponibilidadIntent',
+        },
+        {
+            intent: 'hablar_operador',
+            patterns: [
+                /(?:hablar|contactar|comunicar).*(?:operador|persona|humano|agente)/i,
+                /(?:necesito|quiero).*(?:ayuda|persona|humano)/i,
+            ],
+            handler: 'handleOperadorIntent',
+        },
     ];
+
+    // Estado de flujo de agendamiento para cada sesión
+    private agendaFlowStates = new Map<string, boolean>();
 
     constructor(
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
+        @Inject(forwardRef(() => ChatbotAgendaService))
+        private readonly agendaService: ChatbotAgendaService,
     ) { }
 
     async onModuleInit() {
@@ -218,6 +267,24 @@ export class ChatbotService implements OnModuleInit {
     private async processMessageLocally(sessionId: string, text: string, userId?: number) {
         this.logger.log(`Processing message locally: ${text}`);
 
+        // Verificar si estamos en flujo de agendamiento
+        const agendaState = this.agendaService.getConversationState(sessionId);
+        if (agendaState) {
+            const result = await this.agendaService.procesarInputAgendamiento(sessionId, text, userId);
+            await this.logMessage(sessionId, text, 'USER', userId);
+            await this.logMessage(sessionId, result.mensaje, 'BOT', null, 'agenda_flow', 0.9);
+
+            return {
+                text: result.mensaje,
+                source: 'local',
+                intent: 'agenda_flow',
+                confidence: 0.9,
+                accion: result.accion,
+                requiresAuth: result.requiresAuth,
+                citaResumen: result.citaResumen,
+            };
+        }
+
         // Detectar intent usando patrones locales
         let detectedIntent: string | null = null;
         let extractedEntity: string | null = null;
@@ -238,8 +305,15 @@ export class ChatbotService implements OnModuleInit {
             extractedEntity = examenMatch[1];
         }
 
+        // Extraer código de cita para cancelación
+        const citaMatch = text.match(/#?(\d+)/);
+        const codigoCita = citaMatch ? parseInt(citaMatch[1]) : null;
+
         // Manejar intent detectado
         let responseText: string;
+        let accion: string | undefined;
+        let requiresAuth: boolean | undefined;
+
         switch (detectedIntent) {
             case 'saludar':
                 responseText = await this.handleSaludoIntent();
@@ -265,6 +339,47 @@ export class ChatbotService implements OnModuleInit {
             case 'despedida':
                 responseText = '¡Hasta luego! Fue un placer ayudarte. No dudes en volver si tienes más preguntas.';
                 break;
+            // HU-26: Gestión de Turnos
+            case 'agendar_cita': {
+                const result = await this.agendaService.iniciarAgendamiento(sessionId);
+                responseText = result.mensaje;
+                accion = result.accion;
+                break;
+            }
+            case 'consultar_citas': {
+                if (!userId) {
+                    responseText = '⚠️ Para ver tus citas, necesitas iniciar sesión en tu cuenta primero.';
+                    requiresAuth = true;
+                } else {
+                    const result = await this.agendaService.consultarMisCitas(userId);
+                    responseText = result.mensaje;
+                    accion = result.accion;
+                }
+                break;
+            }
+            case 'cancelar_cita': {
+                if (!userId) {
+                    responseText = '⚠️ Para cancelar una cita, necesitas iniciar sesión en tu cuenta primero.';
+                    requiresAuth = true;
+                } else if (codigoCita) {
+                    const result = await this.agendaService.cancelarCita(userId, codigoCita);
+                    responseText = result.mensaje;
+                    accion = result.accion;
+                } else {
+                    responseText = 'Por favor, indica el número de la cita que deseas cancelar. Por ejemplo: "cancelar cita #123"';
+                }
+                break;
+            }
+            case 'ver_disponibilidad': {
+                const result = await this.agendaService.consultarDisponibilidad(extractedEntity || undefined);
+                responseText = result.mensaje;
+                accion = result.accion;
+                break;
+            }
+            case 'hablar_operador':
+                responseText = 'Puedo transferirte con un operador humano. ¿Deseas que te conecte con uno de nuestros agentes?';
+                accion = 'HANDOFF_SUGERIDO';
+                break;
             default:
                 responseText = this.getDefaultResponse();
         }
@@ -278,6 +393,8 @@ export class ChatbotService implements OnModuleInit {
             source: 'local',
             intent: detectedIntent || 'unknown',
             confidence: detectedIntent ? 0.8 : 0.3,
+            accion,
+            requiresAuth,
         };
     }
 
@@ -323,11 +440,15 @@ export class ChatbotService implements OnModuleInit {
         else saludo = 'Buenas noches';
 
         return `${saludo}! Soy el asistente virtual de Laboratorio Clínico Franz. Puedo ayudarte con:\n\n` +
-            `- Información sobre precios de exámenes\n` +
-            `- Ubicación de nuestras sedes\n` +
+            `📅 **Gestión de citas:**\n` +
+            `- Agendar una cita\n` +
+            `- Ver mis citas\n` +
+            `- Cancelar una cita\n\n` +
+            `📋 **Información:**\n` +
+            `- Precios de exámenes\n` +
+            `- Ubicación de sedes\n` +
             `- Horarios de atención\n` +
-            `- Preparación para exámenes\n` +
-            `- Servicios disponibles\n\n` +
+            `- Preparación para exámenes\n\n` +
             `¿En qué puedo ayudarte?`;
     }
 

@@ -119,7 +119,12 @@ describe('ChatbotService', () => {
 
             expect(result.source).toBe('dialogflow');
             expect(result.text).toBe('Respuesta de prueba');
-            expect(result.intent).toBe('test_intent');
+            // Type guard for intent property (only present in dialogflow/local responses)
+            if ('intent' in result) {
+                expect(result.intent).toBe('test_intent');
+            } else {
+                fail('Expected result to have intent property');
+            }
         });
 
         it('should return fallback message if confidence is low', async () => {

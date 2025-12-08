@@ -22,6 +22,7 @@ export class ChatbotController {
         const response = await this.chatbotService.processMessage(
             sessionId,
             createMessageDto.content,
+            createMessageDto.userId, // HU-26: Pasar userId para gestión de citas
         );
         return { ...response, sessionId };
     }

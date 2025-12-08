@@ -5,6 +5,7 @@ import { EventsModule } from '../events/events.module';
 import { ChatbotService } from './services/chatbot.service';
 import { ChatbotLoggingService } from './services/chatbot-logging.service';
 import { LiveChatService } from './services/livechat.service';
+import { ChatbotAgendaService } from './services/chatbot-agenda.service';
 import { ChatbotController } from './controllers/chatbot.controller';
 import { ChatbotLoggingController } from './controllers/chatbot-logging.controller';
 import { LiveChatController } from './controllers/livechat.controller';
@@ -17,7 +18,13 @@ import { ChatGateway } from './gateways/chat.gateway';
         forwardRef(() => EventsModule),
     ],
     controllers: [ChatbotController, ChatbotLoggingController, LiveChatController],
-    providers: [ChatbotService, ChatbotLoggingService, LiveChatService, ChatGateway],
-    exports: [ChatbotService, ChatbotLoggingService, LiveChatService, ChatGateway],
+    providers: [
+        ChatbotAgendaService,
+        ChatbotService,
+        ChatbotLoggingService,
+        LiveChatService,
+        ChatGateway,
+    ],
+    exports: [ChatbotService, ChatbotLoggingService, LiveChatService, ChatGateway, ChatbotAgendaService],
 })
 export class ChatbotModule { }
