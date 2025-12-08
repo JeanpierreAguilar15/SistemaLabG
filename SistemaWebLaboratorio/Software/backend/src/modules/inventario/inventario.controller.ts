@@ -11,9 +11,16 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiOperation, ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { InventarioService } from './inventario.service';
+import { OcrFacturaService } from './services/ocr-factura.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -31,7 +38,10 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class InventarioController {
-  constructor(private readonly inventarioService: InventarioService) {}
+  constructor(
+    private readonly inventarioService: InventarioService,
+    private readonly ocrFacturaService: OcrFacturaService,
+  ) {}
 
   // ==================== INVENTARIO ====================
 
@@ -428,5 +438,140 @@ export class InventarioController {
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
     return this.inventarioService.cancelarOrdenCompra(id, adminId);
+  }
+
+  // ==================== OCR FACTURAS ====================
+
+  @Get('inventory/ocr/status')
+  @ApiOperation({ summary: 'Verificar si el OCR está configurado' })
+  async getOcrStatus() {
+    return {
+      configured: this.ocrFacturaService.isConfigured(),
+      message: this.ocrFacturaService.isConfigured()
+        ? 'OCR de facturas configurado y listo'
+        : 'API Key de Gemini no configurada',
+    };
+  }
+
+  @Post('inventory/ocr/process-image')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Procesar imagen de factura con OCR' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Imagen de la factura (JPG, PNG, PDF)',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/facturas',
+        filename: (req, file, callback) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          callback(null, `factura-${uniqueSuffix}${ext}`);
+        },
+      }),
+      fileFilter: (req, file, callback) => {
+        const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+        if (allowedMimes.includes(file.mimetype)) {
+          callback(null, true);
+        } else {
+          callback(new BadRequestException('Tipo de archivo no permitido. Use JPG, PNG o PDF.'), false);
+        }
+      },
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB max
+      },
+    }),
+  )
+  async processFacturaImage(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    const result = await this.ocrFacturaService.processFacturaImage(file.path);
+
+    // Eliminar el archivo después de procesarlo
+    const fs = await import('fs');
+    try {
+      fs.unlinkSync(file.path);
+    } catch (e) {
+      // Ignorar error si no se puede eliminar
+    }
+
+    return result;
+  }
+
+  @Post('inventory/ocr/process-base64')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Procesar imagen de factura en base64 con OCR' })
+  async processFacturaBase64(
+    @Body() data: { image: string; mimeType?: string },
+  ) {
+    if (!data.image) {
+      throw new BadRequestException('No se proporcionó ninguna imagen');
+    }
+
+    const mimeType = data.mimeType || 'image/jpeg';
+    return this.ocrFacturaService.processFacturaBase64(data.image, mimeType);
+  }
+
+  @Post('inventory/ocr/create-from-result')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Crear lotes en inventario desde resultado de OCR' })
+  async createLotesFromOcr(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: {
+      items: Array<{
+        codigo_item: number;
+        numero_lote: string;
+        cantidad: number;
+        fecha_vencimiento?: string;
+        costo_unitario?: number;
+      }>;
+      codigo_proveedor?: number;
+    },
+  ) {
+    const results = [];
+
+    for (const item of data.items) {
+      try {
+        const lote = await this.inventarioService.createLote({
+          codigo_item: item.codigo_item,
+          numero_lote: item.numero_lote,
+          cantidad_inicial: item.cantidad,
+          fecha_vencimiento: item.fecha_vencimiento ? new Date(item.fecha_vencimiento) : undefined,
+          costo_unitario: item.costo_unitario,
+          proveedor: data.codigo_proveedor?.toString(),
+        }, adminId);
+
+        results.push({
+          success: true,
+          codigo_item: item.codigo_item,
+          lote,
+        });
+      } catch (error) {
+        results.push({
+          success: false,
+          codigo_item: item.codigo_item,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      total: data.items.length,
+      exitosos: results.filter(r => r.success).length,
+      fallidos: results.filter(r => !r.success).length,
+      results,
+    };
   }
 }

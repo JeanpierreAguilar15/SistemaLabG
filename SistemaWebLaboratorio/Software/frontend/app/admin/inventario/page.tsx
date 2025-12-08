@@ -279,6 +279,20 @@ export default function InventarioPage() {
   const [quickKardexData, setQuickKardexData] = useState<KardexResponse | null>(null)
   const [quickKardexLoading, setQuickKardexLoading] = useState(false)
 
+  // OCR Factura state
+  const [showOcrModal, setShowOcrModal] = useState(false)
+  const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrResult, setOcrResult] = useState<any>(null)
+  const [ocrPreviewUrl, setOcrPreviewUrl] = useState<string | null>(null)
+  const [ocrSelectedItems, setOcrSelectedItems] = useState<Array<{
+    descripcion: string
+    cantidad: number
+    numero_lote: string
+    fecha_vencimiento: string
+    codigo_item: string
+    selected: boolean
+  }>>([])
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -1103,6 +1117,129 @@ export default function InventarioPage() {
     setKardexData(null)
   }
 
+  // ==================== OCR FACTURA FUNCTIONS ====================
+  const openOcrModal = () => {
+    setShowOcrModal(true)
+    setOcrResult(null)
+    setOcrPreviewUrl(null)
+    setOcrSelectedItems([])
+  }
+
+  const closeOcrModal = () => {
+    setShowOcrModal(false)
+    setOcrResult(null)
+    setOcrPreviewUrl(null)
+    setOcrSelectedItems([])
+  }
+
+  const handleOcrFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Mostrar preview
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setOcrPreviewUrl(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    // Procesar con OCR
+    setOcrLoading(true)
+    setOcrResult(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/ocr/process-image`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: formData,
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setOcrResult(data)
+
+        // Preparar items para selección
+        if (data.success && data.items?.length > 0) {
+          setOcrSelectedItems(data.items.map((item: any) => ({
+            descripcion: item.descripcion || '',
+            cantidad: item.cantidad || 1,
+            numero_lote: item.numero_lote || `LOT-${Date.now()}`,
+            fecha_vencimiento: item.fecha_vencimiento || '',
+            codigo_item: '', // El usuario debe seleccionar
+            selected: true,
+          })))
+        }
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al procesar imagen' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setOcrLoading(false)
+    }
+  }
+
+  const handleOcrItemChange = (index: number, field: string, value: any) => {
+    setOcrSelectedItems(prev => {
+      const updated = [...prev]
+      updated[index] = { ...updated[index], [field]: value }
+      return updated
+    })
+  }
+
+  const handleCreateLotesFromOcr = async () => {
+    const itemsToCreate = ocrSelectedItems.filter(item => item.selected && item.codigo_item)
+
+    if (itemsToCreate.length === 0) {
+      setMessage({ type: 'error', text: 'Seleccione al menos un item y asigne un producto del inventario' })
+      return
+    }
+
+    setOcrLoading(true)
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/ocr/create-from-result`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          items: itemsToCreate.map(item => ({
+            codigo_item: parseInt(item.codigo_item),
+            numero_lote: item.numero_lote,
+            cantidad: item.cantidad,
+            fecha_vencimiento: item.fecha_vencimiento || undefined,
+          })),
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setMessage({
+          type: 'success',
+          text: `Se crearon ${result.exitosos} lotes exitosamente${result.fallidos > 0 ? ` (${result.fallidos} fallidos)` : ''}`,
+        })
+        closeOcrModal()
+        loadLotes()
+        loadItems()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al crear lotes' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setOcrLoading(false)
+    }
+  }
+
   // ==================== RENDER ====================
   if (!mounted) {
     return (
@@ -1160,12 +1297,20 @@ export default function InventarioPage() {
           </Button>
         )}
         {activeTab === 'lotes' && (
-          <Button onClick={() => handleOpenLoteForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
-            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Nuevo Lote
-          </Button>
+          <div className="flex space-x-2">
+            <Button onClick={openOcrModal} variant="outline" className="border-lab-primary-600 text-lab-primary-600 hover:bg-lab-primary-50">
+              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Escanear Factura (OCR)
+            </Button>
+            <Button onClick={() => handleOpenLoteForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
+              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Nuevo Lote
+            </Button>
+          </div>
         )}
         {activeTab === 'categorias' && (
           <Button onClick={() => handleOpenCategoriaForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
@@ -2926,6 +3071,221 @@ export default function InventarioPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== OCR FACTURA MODAL ==================== */}
+      {showOcrModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full my-8 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-lab-neutral-900">Escanear Factura de Proveedor</h2>
+                <p className="text-sm text-lab-neutral-600 mt-1">
+                  Suba una imagen de factura para extraer automáticamente los productos y crear lotes
+                </p>
+              </div>
+              <Button variant="outline" onClick={closeOcrModal}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* File Upload Area */}
+              {!ocrResult && (
+                <div className="mb-6">
+                  <label className="block">
+                    <div className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                      ocrLoading ? 'border-lab-primary-300 bg-lab-primary-50' : 'border-lab-neutral-300 hover:border-lab-primary-500 hover:bg-lab-neutral-50'
+                    }`}>
+                      {ocrLoading ? (
+                        <div className="flex flex-col items-center">
+                          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600 mb-4"></div>
+                          <p className="text-lab-primary-600 font-medium">Procesando imagen con IA...</p>
+                          <p className="text-sm text-lab-neutral-500 mt-1">Esto puede tomar unos segundos</p>
+                        </div>
+                      ) : (
+                        <>
+                          <svg className="mx-auto h-16 w-16 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="mt-4 text-lg font-medium text-lab-neutral-700">
+                            Haga clic para subir una imagen de factura
+                          </p>
+                          <p className="mt-2 text-sm text-lab-neutral-500">
+                            Formatos: JPG, PNG, PDF (máx. 10MB)
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+                      onChange={handleOcrFileSelect}
+                      disabled={ocrLoading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* Preview and Results */}
+              {ocrResult && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Image Preview */}
+                  <div>
+                    <h3 className="font-semibold text-lab-neutral-900 mb-3">Imagen de Factura</h3>
+                    {ocrPreviewUrl && (
+                      <div className="border rounded-lg overflow-hidden bg-lab-neutral-50">
+                        <img src={ocrPreviewUrl} alt="Factura" className="w-full h-auto max-h-96 object-contain" />
+                      </div>
+                    )}
+
+                    {/* Proveedor Info */}
+                    {ocrResult.proveedor && (
+                      <div className="mt-4 p-4 bg-lab-neutral-50 rounded-lg">
+                        <h4 className="font-medium text-lab-neutral-900 mb-2">Datos del Proveedor (detectados)</h4>
+                        <div className="text-sm text-lab-neutral-600 space-y-1">
+                          {ocrResult.proveedor.razon_social && <p><strong>Proveedor:</strong> {ocrResult.proveedor.razon_social}</p>}
+                          {ocrResult.proveedor.ruc && <p><strong>RUC:</strong> {ocrResult.proveedor.ruc}</p>}
+                          {ocrResult.factura?.numero && <p><strong>Factura N°:</strong> {ocrResult.factura.numero}</p>}
+                          {ocrResult.factura?.fecha && <p><strong>Fecha:</strong> {ocrResult.factura.fecha}</p>}
+                          {ocrResult.factura?.total && <p><strong>Total:</strong> ${ocrResult.factura.total.toFixed(2)}</p>}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Button to upload another */}
+                    <div className="mt-4">
+                      <label className="cursor-pointer">
+                        <span className="text-sm text-lab-primary-600 hover:underline">
+                          Subir otra imagen
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+                          onChange={handleOcrFileSelect}
+                          disabled={ocrLoading}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Extracted Items */}
+                  <div>
+                    <h3 className="font-semibold text-lab-neutral-900 mb-3">
+                      Items Detectados ({ocrSelectedItems.length})
+                    </h3>
+
+                    {ocrSelectedItems.length === 0 ? (
+                      <div className="text-center py-8 text-lab-neutral-500 border rounded-lg">
+                        No se detectaron items en la factura
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {ocrSelectedItems.map((item, index) => (
+                          <div key={index} className={`border rounded-lg p-4 ${item.selected ? 'border-lab-primary-300 bg-lab-primary-50' : 'border-lab-neutral-200'}`}>
+                            <div className="flex items-start gap-3">
+                              <input
+                                type="checkbox"
+                                checked={item.selected}
+                                onChange={(e) => handleOcrItemChange(index, 'selected', e.target.checked)}
+                                className="mt-1"
+                              />
+                              <div className="flex-1 space-y-2">
+                                <p className="font-medium text-lab-neutral-900">{item.descripcion}</p>
+
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                  <div>
+                                    <label className="text-lab-neutral-600">Cantidad:</label>
+                                    <input
+                                      type="number"
+                                      value={item.cantidad}
+                                      onChange={(e) => handleOcrItemChange(index, 'cantidad', parseInt(e.target.value) || 0)}
+                                      className="w-full border rounded px-2 py-1 mt-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-lab-neutral-600">N° Lote:</label>
+                                    <input
+                                      type="text"
+                                      value={item.numero_lote}
+                                      onChange={(e) => handleOcrItemChange(index, 'numero_lote', e.target.value)}
+                                      className="w-full border rounded px-2 py-1 mt-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-lab-neutral-600">Vencimiento:</label>
+                                    <input
+                                      type="date"
+                                      value={item.fecha_vencimiento}
+                                      onChange={(e) => handleOcrItemChange(index, 'fecha_vencimiento', e.target.value)}
+                                      className="w-full border rounded px-2 py-1 mt-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-lab-neutral-600">Asignar a Item: *</label>
+                                    <select
+                                      value={item.codigo_item}
+                                      onChange={(e) => handleOcrItemChange(index, 'codigo_item', e.target.value)}
+                                      className="w-full border rounded px-2 py-1 mt-1"
+                                    >
+                                      <option value="">Seleccionar...</option>
+                                      {items.map((inv) => (
+                                        <option key={inv.codigo_item} value={inv.codigo_item}>
+                                          {inv.codigo_interno} - {inv.nombre}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            {ocrResult && ocrSelectedItems.length > 0 && (
+              <div className="p-6 border-t border-lab-neutral-200 flex justify-between items-center">
+                <div className="text-sm text-lab-neutral-600">
+                  {ocrSelectedItems.filter(i => i.selected && i.codigo_item).length} items listos para crear
+                </div>
+                <div className="flex space-x-3">
+                  <Button variant="outline" onClick={closeOcrModal}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleCreateLotesFromOcr}
+                    disabled={ocrLoading || ocrSelectedItems.filter(i => i.selected && i.codigo_item).length === 0}
+                    className="bg-lab-primary-600 hover:bg-lab-primary-700"
+                  >
+                    {ocrLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                        Procesando...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Crear Lotes en Inventario
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
