@@ -94,6 +94,23 @@ export class InventarioController {
     return this.inventarioService.getKardexReport();
   }
 
+  @Get('inventory/kardex/global')
+  @ApiOperation({
+    summary: 'Kardex Global - Resumen de todos los items',
+    description: 'Retorna un resumen completo del inventario con totales de entradas/salidas, stock actual, valor y estado de cada item.',
+  })
+  async getKardexGlobal(
+    @Query('fecha_desde') fecha_desde?: string,
+    @Query('fecha_hasta') fecha_hasta?: string,
+    @Query('categoria') categoria?: string,
+  ) {
+    return this.inventarioService.getKardexGlobal({
+      fecha_desde,
+      fecha_hasta,
+      categoria: categoria ? parseInt(categoria, 10) : undefined,
+    });
+  }
+
   @Put('inventory/items/:id/toggle-status')
   async toggleInventoryItemStatus(
     @CurrentUser('codigo_usuario') adminId: number,

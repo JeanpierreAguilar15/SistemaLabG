@@ -188,6 +188,41 @@ interface KardexResponse {
   }
 }
 
+// Interface for Global Kardex
+interface KardexGlobalItem {
+  codigo_item: number
+  codigo_interno: string
+  nombre: string
+  categoria: string
+  unidad_medida: string
+  stock_actual: number
+  stock_minimo: number
+  costo_unitario: string | null
+  valor_inventario: number
+  total_entradas: number
+  total_salidas: number
+  total_movimientos: number
+  ultimo_movimiento: {
+    fecha_movimiento: string
+    tipo_movimiento: string
+    cantidad: number
+  } | null
+  estado_stock: 'NORMAL' | 'BAJO' | 'CRITICO' | 'AGOTADO'
+}
+
+interface KardexGlobalResponse {
+  resumen: {
+    total_items: number
+    items_criticos: number
+    items_bajos: number
+    items_agotados: number
+    valor_total_inventario: number
+    total_entradas: number
+    total_salidas: number
+  }
+  items: KardexGlobalItem[]
+}
+
 export default function InventarioPage() {
   const { accessToken } = useAuthStore()
   const [activeTab, setActiveTab] = useState<Tab>('items')
@@ -259,6 +294,11 @@ export default function InventarioPage() {
   const [selectedItemKardex, setSelectedItemKardex] = useState('')
   const [kardexFechaDesde, setKardexFechaDesde] = useState('')
   const [kardexFechaHasta, setKardexFechaHasta] = useState('')
+
+  // Global Kardex state
+  const [kardexGlobal, setKardexGlobal] = useState<KardexGlobalResponse | null>(null)
+  const [kardexGlobalLoading, setKardexGlobalLoading] = useState(false)
+  const [kardexViewMode, setKardexViewMode] = useState<'global' | 'individual'>('global')
 
   // Proveedores for lote form
   const [proveedores, setProveedores] = useState<{ codigo_proveedor: number; razon_social: string }[]>([])
@@ -349,10 +389,11 @@ export default function InventarioPage() {
     }
   }, [activeTab])
 
-  // Load items when switching to kardex tab
+  // Load items and kardex global when switching to kardex tab
   useEffect(() => {
     if (activeTab === 'kardex') {
       loadItems()
+      loadKardexGlobal()
     }
   }, [activeTab])
 
@@ -916,8 +957,9 @@ export default function InventarioPage() {
       )
 
       if (response.ok) {
-        const data = await response.json()
-        setLotes(data)
+        const result = await response.json()
+        // La API retorna { data: [...], pagination: {...} }
+        setLotes(result.data || [])
       } else {
         setMessage({ type: 'error', text: 'Error al cargar lotes' })
       }
@@ -1115,6 +1157,51 @@ export default function InventarioPage() {
     setKardexFechaDesde('')
     setKardexFechaHasta('')
     setKardexData(null)
+  }
+
+  // Cargar Kardex Global
+  const loadKardexGlobal = async () => {
+    try {
+      setKardexGlobalLoading(true)
+      const params = new URLSearchParams()
+      if (kardexFechaDesde) params.append('fecha_desde', kardexFechaDesde)
+      if (kardexFechaHasta) params.append('fecha_hasta', kardexFechaHasta)
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/kardex/global?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setKardexGlobal(data)
+      } else {
+        setMessage({ type: 'error', text: 'Error al cargar kardex global' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setKardexGlobalLoading(false)
+    }
+  }
+
+  // Cambiar a vista de item individual desde el resumen global
+  const handleViewItemKardex = (codigoItem: number) => {
+    setSelectedItemKardex(codigoItem.toString())
+    setKardexViewMode('individual')
+    // Cargar kardex del item
+    setTimeout(() => loadKardex(), 100)
+  }
+
+  // Volver al resumen global
+  const handleBackToGlobal = () => {
+    setKardexViewMode('global')
+    setKardexData(null)
+    setSelectedItemKardex('')
   }
 
   // ==================== OCR FACTURA FUNCTIONS ====================
@@ -2590,87 +2677,230 @@ export default function InventarioPage() {
       {/* ==================== KARDEX TAB ==================== */}
       {activeTab === 'kardex' && (
         <>
-          {/* Info Card */}
-          <Card className="border-lab-primary-200 bg-lab-primary-50">
-            <CardContent className="pt-6">
-              <div className="flex items-start">
-                <svg className="w-6 h-6 text-lab-primary-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          {/* View Toggle */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex space-x-2">
+              <Button
+                variant={kardexViewMode === 'global' ? 'default' : 'outline'}
+                onClick={() => { setKardexViewMode('global'); loadKardexGlobal(); }}
+                className={kardexViewMode === 'global' ? 'bg-lab-primary-600' : ''}
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                 </svg>
-                <div className="ml-3">
-                  <h3 className="font-semibold text-lab-primary-900">Kardex de Inventario</h3>
-                  <p className="text-sm text-lab-primary-700 mt-1">
-                    Seleccione un item para ver su historial completo de movimientos. El kardex registra todas las entradas,
-                    salidas y ajustes de stock, incluyendo los descuentos automáticos por exámenes realizados.
-                  </p>
-                </div>
+                Resumen Global
+              </Button>
+              <Button
+                variant={kardexViewMode === 'individual' ? 'default' : 'outline'}
+                onClick={() => setKardexViewMode('individual')}
+                className={kardexViewMode === 'individual' ? 'bg-lab-primary-600' : ''}
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Por Item
+              </Button>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div>
+                <input
+                  type="date"
+                  value={kardexFechaDesde}
+                  onChange={(e) => setKardexFechaDesde(e.target.value)}
+                  className="rounded-md border border-lab-neutral-300 px-3 py-1.5 text-sm"
+                  placeholder="Desde"
+                />
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Search and Filters */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Consultar Kardex</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Seleccionar Item *
-                  </label>
-                  <select
-                    value={selectedItemKardex}
-                    onChange={(e) => setSelectedItemKardex(e.target.value)}
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
-                  >
-                    <option value="">Seleccionar item...</option>
-                    {items.map((item) => (
-                      <option key={item.codigo_item} value={item.codigo_item}>
-                        {item.codigo_interno} - {item.nombre} (Stock: {item.stock_actual})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Desde
-                  </label>
-                  <input
-                    type="date"
-                    value={kardexFechaDesde}
-                    onChange={(e) => setKardexFechaDesde(e.target.value)}
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                    Hasta
-                  </label>
-                  <input
-                    type="date"
-                    value={kardexFechaHasta}
-                    onChange={(e) => setKardexFechaHasta(e.target.value)}
-                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
-                  />
-                </div>
+              <div>
+                <input
+                  type="date"
+                  value={kardexFechaHasta}
+                  onChange={(e) => setKardexFechaHasta(e.target.value)}
+                  className="rounded-md border border-lab-neutral-300 px-3 py-1.5 text-sm"
+                  placeholder="Hasta"
+                />
               </div>
+              <Button onClick={kardexViewMode === 'global' ? loadKardexGlobal : loadKardex} size="sm">
+                Actualizar
+              </Button>
+            </div>
+          </div>
 
-              <div className="flex space-x-3 mt-4">
-                <Button onClick={loadKardex} className="bg-lab-primary-600 hover:bg-lab-primary-700">
-                  <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  Consultar Kardex
-                </Button>
-                <Button onClick={handleClearKardex} variant="outline">
-                  Limpiar
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {/* GLOBAL VIEW */}
+          {kardexViewMode === 'global' && (
+            <>
+              {kardexGlobalLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
+                </div>
+              ) : kardexGlobal ? (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
+                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-blue-700">{kardexGlobal.resumen.total_items}</div>
+                        <div className="text-xs text-blue-600">Items Activos</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-green-50 to-green-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-green-700">+{kardexGlobal.resumen.total_entradas}</div>
+                        <div className="text-xs text-green-600">Total Entradas</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-red-50 to-red-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-red-700">-{kardexGlobal.resumen.total_salidas}</div>
+                        <div className="text-xs text-red-600">Total Salidas</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-yellow-700">{kardexGlobal.resumen.items_bajos}</div>
+                        <div className="text-xs text-yellow-600">Stock Bajo</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-orange-700">{kardexGlobal.resumen.items_criticos}</div>
+                        <div className="text-xs text-orange-600">Críticos</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-red-100 to-red-200">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-red-800">{kardexGlobal.resumen.items_agotados}</div>
+                        <div className="text-xs text-red-700">Agotados</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-lg font-bold text-purple-700">
+                          Bs. {kardexGlobal.resumen.valor_total_inventario.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-xs text-purple-600">Valor Total</div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Global Kardex Table */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Kardex Global de Inventario</CardTitle>
+                      <CardDescription>Resumen de todos los items con sus movimientos y estado de stock</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-lab-neutral-200 bg-lab-neutral-50">
+                              <th className="text-left p-3 font-semibold text-lab-neutral-900">Código</th>
+                              <th className="text-left p-3 font-semibold text-lab-neutral-900">Item</th>
+                              <th className="text-left p-3 font-semibold text-lab-neutral-900">Categoría</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Stock</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Entradas</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Salidas</th>
+                              <th className="text-right p-3 font-semibold text-lab-neutral-900">Valor</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Estado</th>
+                              <th className="text-left p-3 font-semibold text-lab-neutral-900">Último Mov.</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {kardexGlobal.items.map((item) => (
+                              <tr key={item.codigo_item} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
+                                <td className="p-3 font-mono text-sm">{item.codigo_interno}</td>
+                                <td className="p-3 font-medium">{item.nombre}</td>
+                                <td className="p-3 text-sm text-lab-neutral-600">{item.categoria}</td>
+                                <td className="p-3 text-center">
+                                  <span className="font-semibold">{item.stock_actual}</span>
+                                  <span className="text-xs text-lab-neutral-500 ml-1">{item.unidad_medida}</span>
+                                </td>
+                                <td className="p-3 text-center text-green-600 font-medium">+{item.total_entradas}</td>
+                                <td className="p-3 text-center text-red-600 font-medium">-{item.total_salidas}</td>
+                                <td className="p-3 text-right font-mono text-sm">
+                                  Bs. {item.valor_inventario.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                    item.estado_stock === 'NORMAL' ? 'bg-green-100 text-green-700' :
+                                    item.estado_stock === 'BAJO' ? 'bg-yellow-100 text-yellow-700' :
+                                    item.estado_stock === 'CRITICO' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-red-100 text-red-700'
+                                  }`}>
+                                    {item.estado_stock}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-sm text-lab-neutral-600">
+                                  {item.ultimo_movimiento ? (
+                                    <span title={item.ultimo_movimiento.tipo_movimiento}>
+                                      {new Date(item.ultimo_movimiento.fecha_movimiento).toLocaleDateString('es-BO')}
+                                    </span>
+                                  ) : '-'}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleViewItemKardex(item.codigo_item)}
+                                    className="text-xs"
+                                  >
+                                    Ver Detalle
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="py-12">
+                    <div className="text-center text-lab-neutral-500">
+                      <p>Cargando datos del kardex...</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          {/* INDIVIDUAL VIEW */}
+          {kardexViewMode === 'individual' && (
+            <>
+              {/* Back Button and Item Selector */}
+              <Card className="mb-4">
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-4">
+                    <Button variant="outline" onClick={handleBackToGlobal} size="sm">
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      Volver al Resumen
+                    </Button>
+                    <div className="flex-1">
+                      <select
+                        value={selectedItemKardex}
+                        onChange={(e) => setSelectedItemKardex(e.target.value)}
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      >
+                        <option value="">Seleccionar item...</option>
+                        {items.map((item) => (
+                          <option key={item.codigo_item} value={item.codigo_item}>
+                            {item.codigo_interno} - {item.nombre} (Stock: {item.stock_actual})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Button onClick={loadKardex} className="bg-lab-primary-600 hover:bg-lab-primary-700">
+                      Consultar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
 
           {/* Kardex Results */}
           {kardexLoading ? (
@@ -2811,10 +3041,12 @@ export default function InventarioPage() {
                   <svg className="mx-auto h-12 w-12 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
-                  <p className="mt-2">Seleccione un item y haga clic en "Consultar Kardex" para ver el historial</p>
+                  <p className="mt-2">Seleccione un item y haga clic en "Consultar" para ver el historial</p>
                 </div>
               </CardContent>
             </Card>
+          )}
+            </>
           )}
         </>
       )}

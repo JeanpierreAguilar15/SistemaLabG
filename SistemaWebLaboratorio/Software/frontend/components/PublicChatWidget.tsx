@@ -48,6 +48,13 @@ export default function PublicChatWidget() {
     // Estado para mostrar prompt de login
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
+    // Estado para mostrar información de contacto
+    const [showContactInfo, setShowContactInfo] = useState(false);
+
+    // Información del laboratorio
+    const LAB_PHONE = '(+591) 3-3456789';
+    const LAB_WHATSAPP = '+591 70012345';
+
     // Quick actions para FAQ y Citas (HU-26)
     const quickActions: QuickAction[] = [
         { icon: <CalendarPlus size={16} />, label: 'Agendar Cita', message: 'Quiero agendar una cita' },
@@ -68,6 +75,25 @@ export default function PublicChatWidget() {
         }
         setSessionId(storedSession);
     }, [isAuthenticated, user]);
+
+    // Limpiar chat al cerrar sesión
+    useEffect(() => {
+        if (!isAuthenticated) {
+            // Usuario cerró sesión - limpiar todo el estado del chat
+            setMessages([]);
+            setShowQuickActions(true);
+            setChatMode('BOT');
+            setOperatorName('');
+            setQueuePosition(null);
+            setShowLoginPrompt(false);
+            setShowContactInfo(false);
+            setIsOpen(false);
+            // Generar nueva sesión anónima
+            const newSession = `anon-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+            localStorage.setItem('chatbot-public-session', newSession);
+            setSessionId(newSession);
+        }
+    }, [isAuthenticated]);
 
     // Initialize WebSocket connection when chat is opened
     useEffect(() => {
@@ -274,6 +300,17 @@ export default function PublicChatWidget() {
     };
 
     const requestHumanAgent = () => {
+        // Mostrar información de contacto del laboratorio
+        setShowContactInfo(true);
+        addMessage({
+            id: Date.now().toString(),
+            content: `📞 Para comunicarte con nosotros:\n\n• Teléfono: ${LAB_PHONE}\n• WhatsApp: ${LAB_WHATSAPP}\n\nHorario de atención:\nLunes a Viernes: 7:00 - 19:00\nSábados: 7:00 - 13:00`,
+            sender: 'bot',
+            timestamp: new Date(),
+        });
+    };
+
+    const requestLiveChat = () => {
         if (!socket) return;
 
         socket.emit('request_handoff', {
@@ -468,13 +505,24 @@ export default function PublicChatWidget() {
                             )}
 
                             {/* Talk to Human Button (only in BOT mode) */}
-                            {chatMode === 'BOT' && messages.length > 0 && !showLoginPrompt && (
+                            {chatMode === 'BOT' && messages.length > 0 && !showLoginPrompt && !showContactInfo && (
                                 <button
                                     onClick={requestHumanAgent}
                                     className="w-full mb-3 flex items-center justify-center gap-2 py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-sm transition-colors"
                                 >
                                     <Phone size={16} />
                                     Hablar con un operador
+                                </button>
+                            )}
+
+                            {/* Live Chat Option after showing contact info */}
+                            {chatMode === 'BOT' && showContactInfo && (
+                                <button
+                                    onClick={requestLiveChat}
+                                    className="w-full mb-3 flex items-center justify-center gap-2 py-2 px-4 bg-green-100 hover:bg-green-200 text-green-700 rounded-full text-sm transition-colors"
+                                >
+                                    <User size={16} />
+                                    Solicitar chat en vivo
                                 </button>
                             )}
 

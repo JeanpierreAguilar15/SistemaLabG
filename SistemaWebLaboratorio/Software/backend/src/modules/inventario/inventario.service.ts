@@ -151,6 +151,131 @@ export class InventarioService {
     });
   }
 
+  /**
+   * Kardex Global - Resumen de todos los items con sus movimientos
+   * Retorna un resumen completo del inventario con:
+   * - Total de entradas y salidas por item
+   * - Stock actual y valor
+   * - Último movimiento
+   * - Estado del stock (normal, bajo, crítico)
+   */
+  async getKardexGlobal(filters?: {
+    fecha_desde?: string;
+    fecha_hasta?: string;
+    categoria?: number;
+  }) {
+    // Obtener todos los items activos con su categoría
+    const items = await this.prisma.item.findMany({
+      where: {
+        activo: true,
+        ...(filters?.categoria && { codigo_categoria: filters.categoria }),
+      },
+      include: {
+        categoria: { select: { nombre: true } },
+      },
+      orderBy: { nombre: 'asc' },
+    });
+
+    // Construir filtro de fechas para movimientos
+    const whereMovimiento: any = {};
+    if (filters?.fecha_desde) {
+      whereMovimiento.fecha_movimiento = {
+        ...whereMovimiento.fecha_movimiento,
+        gte: new Date(filters.fecha_desde),
+      };
+    }
+    if (filters?.fecha_hasta) {
+      whereMovimiento.fecha_movimiento = {
+        ...whereMovimiento.fecha_movimiento,
+        lte: new Date(filters.fecha_hasta),
+      };
+    }
+
+    // Obtener resumen de movimientos por item
+    const kardexItems = await Promise.all(
+      items.map(async (item) => {
+        // Obtener movimientos del item
+        const movimientos = await this.prisma.movimiento.findMany({
+          where: {
+            codigo_item: item.codigo_item,
+            ...whereMovimiento,
+          },
+          orderBy: { fecha_movimiento: 'desc' },
+          take: 1, // Solo el último movimiento
+          select: {
+            fecha_movimiento: true,
+            tipo_movimiento: true,
+            cantidad: true,
+          },
+        });
+
+        // Calcular totales de entradas y salidas
+        const totales = await this.prisma.movimiento.groupBy({
+          by: ['tipo_movimiento'],
+          where: {
+            codigo_item: item.codigo_item,
+            ...whereMovimiento,
+          },
+          _sum: { cantidad: true },
+          _count: true,
+        });
+
+        const entradas = totales
+          .filter(t => ['ENTRADA', 'AJUSTE_POSITIVO', 'COMPRA'].includes(t.tipo_movimiento))
+          .reduce((sum, t) => sum + (t._sum.cantidad || 0), 0);
+
+        const salidas = totales
+          .filter(t => ['SALIDA', 'AJUSTE_NEGATIVO', 'USO_EXAMEN', 'VENCIMIENTO'].includes(t.tipo_movimiento))
+          .reduce((sum, t) => sum + (t._sum.cantidad || 0), 0);
+
+        const totalMovimientos = totales.reduce((sum, t) => sum + t._count, 0);
+
+        // Determinar estado del stock
+        let estadoStock: 'NORMAL' | 'BAJO' | 'CRITICO' | 'AGOTADO' = 'NORMAL';
+        if (item.stock_actual <= 0) {
+          estadoStock = 'AGOTADO';
+        } else if (item.stock_actual <= item.stock_minimo) {
+          estadoStock = 'CRITICO';
+        } else if (item.stock_actual <= item.stock_minimo * 1.5) {
+          estadoStock = 'BAJO';
+        }
+
+        return {
+          codigo_item: item.codigo_item,
+          codigo_interno: item.codigo_interno,
+          nombre: item.nombre,
+          categoria: item.categoria?.nombre || 'Sin categoría',
+          unidad_medida: item.unidad_medida,
+          stock_actual: item.stock_actual,
+          stock_minimo: item.stock_minimo,
+          costo_unitario: item.costo_unitario,
+          valor_inventario: item.stock_actual * (item.costo_unitario ? parseFloat(item.costo_unitario.toString()) : 0),
+          total_entradas: entradas,
+          total_salidas: salidas,
+          total_movimientos: totalMovimientos,
+          ultimo_movimiento: movimientos[0] || null,
+          estado_stock: estadoStock,
+        };
+      })
+    );
+
+    // Calcular totales generales
+    const totalesGenerales = {
+      total_items: kardexItems.length,
+      items_criticos: kardexItems.filter(i => i.estado_stock === 'CRITICO').length,
+      items_bajos: kardexItems.filter(i => i.estado_stock === 'BAJO').length,
+      items_agotados: kardexItems.filter(i => i.estado_stock === 'AGOTADO').length,
+      valor_total_inventario: kardexItems.reduce((sum, i) => sum + i.valor_inventario, 0),
+      total_entradas: kardexItems.reduce((sum, i) => sum + i.total_entradas, 0),
+      total_salidas: kardexItems.reduce((sum, i) => sum + i.total_salidas, 0),
+    };
+
+    return {
+      resumen: totalesGenerales,
+      items: kardexItems,
+    };
+  }
+
   async toggleInventoryItemStatus(codigo_item: number, adminId: number) {
     const item = await this.prisma.item.findUnique({
       where: { codigo_item },
