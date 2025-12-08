@@ -184,6 +184,109 @@ export class InventarioController {
     return this.inventarioService.deleteSupplier(id, adminId);
   }
 
+  // ==================== CATEGORÍAS ====================
+
+  @Get('inventory/categories')
+  @ApiOperation({ summary: 'Obtener todas las categorías de items' })
+  async getAllCategories() {
+    return this.inventarioService.getAllCategories();
+  }
+
+  @Get('inventory/categories/:id')
+  @ApiOperation({ summary: 'Obtener categoría por ID' })
+  async getCategoryById(@Param('id', ParseIntPipe) id: number) {
+    return this.inventarioService.getCategoryById(id);
+  }
+
+  @Post('inventory/categories')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Crear nueva categoría' })
+  async createCategory(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: { nombre: string; descripcion?: string },
+  ) {
+    return this.inventarioService.createCategory(data, adminId);
+  }
+
+  @Put('inventory/categories/:id')
+  @ApiOperation({ summary: 'Actualizar categoría' })
+  async updateCategory(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: { nombre?: string; descripcion?: string },
+  ) {
+    return this.inventarioService.updateCategory(id, data, adminId);
+  }
+
+  @Delete('inventory/categories/:id')
+  @ApiOperation({ summary: 'Eliminar categoría' })
+  async deleteCategory(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.inventarioService.deleteCategory(id, adminId);
+  }
+
+  // ==================== LOTES ====================
+
+  @Get('inventory/lotes')
+  @ApiOperation({ summary: 'Obtener todos los lotes' })
+  async getAllLotes(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query() filters?: any,
+  ) {
+    return this.inventarioService.getAllLotes(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+      filters,
+    );
+  }
+
+  @Get('inventory/lotes/:id')
+  @ApiOperation({ summary: 'Obtener lote por ID' })
+  async getLoteById(@Param('id', ParseIntPipe) id: number) {
+    return this.inventarioService.getLoteById(id);
+  }
+
+  @Post('inventory/lotes')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Crear nuevo lote (ingreso de mercadería)' })
+  async createLote(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: {
+      codigo_item: number;
+      numero_lote: string;
+      fecha_fabricacion?: Date;
+      fecha_vencimiento?: Date;
+      cantidad_inicial: number;
+      proveedor?: string;
+    },
+  ) {
+    return this.inventarioService.createLote(data, adminId);
+  }
+
+  @Put('inventory/lotes/:id')
+  @ApiOperation({ summary: 'Actualizar información del lote' })
+  async updateLote(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: {
+      numero_lote?: string;
+      fecha_fabricacion?: Date;
+      fecha_vencimiento?: Date;
+      proveedor?: string;
+    },
+  ) {
+    return this.inventarioService.updateLote(id, data, adminId);
+  }
+
+  @Get('inventory/items/:itemId/lotes')
+  @ApiOperation({ summary: 'Obtener lotes de un item específico' })
+  async getLotesByItem(@Param('itemId', ParseIntPipe) itemId: number) {
+    return this.inventarioService.getLotesByItem(itemId);
+  }
+
   // ==================== ÓRDENES DE COMPRA ====================
 
   @Post('purchase-orders')

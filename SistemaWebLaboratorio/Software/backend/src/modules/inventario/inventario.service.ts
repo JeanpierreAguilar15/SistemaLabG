@@ -291,48 +291,172 @@ export class InventarioService {
 
   // ==================== ALERTAS DE STOCK ====================
 
+  /**
+   * Obtiene alertas de stock con estructura completa
+   * Incluye alertas por stock bajo, stock crítico y lotes próximos a vencer
+   */
   async getAlertasStock(filters: any) {
-    const where: Prisma.ItemWhereInput = {
-      activo: true,
-    };
+    const alertas: any[] = [];
 
+    // Obtener items con stock bajo o crítico
     const items = await this.prisma.item.findMany({
-      where,
+      where: { activo: true },
+      include: { categoria: true },
     });
 
-    const alertas = items.filter((item) => {
-      if (filters.tipo === 'BAJO_STOCK') {
-        return item.stock_actual <= item.stock_minimo;
+    // Alertas de stock
+    for (const item of items) {
+      // Stock crítico (sin stock)
+      if (item.stock_actual === 0) {
+        if (!filters.tipo || filters.tipo === 'STOCK_CRITICO') {
+          alertas.push({
+            codigo_item: item.codigo_item,
+            codigo_interno: item.codigo_interno,
+            nombre: item.nombre,
+            stock_actual: item.stock_actual,
+            stock_minimo: item.stock_minimo,
+            stock_maximo: item.stock_maximo,
+            unidad_medida: item.unidad_medida,
+            tipo_alerta: 'STOCK_CRITICO',
+            mensaje: `Sin stock disponible`,
+            prioridad: 'CRITICA' as const,
+          });
+        }
       }
-      if (filters.tipo === 'SOBRE_STOCK') {
-        return item.stock_actual >= (item.stock_maximo || 999999);
+      // Stock bajo (por debajo del mínimo)
+      else if (item.stock_actual <= item.stock_minimo) {
+        if (!filters.tipo || filters.tipo === 'STOCK_BAJO' || filters.tipo === 'BAJO_STOCK') {
+          alertas.push({
+            codigo_item: item.codigo_item,
+            codigo_interno: item.codigo_interno,
+            nombre: item.nombre,
+            stock_actual: item.stock_actual,
+            stock_minimo: item.stock_minimo,
+            stock_maximo: item.stock_maximo,
+            unidad_medida: item.unidad_medida,
+            tipo_alerta: 'STOCK_BAJO',
+            mensaje: `Stock actual (${item.stock_actual}) por debajo del mínimo (${item.stock_minimo})`,
+            prioridad: 'ALTA' as const,
+          });
+        }
       }
-      return item.stock_actual <= item.stock_minimo;
+    }
+
+    // Obtener lotes próximos a vencer o vencidos
+    const hoy = new Date();
+    const en30Dias = new Date();
+    en30Dias.setDate(en30Dias.getDate() + 30);
+
+    const lotesConVencimiento = await this.prisma.lote.findMany({
+      where: {
+        fecha_vencimiento: { not: null },
+        cantidad_actual: { gt: 0 },
+      },
+      include: {
+        item: true,
+      },
     });
+
+    for (const lote of lotesConVencimiento) {
+      if (!lote.fecha_vencimiento) continue;
+
+      const fechaVenc = new Date(lote.fecha_vencimiento);
+      const diasHastaVenc = Math.floor((fechaVenc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+
+      // Vencido
+      if (fechaVenc < hoy) {
+        if (!filters.tipo || filters.tipo === 'VENCIDO') {
+          alertas.push({
+            codigo_item: lote.item.codigo_item,
+            codigo_interno: lote.item.codigo_interno,
+            nombre: lote.item.nombre,
+            stock_actual: lote.cantidad_actual,
+            stock_minimo: lote.item.stock_minimo,
+            stock_maximo: lote.item.stock_maximo,
+            unidad_medida: lote.item.unidad_medida,
+            tipo_alerta: 'VENCIDO',
+            mensaje: `Lote ${lote.numero_lote} vencido`,
+            prioridad: 'CRITICA' as const,
+            codigo_lote: lote.codigo_lote,
+            numero_lote: lote.numero_lote,
+            fecha_vencimiento: lote.fecha_vencimiento,
+            dias_hasta_vencimiento: diasHastaVenc,
+          });
+        }
+      }
+      // Próximo a vencer (30 días o menos)
+      else if (fechaVenc <= en30Dias) {
+        if (!filters.tipo || filters.tipo === 'PROXIMO_VENCER') {
+          alertas.push({
+            codigo_item: lote.item.codigo_item,
+            codigo_interno: lote.item.codigo_interno,
+            nombre: lote.item.nombre,
+            stock_actual: lote.cantidad_actual,
+            stock_minimo: lote.item.stock_minimo,
+            stock_maximo: lote.item.stock_maximo,
+            unidad_medida: lote.item.unidad_medida,
+            tipo_alerta: 'PROXIMO_VENCER',
+            mensaje: `Lote ${lote.numero_lote} vence en ${diasHastaVenc} días`,
+            prioridad: diasHastaVenc <= 7 ? 'ALTA' as const : 'MEDIA' as const,
+            codigo_lote: lote.codigo_lote,
+            numero_lote: lote.numero_lote,
+            fecha_vencimiento: lote.fecha_vencimiento,
+            dias_hasta_vencimiento: diasHastaVenc,
+          });
+        }
+      }
+    }
+
+    // Ordenar por prioridad
+    const prioridadOrden = { CRITICA: 0, ALTA: 1, MEDIA: 2, BAJA: 3 };
+    alertas.sort((a, b) => prioridadOrden[a.prioridad] - prioridadOrden[b.prioridad]);
 
     return alertas;
   }
 
+  /**
+   * Obtiene estadísticas de alertas compatible con el frontend
+   */
   async getEstadisticasAlertas() {
-    const items = await this.prisma.item.findMany({
-      where: { activo: true },
-    });
+    const alertas = await this.getAlertasStock({});
 
-    let bajoStock = 0;
-    let sobreStock = 0;
-    let stockOptimo = 0;
+    let criticas = 0;
+    let altas = 0;
+    let medias = 0;
+    let bajas = 0;
 
-    items.forEach((item) => {
-      if (item.stock_actual <= item.stock_minimo) bajoStock++;
-      else if (item.stock_actual >= (item.stock_maximo || 999999)) sobreStock++;
-      else stockOptimo++;
-    });
+    const por_tipo = {
+      stock_critico: 0,
+      stock_bajo: 0,
+      vencidos: 0,
+      proximos_vencer: 0,
+    };
+
+    for (const alerta of alertas) {
+      // Contar por prioridad
+      switch (alerta.prioridad) {
+        case 'CRITICA': criticas++; break;
+        case 'ALTA': altas++; break;
+        case 'MEDIA': medias++; break;
+        case 'BAJA': bajas++; break;
+      }
+
+      // Contar por tipo
+      switch (alerta.tipo_alerta) {
+        case 'STOCK_CRITICO': por_tipo.stock_critico++; break;
+        case 'STOCK_BAJO': por_tipo.stock_bajo++; break;
+        case 'VENCIDO': por_tipo.vencidos++; break;
+        case 'PROXIMO_VENCER': por_tipo.proximos_vencer++; break;
+      }
+    }
 
     return {
-      bajoStock,
-      sobreStock,
-      stockOptimo,
-      totalItems: items.length,
+      total: alertas.length,
+      criticas,
+      altas,
+      medias,
+      bajas,
+      por_tipo,
     };
   }
 
@@ -397,6 +521,278 @@ export class InventarioService {
     return this.prisma.proveedor.update({
       where: { codigo_proveedor },
       data: { activo: false },
+    });
+  }
+
+  // ==================== CATEGORÍAS DE ITEMS ====================
+
+  async getAllCategories() {
+    return this.prisma.categoriaItem.findMany({
+      where: { activo: true },
+      orderBy: { nombre: 'asc' },
+      include: {
+        _count: {
+          select: { items: true },
+        },
+      },
+    });
+  }
+
+  async getCategoryById(codigo_categoria: number) {
+    const category = await this.prisma.categoriaItem.findUnique({
+      where: { codigo_categoria },
+      include: {
+        items: {
+          where: { activo: true },
+          select: {
+            codigo_item: true,
+            codigo_interno: true,
+            nombre: true,
+            stock_actual: true,
+          },
+        },
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Categoría no encontrada');
+    }
+
+    return category;
+  }
+
+  async createCategory(data: { nombre: string; descripcion?: string }, adminId: number) {
+    const existing = await this.prisma.categoriaItem.findUnique({
+      where: { nombre: data.nombre },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Ya existe una categoría con este nombre');
+    }
+
+    return this.prisma.categoriaItem.create({
+      data: {
+        nombre: data.nombre,
+        descripcion: data.descripcion || null,
+        activo: true,
+      },
+    });
+  }
+
+  async updateCategory(codigo_categoria: number, data: { nombre?: string; descripcion?: string }, adminId: number) {
+    const category = await this.prisma.categoriaItem.findUnique({
+      where: { codigo_categoria },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Categoría no encontrada');
+    }
+
+    if (data.nombre && data.nombre !== category.nombre) {
+      const existing = await this.prisma.categoriaItem.findUnique({
+        where: { nombre: data.nombre },
+      });
+
+      if (existing) {
+        throw new BadRequestException('Ya existe una categoría con este nombre');
+      }
+    }
+
+    return this.prisma.categoriaItem.update({
+      where: { codigo_categoria },
+      data,
+    });
+  }
+
+  async deleteCategory(codigo_categoria: number, adminId: number) {
+    const category = await this.prisma.categoriaItem.findUnique({
+      where: { codigo_categoria },
+      include: { _count: { select: { items: true } } },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Categoría no encontrada');
+    }
+
+    if (category._count.items > 0) {
+      // Soft delete si tiene items
+      return this.prisma.categoriaItem.update({
+        where: { codigo_categoria },
+        data: { activo: false },
+      });
+    }
+
+    return this.prisma.categoriaItem.delete({
+      where: { codigo_categoria },
+    });
+  }
+
+  // ==================== LOTES ====================
+
+  async getAllLotes(page: number = 1, limit: number = 50, filters?: any) {
+    const skip = (page - 1) * limit;
+    const where: Prisma.LoteWhereInput = {};
+
+    if (filters?.codigo_item) {
+      where.codigo_item = parseInt(filters.codigo_item);
+    }
+
+    if (filters?.activo === 'true') {
+      where.cantidad_actual = { gt: 0 };
+    }
+
+    if (filters?.vencidos === 'true') {
+      where.fecha_vencimiento = { lt: new Date() };
+    }
+
+    if (filters?.proximos_vencer === 'true') {
+      const en30Dias = new Date();
+      en30Dias.setDate(en30Dias.getDate() + 30);
+      where.fecha_vencimiento = {
+        gte: new Date(),
+        lte: en30Dias,
+      };
+    }
+
+    const [lotes, total] = await Promise.all([
+      this.prisma.lote.findMany({
+        where,
+        include: {
+          item: {
+            select: {
+              codigo_interno: true,
+              nombre: true,
+              unidad_medida: true,
+            },
+          },
+        },
+        orderBy: { fecha_vencimiento: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.lote.count({ where }),
+    ]);
+
+    return {
+      data: lotes,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getLoteById(codigo_lote: number) {
+    const lote = await this.prisma.lote.findUnique({
+      where: { codigo_lote },
+      include: {
+        item: true,
+        movimientos: {
+          orderBy: { fecha_movimiento: 'desc' },
+          take: 10,
+          include: {
+            usuario: { select: { nombres: true, apellidos: true } },
+          },
+        },
+      },
+    });
+
+    if (!lote) {
+      throw new NotFoundException('Lote no encontrado');
+    }
+
+    return lote;
+  }
+
+  async createLote(data: {
+    codigo_item: number;
+    numero_lote: string;
+    fecha_fabricacion?: Date;
+    fecha_vencimiento?: Date;
+    cantidad_inicial: number;
+    proveedor?: string;
+  }, adminId: number) {
+    const item = await this.prisma.item.findUnique({
+      where: { codigo_item: data.codigo_item },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Item no encontrado');
+    }
+
+    // Crear lote y actualizar stock en transacción
+    return this.prisma.$transaction(async (prisma) => {
+      const lote = await prisma.lote.create({
+        data: {
+          codigo_item: data.codigo_item,
+          numero_lote: data.numero_lote,
+          fecha_fabricacion: data.fecha_fabricacion || null,
+          fecha_vencimiento: data.fecha_vencimiento || null,
+          cantidad_inicial: data.cantidad_inicial,
+          cantidad_actual: data.cantidad_inicial,
+          proveedor: data.proveedor || null,
+        },
+        include: { item: true },
+      });
+
+      // Registrar movimiento de entrada
+      await prisma.movimiento.create({
+        data: {
+          codigo_item: data.codigo_item,
+          codigo_lote: lote.codigo_lote,
+          tipo_movimiento: 'ENTRADA',
+          cantidad: data.cantidad_inicial,
+          motivo: `Ingreso de lote ${data.numero_lote}`,
+          stock_anterior: item.stock_actual,
+          stock_nuevo: item.stock_actual + data.cantidad_inicial,
+          realizado_por: adminId,
+        },
+      });
+
+      // Actualizar stock del item
+      await prisma.item.update({
+        where: { codigo_item: data.codigo_item },
+        data: { stock_actual: { increment: data.cantidad_inicial } },
+      });
+
+      return lote;
+    });
+  }
+
+  async updateLote(codigo_lote: number, data: {
+    numero_lote?: string;
+    fecha_fabricacion?: Date;
+    fecha_vencimiento?: Date;
+    proveedor?: string;
+  }, adminId: number) {
+    const lote = await this.prisma.lote.findUnique({
+      where: { codigo_lote },
+    });
+
+    if (!lote) {
+      throw new NotFoundException('Lote no encontrado');
+    }
+
+    return this.prisma.lote.update({
+      where: { codigo_lote },
+      data: {
+        numero_lote: data.numero_lote,
+        fecha_fabricacion: data.fecha_fabricacion,
+        fecha_vencimiento: data.fecha_vencimiento,
+        proveedor: data.proveedor,
+      },
+    });
+  }
+
+  async getLotesByItem(codigo_item: number) {
+    return this.prisma.lote.findMany({
+      where: {
+        codigo_item,
+        cantidad_actual: { gt: 0 },
+      },
+      orderBy: { fecha_vencimiento: 'asc' },
     });
   }
 
