@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { io, Socket } from 'socket.io-client';
 import { MessageCircle, X, Send, Bot, Clock, MapPin, DollarSign, FlaskConical, RefreshCw, User, Phone, CalendarPlus, Calendar, LogIn } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
@@ -337,14 +336,10 @@ export default function PublicChatWidget() {
 
     return (
         <div className="fixed bottom-6 right-6 z-50">
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                        className="mb-4 w-[350px] sm:w-[400px] h-[550px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-100"
-                    >
+            {isOpen && (
+                <div
+                    className="mb-4 w-[350px] sm:w-[400px] h-[550px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in fade-in slide-in-from-bottom-4 duration-200"
+                >
                         {/* Header */}
                         <div className={`bg-gradient-to-r ${headerInfo.bgClass} p-4 flex items-center justify-between text-white`}>
                             <div className="flex items-center gap-3">
@@ -511,26 +506,23 @@ export default function PublicChatWidget() {
                                 </p>
                             </div>
                         </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                </div>
+            )}
 
             {/* Chat Toggle Button */}
-            <motion.button
+            <button
                 onClick={() => setIsOpen(!isOpen)}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
                 className={`${
                     isOpen ? 'bg-gray-600' :
                     chatMode === 'HUMAN' ? 'bg-green-600' :
                     chatMode === 'WAITING' ? 'bg-yellow-500' : 'bg-blue-600'
-                } text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center relative`}
+                } text-white p-4 rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center relative`}
             >
                 {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
                 {chatMode === 'WAITING' && !isOpen && (
                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full animate-pulse" />
                 )}
-            </motion.button>
+            </button>
         </div>
     );
 }

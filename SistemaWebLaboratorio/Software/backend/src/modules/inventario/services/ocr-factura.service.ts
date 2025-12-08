@@ -145,7 +145,9 @@ Extrae TODOS los items/productos que aparezcan en la factura.`;
 
       return {
         success: true,
-        ...parsedData,
+        proveedor: parsedData.proveedor,
+        factura: parsedData.factura,
+        items: parsedData.items || [],
         raw_text: responseText,
       };
 
@@ -250,7 +252,9 @@ Extrae TODOS los items/productos que aparezcan en la factura.`;
 
       return {
         success: true,
-        ...parsedData,
+        proveedor: parsedData.proveedor,
+        factura: parsedData.factura,
+        items: parsedData.items || [],
         raw_text: responseText,
       };
 

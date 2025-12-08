@@ -535,7 +535,6 @@ export class InventarioController {
         numero_lote: string;
         cantidad: number;
         fecha_vencimiento?: string;
-        costo_unitario?: number;
       }>;
       codigo_proveedor?: number;
     },
@@ -549,7 +548,6 @@ export class InventarioController {
           numero_lote: item.numero_lote,
           cantidad_inicial: item.cantidad,
           fecha_vencimiento: item.fecha_vencimiento ? new Date(item.fecha_vencimiento) : undefined,
-          costo_unitario: item.costo_unitario,
           proveedor: data.codigo_proveedor?.toString(),
         }, adminId);
 
