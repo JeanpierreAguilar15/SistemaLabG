@@ -17,6 +17,7 @@ import { EventsModule } from './modules/events/events.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { FeriadosModule } from './modules/feriados/feriados.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { DialogflowWebhookModule } from './modules/dialogflow-webhook/dialogflow-webhook.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     SystemConfigModule,
     FeriadosModule,
     ReportsModule,
+    DialogflowWebhookModule,
   ],
 })
 export class AppModule { }
