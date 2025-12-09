@@ -26,7 +26,7 @@ import {
 } from './dto/dialogflow.dto';
 
 @ApiTags('Dialogflow Webhook')
-@Controller('api/dialogflow')
+@Controller('dialogflow')
 export class DialogflowWebhookController {
   constructor(private readonly dialogflowService: DialogflowWebhookService) {}
 
