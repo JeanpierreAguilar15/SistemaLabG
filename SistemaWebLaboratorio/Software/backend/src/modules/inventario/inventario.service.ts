@@ -181,7 +181,7 @@ export class InventarioService {
     // 2. Auto-generar código interno si no se proporciona
     let codigoInterno = data.codigo_interno;
     if (!codigoInterno) {
-      codigoInterno = await this.generarCodigoInterno(data.codigo_categoria);
+      codigoInterno = await this.generarCodigoInterno(data.nombre, data.codigo_categoria);
     } else {
       // Verificar que el código proporcionado no exista
       const existingCode = await this.prisma.item.findUnique({
@@ -219,23 +219,30 @@ export class InventarioService {
   }
 
   /**
-   * Genera un código interno automático basado en la categoría
-   * Formato: XXX-0001 (prefijo de categoría + secuencial)
+   * Genera un código interno automático basado en el nombre del item
+   * Formato: XX-0001 (iniciales del nombre + secuencial)
+   * Ejemplo: "Reactivo Hemoglobina" -> "RH-0001"
    */
-  private async generarCodigoInterno(codigoCategoria?: number): Promise<string> {
-    let prefijo = 'ITM'; // Default prefix
+  private async generarCodigoInterno(nombreItem: string, codigoCategoria?: number): Promise<string> {
+    // Extraer iniciales del nombre del item
+    let prefijo = this.extraerIniciales(nombreItem);
 
-    if (codigoCategoria) {
-      const categoria = await this.prisma.categoriaItem.findUnique({
-        where: { codigo_categoria: codigoCategoria },
-      });
-      if (categoria) {
-        // Tomar las primeras 3 letras del nombre de categoría
-        prefijo = categoria.nombre
-          .substring(0, 3)
-          .toUpperCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, ''); // Quitar acentos
+    // Si no se pudo extraer, usar prefijo de categoría o default
+    if (!prefijo || prefijo.length < 2) {
+      if (codigoCategoria) {
+        const categoria = await this.prisma.categoriaItem.findUnique({
+          where: { codigo_categoria: codigoCategoria },
+        });
+        if (categoria) {
+          prefijo = categoria.nombre
+            .substring(0, 3)
+            .toUpperCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+        }
+      }
+      if (!prefijo || prefijo.length < 2) {
+        prefijo = 'ITM';
       }
     }
 
@@ -256,6 +263,42 @@ export class InventarioService {
     }
 
     return `${prefijo}-${secuencial.toString().padStart(4, '0')}`;
+  }
+
+  /**
+   * Extrae las iniciales de un nombre compuesto
+   * "Reactivo Hemoglobina" -> "RH"
+   * "Tubos EDTA 5ml" -> "TE"
+   * "Glucosa en Sangre" -> "GS" (ignora preposiciones)
+   */
+  private extraerIniciales(nombre: string): string {
+    if (!nombre) return '';
+
+    // Palabras a ignorar (preposiciones, artículos, conectores)
+    const ignorar = ['de', 'del', 'la', 'el', 'los', 'las', 'en', 'con', 'para', 'por', 'y', 'a', 'ml', 'mg', 'gr', 'lt'];
+
+    // Limpiar y normalizar el nombre
+    const palabras = nombre
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+      .replace(/[^a-zA-Z0-9\s]/g, '') // Quitar caracteres especiales
+      .split(/\s+/)
+      .filter(p => p.length > 0 && !ignorar.includes(p.toLowerCase()));
+
+    if (palabras.length === 0) return '';
+
+    // Si solo hay una palabra, tomar las primeras 2-3 letras
+    if (palabras.length === 1) {
+      return palabras[0].substring(0, 3).toUpperCase();
+    }
+
+    // Tomar la primera letra de cada palabra (máximo 3)
+    const iniciales = palabras
+      .slice(0, 3)
+      .map(p => p.charAt(0).toUpperCase())
+      .join('');
+
+    return iniciales;
   }
 
   /**
@@ -1667,25 +1710,41 @@ export class InventarioService {
   // ==================== ÓRDENES DE COMPRA ====================
 
   async createOrdenCompra(data: any, adminId: number) {
+    // Calcular totales
+    const detalles = data.detalles || [];
+    const subtotal = detalles.reduce(
+      (sum, d) => sum + d.cantidad * d.precio_unitario,
+      0,
+    );
+    const iva = 0; // Se puede calcular si aplica
+    const total = subtotal + iva;
+
     return this.prisma.ordenCompra.create({
       data: {
         codigo_proveedor: data.codigo_proveedor,
-        numero_orden: `OC-${Date.now()}`, // Generar número único
+        numero_orden: `OC-${Date.now()}`,
         creado_por: adminId,
         fecha_orden: new Date(),
+        fecha_entrega_estimada: data.fecha_entrega_esperada
+          ? new Date(data.fecha_entrega_esperada)
+          : null,
         estado: 'BORRADOR',
-        total: 0,
-        subtotal: 0,
-        iva: 0,
+        subtotal,
+        iva,
+        total,
+        observaciones: data.observaciones || null,
         detalles: {
-          create:
-            data.detalles?.map((d) => ({
-              codigo_item: d.codigo_item,
-              cantidad: d.cantidad,
-              precio_unitario: d.precio_unitario,
-              subtotal: d.cantidad * d.precio_unitario,
-            })) || [],
+          create: detalles.map((d) => ({
+            codigo_item: d.codigo_item,
+            cantidad: d.cantidad,
+            precio_unitario: d.precio_unitario,
+            total_linea: d.cantidad * d.precio_unitario,
+          })),
         },
+      },
+      include: {
+        proveedor: true,
+        detalles: { include: { item: true } },
       },
     });
   }
