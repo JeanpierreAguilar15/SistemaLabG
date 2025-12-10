@@ -16,6 +16,150 @@ export class DialogflowService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Normaliza texto para búsqueda flexible
+   * - Quita acentos
+   * - Convierte a minúsculas
+   * - Quita espacios extra
+   */
+  private normalizarTexto(texto: string): string {
+    return texto
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Quita acentos
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Búsqueda flexible de exámenes usando SQL raw
+   * Busca en nombre, descripción y código interno
+   */
+  private async buscarExamenFlexible(termino: string) {
+    const terminoNormalizado = this.normalizarTexto(termino);
+    const palabras = terminoNormalizado.split(' ').filter(p => p.length > 2);
+
+    this.logger.log(`Buscando examen: "${termino}" -> palabras: [${palabras.join(', ')}]`);
+
+    // Primero intentar búsqueda exacta con contains
+    let examen = await this.prisma.examen.findFirst({
+      where: {
+        activo: true,
+        OR: [
+          { nombre: { contains: termino, mode: 'insensitive' } },
+          { codigo_interno: { contains: termino, mode: 'insensitive' } },
+          { descripcion: { contains: termino, mode: 'insensitive' } },
+        ],
+      },
+      include: {
+        categoria: true,
+        precios: {
+          where: { activo: true },
+          orderBy: { fecha_inicio: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (examen) {
+      this.logger.log(`Encontrado por búsqueda directa: ${examen.nombre}`);
+      return examen;
+    }
+
+    // Si no encuentra, buscar por cada palabra individual
+    for (const palabra of palabras) {
+      examen = await this.prisma.examen.findFirst({
+        where: {
+          activo: true,
+          OR: [
+            { nombre: { contains: palabra, mode: 'insensitive' } },
+            { codigo_interno: { contains: palabra, mode: 'insensitive' } },
+            { descripcion: { contains: palabra, mode: 'insensitive' } },
+          ],
+        },
+        include: {
+          categoria: true,
+          precios: {
+            where: { activo: true },
+            orderBy: { fecha_inicio: 'desc' },
+            take: 1,
+          },
+        },
+      });
+
+      if (examen) {
+        this.logger.log(`Encontrado por palabra "${palabra}": ${examen.nombre}`);
+        return examen;
+      }
+    }
+
+    // Búsqueda con SQL raw para más flexibilidad (unaccent si está disponible)
+    try {
+      const resultados = await this.prisma.$queryRaw<any[]>`
+        SELECT e.*, c.nombre as categoria_nombre
+        FROM catalogo.examen e
+        LEFT JOIN catalogo.categoria_examen c ON e.codigo_categoria = c.codigo_categoria
+        WHERE e.activo = true
+        AND (
+          LOWER(e.nombre) LIKE ${`%${terminoNormalizado}%`}
+          OR LOWER(e.codigo_interno) LIKE ${`%${terminoNormalizado}%`}
+          OR LOWER(COALESCE(e.descripcion, '')) LIKE ${`%${terminoNormalizado}%`}
+        )
+        LIMIT 1
+      `;
+
+      if (resultados.length > 0) {
+        const r = resultados[0];
+        this.logger.log(`Encontrado por SQL raw: ${r.nombre}`);
+        // Obtener precios por separado
+        const precios = await this.prisma.precio.findMany({
+          where: { codigo_examen: r.codigo_examen, activo: true },
+          orderBy: { fecha_inicio: 'desc' },
+          take: 1,
+        });
+        return {
+          ...r,
+          categoria: r.categoria_nombre ? { nombre: r.categoria_nombre } : null,
+          precios,
+        };
+      }
+    } catch (error) {
+      this.logger.warn('Error en búsqueda SQL raw, usando fallback', error.message);
+    }
+
+    this.logger.log(`No se encontró examen para: "${termino}"`);
+    return null;
+  }
+
+  /**
+   * Busca exámenes similares para sugerencias
+   */
+  private async buscarExamenesSimilares(termino: string, limite: number = 3) {
+    const terminoNormalizado = this.normalizarTexto(termino);
+    const palabras = terminoNormalizado.split(' ').filter(p => p.length > 2);
+
+    const condiciones: any[] = [];
+
+    // Agregar condiciones por cada palabra
+    for (const palabra of palabras) {
+      condiciones.push({ nombre: { contains: palabra, mode: 'insensitive' as const } });
+    }
+
+    // Si no hay palabras válidas, usar el término completo
+    if (condiciones.length === 0) {
+      condiciones.push({ nombre: { contains: termino, mode: 'insensitive' as const } });
+    }
+
+    return this.prisma.examen.findMany({
+      where: {
+        activo: true,
+        OR: condiciones,
+      },
+      select: { nombre: true },
+      take: limite,
+    });
+  }
+
   // =====================================================
   // EXÁMENES
   // =====================================================
@@ -74,39 +218,30 @@ export class DialogflowService {
   }
 
   /**
-   * Consulta el precio de un examen por nombre
+   * Consulta el precio de un examen por nombre (búsqueda flexible)
    */
   async consultarPrecio(nombre: string): Promise<DialogflowResponse<ExamenInfoDto>> {
     this.logger.log(`Consultando precio: ${nombre}`);
 
     try {
-      const examen = await this.prisma.examen.findFirst({
-        where: {
-          OR: [
-            { nombre: { contains: nombre, mode: 'insensitive' } },
-            { codigo_interno: { contains: nombre, mode: 'insensitive' } },
-          ],
-          activo: true,
-        },
-        include: {
-          categoria: true,
-          precios: {
-            where: { activo: true },
-            orderBy: { fecha_inicio: 'desc' },
-            take: 1,
-          },
-        },
-      });
+      // Usar búsqueda flexible
+      const examen = await this.buscarExamenFlexible(nombre);
 
       if (!examen) {
+        // Buscar sugerencias
+        const similares = await this.buscarExamenesSimilares(nombre);
+        const sugerencias = similares.map(e => e.nombre).join(', ');
+
         return {
           success: false,
-          mensaje: `No encontré el examen "${nombre}". ¿Podrías verificar el nombre?`,
+          mensaje: sugerencias
+            ? `No encontré "${nombre}". ¿Quizás buscas: ${sugerencias}?`
+            : `No encontré el examen "${nombre}". ¿Podrías verificar el nombre?`,
           error_code: 'EXAMEN_NO_ENCONTRADO',
         };
       }
 
-      const precio = examen.precios[0] ? Number(examen.precios[0].precio) : 0;
+      const precio = examen.precios?.[0] ? Number(examen.precios[0].precio) : 0;
       let preparacion = '';
       if (examen.requiere_ayuno) {
         preparacion = ` Requiere ayuno de ${examen.horas_ayuno || 8} horas.`;
@@ -139,33 +274,25 @@ export class DialogflowService {
   }
 
   /**
-   * Consulta valores de referencia de un examen
+   * Consulta valores de referencia de un examen (búsqueda flexible)
    */
   async consultarRango(nombre: string): Promise<DialogflowResponse<RangoReferenciaDto>> {
     this.logger.log(`Consultando rango: ${nombre}`);
 
     try {
-      const examen = await this.prisma.examen.findFirst({
-        where: {
-          OR: [
-            { nombre: { contains: nombre, mode: 'insensitive' } },
-            { codigo_interno: { contains: nombre, mode: 'insensitive' } },
-          ],
-          activo: true,
-        },
-        select: {
-          nombre: true,
-          valor_referencia_min: true,
-          valor_referencia_max: true,
-          unidad_medida: true,
-          valores_referencia_texto: true,
-        },
-      });
+      // Usar búsqueda flexible
+      const examen = await this.buscarExamenFlexible(nombre);
 
       if (!examen) {
+        // Buscar sugerencias
+        const similares = await this.buscarExamenesSimilares(nombre);
+        const sugerencias = similares.map(e => e.nombre).join(', ');
+
         return {
           success: false,
-          mensaje: `No encontré el examen "${nombre}".`,
+          mensaje: sugerencias
+            ? `No encontré "${nombre}". ¿Quizás buscas: ${sugerencias}?`
+            : `No encontré el examen "${nombre}".`,
           error_code: 'EXAMEN_NO_ENCONTRADO',
         };
       }
