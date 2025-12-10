@@ -170,13 +170,15 @@ export class PdfInventarioService {
       }
 
       // Contenido de la fila
+      const precioUnit = detalle.precio_unitario ? Number(detalle.precio_unitario) : 0;
+      const totalLinea = detalle.total_linea ? Number(detalle.total_linea) : 0;
       const rowData = [
         (index + 1).toString(),
         detalle.item.codigo_interno,
         detalle.item.nombre,
         detalle.cantidad.toString(),
-        `$${Number(detalle.precio_unitario).toFixed(2)}`,
-        `$${Number(detalle.total_linea).toFixed(2)}`,
+        `$${precioUnit.toFixed(2)}`,
+        `$${totalLinea.toFixed(2)}`,
       ];
 
       rowData.forEach((cell, i) => {
@@ -208,20 +210,24 @@ export class PdfInventarioService {
 
     // === TOTALES ===
     const totalsX = 380;
+    const subtotalNum = orden.subtotal ? Number(orden.subtotal) : 0;
+    const ivaNum = orden.iva ? Number(orden.iva) : 0;
+    const totalNum = orden.total ? Number(orden.total) : 0;
+
     doc
       .fontSize(10)
       .font('Helvetica')
       .text('Subtotal:', totalsX, doc.y, { continued: true, width: 80, align: 'right' })
-      .text(`$${Number(orden.subtotal).toFixed(2)}`, { align: 'right' });
+      .text(`$${subtotalNum.toFixed(2)}`, { align: 'right' });
 
     doc
       .text('IVA (12%):', totalsX, doc.y, { continued: true, width: 80, align: 'right' })
-      .text(`$${Number(orden.iva).toFixed(2)}`, { align: 'right' });
+      .text(`$${ivaNum.toFixed(2)}`, { align: 'right' });
 
     doc
       .font('Helvetica-Bold')
       .text('TOTAL:', totalsX, doc.y, { continued: true, width: 80, align: 'right' })
-      .text(`$${Number(orden.total).toFixed(2)}`, { align: 'right' });
+      .text(`$${totalNum.toFixed(2)}`, { align: 'right' });
 
     doc.moveDown(2);
 

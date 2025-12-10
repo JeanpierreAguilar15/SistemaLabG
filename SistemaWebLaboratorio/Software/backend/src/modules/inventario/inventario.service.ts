@@ -1841,9 +1841,74 @@ export class InventarioService {
   }
 
   async updateOrdenCompra(id: number, data: any, adminId: number) {
+    // Verificar que la orden existe y está en BORRADOR
+    const ordenActual = await this.prisma.ordenCompra.findUnique({
+      where: { codigo_orden_compra: id },
+      include: { detalles: true },
+    });
+
+    if (!ordenActual) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    if (ordenActual.estado !== 'BORRADOR') {
+      throw new BadRequestException('Solo se pueden editar órdenes en estado BORRADOR');
+    }
+
+    // Si se envían nuevos detalles, recalcular totales
+    const detalles = data.detalles || [];
+    let updateData: any = {
+      codigo_proveedor: data.codigo_proveedor,
+      fecha_entrega_estimada: data.fecha_entrega_estimada ? new Date(data.fecha_entrega_estimada) : null,
+      observaciones: data.observaciones || null,
+    };
+
+    // Si hay detalles nuevos, eliminar los anteriores y crear los nuevos
+    if (detalles.length > 0) {
+      const subtotal = detalles.reduce(
+        (sum: number, d: any) => sum + d.cantidad * d.precio_unitario,
+        0,
+      );
+      const iva = 0;
+      const total = subtotal + iva;
+
+      // Primero eliminar detalles existentes
+      await this.prisma.ordenCompraDetalle.deleteMany({
+        where: { codigo_orden_compra: id },
+      });
+
+      // Actualizar orden con nuevos detalles
+      return this.prisma.ordenCompra.update({
+        where: { codigo_orden_compra: id },
+        data: {
+          ...updateData,
+          subtotal,
+          iva,
+          total,
+          detalles: {
+            create: detalles.map((d: any) => ({
+              codigo_item: d.codigo_item,
+              cantidad: d.cantidad,
+              precio_unitario: d.precio_unitario,
+              total_linea: d.cantidad * d.precio_unitario,
+            })),
+          },
+        },
+        include: {
+          proveedor: true,
+          detalles: { include: { item: true } },
+        },
+      });
+    }
+
+    // Si no hay detalles, solo actualizar datos básicos
     return this.prisma.ordenCompra.update({
       where: { codigo_orden_compra: id },
-      data,
+      data: updateData,
+      include: {
+        proveedor: true,
+        detalles: { include: { item: true } },
+      },
     });
   }
 

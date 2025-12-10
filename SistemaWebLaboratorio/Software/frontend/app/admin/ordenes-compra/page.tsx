@@ -75,6 +75,7 @@ export default function OrdenesCompraPage() {
   const [showModal, setShowModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [selectedOrden, setSelectedOrden] = useState<OrdenCompra | null>(null)
+  const [editingOrden, setEditingOrden] = useState<OrdenCompra | null>(null)
   const [filterEstado, setFilterEstado] = useState<string>('all')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [pagination, setPagination] = useState<PaginationInfo | null>(null)
@@ -183,8 +184,12 @@ export default function OrdenesCompraPage() {
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders`, {
-        method: 'POST',
+      const url = editingOrden
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders/${editingOrden.codigo_orden}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders`
+
+      const response = await fetch(url, {
+        method: editingOrden ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
@@ -193,12 +198,15 @@ export default function OrdenesCompraPage() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Orden de compra creada correctamente' })
+        setMessage({
+          type: 'success',
+          text: editingOrden ? 'Orden de compra actualizada correctamente' : 'Orden de compra creada correctamente',
+        })
         loadOrdenes()
         handleCloseModal()
       } else {
         const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al crear orden' })
+        setMessage({ type: 'error', text: error.message || 'Error al guardar orden' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
@@ -326,12 +334,43 @@ export default function OrdenesCompraPage() {
 
   const handleCloseModal = () => {
     setShowModal(false)
+    setEditingOrden(null)
     setFormData({
       codigo_proveedor: '',
       fecha_entrega_esperada: '',
       observaciones: '',
       detalles: [],
     })
+  }
+
+  const handleEdit = async (orden: OrdenCompra) => {
+    // Cargar detalles completos de la orden
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders/${orden.codigo_orden}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setEditingOrden(data)
+        setFormData({
+          codigo_proveedor: data.codigo_proveedor?.toString() || '',
+          fecha_entrega_esperada: data.fecha_entrega_esperada
+            ? new Date(data.fecha_entrega_esperada).toISOString().split('T')[0]
+            : '',
+          observaciones: data.observaciones || '',
+          detalles: (data.detalles || []).map((d: any) => ({
+            codigo_item: d.codigo_item?.toString() || '',
+            cantidad: d.cantidad?.toString() || '1',
+            precio_unitario: d.precio_unitario?.toString() || '',
+          })),
+        })
+        setShowModal(true)
+      }
+    } catch (error) {
+      console.error('Error loading order for edit:', error)
+      setMessage({ type: 'error', text: 'Error al cargar orden para edición' })
+    }
   }
 
   const formatCurrency = (value: number) => {
@@ -492,6 +531,9 @@ export default function OrdenesCompraPage() {
                       </Button>
                       {orden.estado === 'BORRADOR' && (
                         <>
+                          <Button size="sm" variant="outline" onClick={() => handleEdit(orden)}>
+                            Editar
+                          </Button>
                           <Button size="sm" variant="outline" onClick={() => handleEmit(orden.codigo_orden)}>
                             Emitir
                           </Button>
@@ -567,7 +609,7 @@ export default function OrdenesCompraPage() {
           <div className="bg-white rounded-xl max-w-3xl w-full my-8">
             <div className="p-6 border-b">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold">Nueva Orden de Compra</h2>
+                <h2 className="text-xl font-bold">{editingOrden ? 'Editar Orden de Compra' : 'Nueva Orden de Compra'}</h2>
                 <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -697,7 +739,7 @@ export default function OrdenesCompraPage() {
                 <Button type="button" variant="outline" onClick={handleCloseModal}>
                   Cancelar
                 </Button>
-                <Button type="submit">Crear Orden</Button>
+                <Button type="submit">{editingOrden ? 'Guardar Cambios' : 'Crear Orden'}</Button>
               </div>
             </form>
           </div>
