@@ -15,11 +15,11 @@ export class CreateInventoryItemDto {
   @IsInt()
   codigo_categoria?: number;
 
+  @IsOptional() // Ahora es opcional - se auto-genera si no se proporciona
   @IsString()
-  @IsNotEmpty({ message: 'El código interno es requerido' })
   @MinLength(2, { message: 'El código interno debe tener al menos 2 caracteres' })
   @MaxLength(50, { message: 'El código interno no puede exceder 50 caracteres' })
-  codigo_interno: string;
+  codigo_interno?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'El nombre del item es requerido' })

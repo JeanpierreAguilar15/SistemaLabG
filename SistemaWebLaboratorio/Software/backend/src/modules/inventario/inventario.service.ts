@@ -76,34 +76,142 @@ export class InventarioService {
   }
 
   async createInventoryItem(data: CreateInventoryItemDto, adminId: number) {
-    // Verificar código interno único
-    const existing = await this.prisma.item.findUnique({
-      where: { codigo_interno: data.codigo_interno },
+    // 1. Validar duplicados por nombre + unidad_medida + categoria
+    const duplicado = await this.prisma.item.findFirst({
+      where: {
+        nombre: { equals: data.nombre, mode: 'insensitive' },
+        unidad_medida: { equals: data.unidad_medida, mode: 'insensitive' },
+        codigo_categoria: data.codigo_categoria || null,
+      },
     });
 
-    if (existing) {
-      throw new BadRequestException(`El código interno ${data.codigo_interno} ya está en uso`);
+    if (duplicado) {
+      throw new BadRequestException(
+        `Ya existe un ítem con el mismo nombre, unidad de medida y categoría: ${duplicado.codigo_interno}`
+      );
     }
 
-    return this.prisma.item.create({
+    // 2. Auto-generar código interno si no se proporciona
+    let codigoInterno = data.codigo_interno;
+    if (!codigoInterno) {
+      codigoInterno = await this.generarCodigoInterno(data.codigo_categoria);
+    } else {
+      // Verificar que el código proporcionado no exista
+      const existingCode = await this.prisma.item.findUnique({
+        where: { codigo_interno: codigoInterno },
+      });
+      if (existingCode) {
+        throw new BadRequestException(`El código interno ${codigoInterno} ya está en uso`);
+      }
+    }
+
+    // 3. Crear el ítem
+    const item = await this.prisma.item.create({
       data: {
         ...data,
+        codigo_interno: codigoInterno,
         stock_actual: data.stock_actual || 0,
         activo: true,
       },
+      include: { categoria: true },
     });
+
+    // 4. Registrar en auditoría
+    await this.registrarAuditoria(
+      adminId,
+      'CREAR_ITEM',
+      'Item',
+      item.codigo_item,
+      null,
+      item,
+      `Creación de ítem: ${item.nombre} (${item.codigo_interno})`
+    );
+
+    this.logger.log(`Ítem creado: ${item.codigo_interno} - ${item.nombre} por usuario ${adminId}`);
+    return item;
+  }
+
+  /**
+   * Genera un código interno automático basado en la categoría
+   * Formato: XXX-0001 (prefijo de categoría + secuencial)
+   */
+  private async generarCodigoInterno(codigoCategoria?: number): Promise<string> {
+    let prefijo = 'ITM'; // Default prefix
+
+    if (codigoCategoria) {
+      const categoria = await this.prisma.categoriaItem.findUnique({
+        where: { codigo_categoria: codigoCategoria },
+      });
+      if (categoria) {
+        // Tomar las primeras 3 letras del nombre de categoría
+        prefijo = categoria.nombre
+          .substring(0, 3)
+          .toUpperCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, ''); // Quitar acentos
+      }
+    }
+
+    // Buscar el último código con este prefijo
+    const ultimoItem = await this.prisma.item.findFirst({
+      where: {
+        codigo_interno: { startsWith: prefijo },
+      },
+      orderBy: { codigo_interno: 'desc' },
+    });
+
+    let secuencial = 1;
+    if (ultimoItem) {
+      const match = ultimoItem.codigo_interno.match(/-(\d+)$/);
+      if (match) {
+        secuencial = parseInt(match[1], 10) + 1;
+      }
+    }
+
+    return `${prefijo}-${secuencial.toString().padStart(4, '0')}`;
+  }
+
+  /**
+   * Registra una acción en el log de auditoría
+   */
+  private async registrarAuditoria(
+    usuarioId: number,
+    accion: string,
+    entidad: string,
+    entidadId?: number,
+    valorAnterior?: any,
+    valorNuevo?: any,
+    descripcion?: string
+  ) {
+    try {
+      await this.prisma.logActividad.create({
+        data: {
+          codigo_usuario: usuarioId,
+          accion,
+          entidad,
+          descripcion: descripcion || `${accion} en ${entidad}`,
+          ip_address: null,
+          user_agent: null,
+          fecha_accion: new Date(),
+        },
+      });
+    } catch (error) {
+      this.logger.warn(`Error al registrar auditoría: ${error.message}`);
+    }
   }
 
   async updateInventoryItem(codigo_item: number, data: UpdateInventoryItemDto, adminId: number) {
-    const item = await this.prisma.item.findUnique({
+    const itemAnterior = await this.prisma.item.findUnique({
       where: { codigo_item },
+      include: { categoria: true },
     });
 
-    if (!item) {
+    if (!itemAnterior) {
       throw new NotFoundException('Ítem no encontrado');
     }
 
-    if (data.codigo_interno && data.codigo_interno !== item.codigo_interno) {
+    // Validar código interno único si se cambia
+    if (data.codigo_interno && data.codigo_interno !== itemAnterior.codigo_interno) {
       const existing = await this.prisma.item.findUnique({
         where: { codigo_interno: data.codigo_interno },
       });
@@ -113,10 +221,63 @@ export class InventarioService {
       }
     }
 
-    return this.prisma.item.update({
+    // Validar duplicados si cambia nombre, unidad o categoría
+    if (data.nombre || data.unidad_medida || data.codigo_categoria !== undefined) {
+      const duplicado = await this.prisma.item.findFirst({
+        where: {
+          codigo_item: { not: codigo_item },
+          nombre: { equals: data.nombre || itemAnterior.nombre, mode: 'insensitive' },
+          unidad_medida: { equals: data.unidad_medida || itemAnterior.unidad_medida, mode: 'insensitive' },
+          codigo_categoria: data.codigo_categoria !== undefined ? data.codigo_categoria : itemAnterior.codigo_categoria,
+        },
+      });
+
+      if (duplicado) {
+        throw new BadRequestException(
+          `Ya existe un ítem con el mismo nombre, unidad de medida y categoría: ${duplicado.codigo_interno}`
+        );
+      }
+    }
+
+    // Actualizar el ítem
+    const itemActualizado = await this.prisma.item.update({
       where: { codigo_item },
       data,
+      include: { categoria: true },
     });
+
+    // Registrar cambios en auditoría
+    const cambios = this.detectarCambios(itemAnterior, itemActualizado);
+    if (cambios.length > 0) {
+      await this.registrarAuditoria(
+        adminId,
+        'ACTUALIZAR_ITEM',
+        'Item',
+        codigo_item,
+        itemAnterior,
+        itemActualizado,
+        `Actualización de ítem ${itemAnterior.codigo_interno}: ${cambios.join(', ')}`
+      );
+    }
+
+    this.logger.log(`Ítem actualizado: ${itemActualizado.codigo_interno} por usuario ${adminId}`);
+    return itemActualizado;
+  }
+
+  /**
+   * Detecta los campos que cambiaron entre dos objetos
+   */
+  private detectarCambios(anterior: any, nuevo: any): string[] {
+    const cambios: string[] = [];
+    const camposRelevantes = ['nombre', 'descripcion', 'unidad_medida', 'stock_minimo', 'stock_maximo', 'costo_unitario', 'precio_venta', 'activo', 'codigo_categoria'];
+
+    for (const campo of camposRelevantes) {
+      if (anterior[campo] !== nuevo[campo]) {
+        cambios.push(`${campo}: "${anterior[campo]}" → "${nuevo[campo]}"`);
+      }
+    }
+
+    return cambios;
   }
 
   async deleteInventoryItem(codigo_item: number, adminId: number) {
