@@ -7,6 +7,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { DialogflowService } from '../services/dialogflow.service';
@@ -26,6 +27,8 @@ import {
 @ApiTags('Dialogflow / Chatbot')
 @Controller('dialogflow')
 export class DialogflowController {
+  private readonly logger = new Logger(DialogflowController.name);
+
   constructor(
     private readonly dialogflowService: DialogflowService,
     private readonly liveChatService: LiveChatService,
@@ -38,8 +41,11 @@ export class DialogflowController {
   @Get('examenes')
   @ApiOperation({ summary: 'Listar exámenes disponibles con precios' })
   @ApiResponse({ status: 200, description: 'Lista de exámenes' })
-  async listarExamenes(): Promise<DialogflowResponse<ExamenInfoDto[]>> {
-    return this.dialogflowService.listarExamenes();
+  async listarExamenes(): Promise<any> {
+    const result = await this.dialogflowService.listarExamenes();
+    const response = JSON.parse(JSON.stringify(result));
+    this.logger.log(`Respuesta listarExamenes: ${result.data?.length || 0} exámenes`);
+    return response;
   }
 
   @Get('examenes/precio/:nombre')
@@ -48,8 +54,12 @@ export class DialogflowController {
   @ApiResponse({ status: 200, description: 'Precio del examen' })
   async consultarPrecio(
     @Param('nombre') nombre: string,
-  ): Promise<DialogflowResponse<ExamenInfoDto>> {
-    return this.dialogflowService.consultarPrecio(nombre);
+  ): Promise<any> {
+    const result = await this.dialogflowService.consultarPrecio(nombre);
+    // Asegurar que sea un objeto plano para serialización
+    const response = JSON.parse(JSON.stringify(result));
+    this.logger.log(`Respuesta consultarPrecio: ${JSON.stringify(response)}`);
+    return response;
   }
 
   @Get('examenes/rango/:nombre')
@@ -58,8 +68,11 @@ export class DialogflowController {
   @ApiResponse({ status: 200, description: 'Valores de referencia' })
   async consultarRango(
     @Param('nombre') nombre: string,
-  ): Promise<DialogflowResponse<RangoReferenciaDto>> {
-    return this.dialogflowService.consultarRango(nombre);
+  ): Promise<any> {
+    const result = await this.dialogflowService.consultarRango(nombre);
+    const response = JSON.parse(JSON.stringify(result));
+    this.logger.log(`Respuesta consultarRango: ${JSON.stringify(response)}`);
+    return response;
   }
 
   // =====================================================
