@@ -1,30 +1,12 @@
 openapi: 3.0.0
 info:
   title: Laboratorio Clínico Franz - API para Dialogflow CX
-  description: |
-    API REST para integración con Dialogflow CX.
-    Permite consultar precios de exámenes, valores de referencia,
-    disponibilidad de horarios y agendar citas.
+  description: API REST para integración con Dialogflow CX
   version: 1.0.0
-  contact:
-    name: Soporte Técnico
-    email: soporte@laboratoriofranz.com
 
 servers:
-  - url: https://api.laboratoriofranz.com
-    description: Servidor de producción
-  - url: http://localhost:3000
-    description: Servidor de desarrollo
-
-tags:
-  - name: Exámenes
-    description: Operaciones relacionadas con exámenes de laboratorio
-  - name: Citas
-    description: Operaciones relacionadas con agendamiento de citas
-  - name: Handoff
-    description: Transferencia a operador humano
-  - name: Webhook
-    description: Webhook para Dialogflow CX
+  - url: https://big-cooks-peel.loca.lt
+    description: Servidor de desarrollo (localtunnel)
 
 paths:
   /api/v1/dialogflow/examenes:
@@ -32,28 +14,50 @@ paths:
       operationId: listarExamenes
       summary: Listar todos los exámenes disponibles
       description: Devuelve la lista de exámenes con sus precios actuales
-      tags:
-        - Exámenes
       responses:
         '200':
           description: Lista de exámenes obtenida exitosamente
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListaExamenesResponse'
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  mensaje:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        codigo:
+                          type: integer
+                        nombre:
+                          type: string
+                        categoria:
+                          type: string
+                        precio:
+                          type: number
+                        moneda:
+                          type: string
+                        requiere_ayuno:
+                          type: boolean
+                        horas_ayuno:
+                          type: integer
+                        tiempo_entrega_horas:
+                          type: integer
 
   /api/v1/dialogflow/examenes/precio/{nombre}:
     get:
       operationId: consultarPrecioExamen
       summary: Consultar precio de un examen
       description: Busca un examen por nombre y devuelve su precio actual
-      tags:
-        - Exámenes
       parameters:
         - name: nombre
           in: path
           required: true
-          description: Nombre del examen (búsqueda parcial)
+          description: Nombre del examen (búsqueda parcial flexible)
           schema:
             type: string
           example: hemograma
@@ -63,15 +67,43 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PrecioExamenResponse'
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    description: true si encontró el examen
+                  mensaje:
+                    type: string
+                    description: Mensaje con el precio o error
+                  data:
+                    type: object
+                    description: Datos del examen (solo si success=true)
+                    properties:
+                      codigo:
+                        type: integer
+                      nombre:
+                        type: string
+                      categoria:
+                        type: string
+                      precio:
+                        type: number
+                      moneda:
+                        type: string
+                      requiere_ayuno:
+                        type: boolean
+                      horas_ayuno:
+                        type: integer
+                      tiempo_entrega_horas:
+                        type: integer
+                  error_code:
+                    type: string
+                    description: Código de error si success=false
 
   /api/v1/dialogflow/examenes/rango/{nombre}:
     get:
       operationId: consultarRangoExamen
       summary: Consultar valores de referencia de un examen
-      description: Devuelve los rangos normales/valores de referencia de un examen
-      tags:
-        - Exámenes
+      description: Devuelve los rangos normales de un examen
       parameters:
         - name: nombre
           in: path
@@ -86,23 +118,40 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RangoExamenResponse'
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  mensaje:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      nombre:
+                        type: string
+                      valor_min:
+                        type: number
+                      valor_max:
+                        type: number
+                      unidad_medida:
+                        type: string
+                      valores_texto:
+                        type: string
+                  error_code:
+                    type: string
 
   /api/v1/dialogflow/citas/disponibilidad:
     get:
       operationId: consultarDisponibilidad
       summary: Consultar disponibilidad de horarios
-      description: Devuelve los horarios disponibles para una fecha específica
-      tags:
-        - Citas
+      description: Devuelve los horarios disponibles para una fecha
       parameters:
         - name: fecha
           in: query
           required: true
-          description: Fecha a consultar en formato YYYY-MM-DD
+          description: Fecha en formato YYYY-MM-DD
           schema:
             type: string
-            format: date
           example: '2025-01-15'
         - name: servicio
           in: query
@@ -110,49 +159,113 @@ paths:
           description: Código del servicio (opcional)
           schema:
             type: integer
-          example: 1
       responses:
         '200':
-          description: Disponibilidad consultada exitosamente
+          description: Disponibilidad consultada
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DisponibilidadResponse'
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  mensaje:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      fecha:
+                        type: string
+                      total_horarios:
+                        type: integer
+                      horarios:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            slot_id:
+                              type: integer
+                            hora:
+                              type: string
+                            cupos:
+                              type: integer
+                            sede:
+                              type: string
+                            servicio:
+                              type: string
 
   /api/v1/dialogflow/citas/agendar:
     post:
       operationId: agendarCita
       summary: Agendar una nueva cita
-      description: Crea una nueva cita para un paciente en la fecha y hora especificadas
-      tags:
-        - Citas
+      description: Crea una cita para un paciente
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AgendarCitaRequest'
+              type: object
+              required:
+                - fecha
+                - hora
+                - cedula_paciente
+              properties:
+                fecha:
+                  type: string
+                  description: Fecha YYYY-MM-DD
+                  example: '2025-01-15'
+                hora:
+                  type: string
+                  description: Hora HH:MM
+                  example: '09:00'
+                cedula_paciente:
+                  type: string
+                  description: Cédula del paciente
+                  example: '1234567890'
+                examen:
+                  type: string
+                  description: Nombre del examen
+                codigo_servicio:
+                  type: integer
+                codigo_sede:
+                  type: integer
+                observaciones:
+                  type: string
       responses:
         '200':
-          description: Cita agendada exitosamente
+          description: Cita agendada
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CitaResponse'
-        '400':
-          description: Datos inválidos o no hay disponibilidad
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  mensaje:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      codigo_cita:
+                        type: integer
+                      fecha:
+                        type: string
+                      hora:
+                        type: string
+                      servicio:
+                        type: string
+                      sede:
+                        type: string
+                      estado:
+                        type: string
+                  error_code:
+                    type: string
 
   /api/v1/dialogflow/citas/paciente/{cedula}:
     get:
       operationId: consultarCitasPaciente
       summary: Consultar citas de un paciente
-      description: Devuelve las citas pendientes de un paciente identificado por su cédula
-      tags:
-        - Citas
+      description: Devuelve las citas pendientes de un paciente
       parameters:
         - name: cedula
           in: path
@@ -163,480 +276,32 @@ paths:
           example: '1234567890'
       responses:
         '200':
-          description: Citas del paciente obtenidas
+          description: Citas del paciente
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListaCitasResponse'
-
-  /api/v1/dialogflow/handoff/solicitar:
-    post:
-      operationId: solicitarHandoff
-      summary: Solicitar transferencia a operador humano
-      description: Inicia el proceso de handoff para conectar con un operador
-      tags:
-        - Handoff
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SolicitarHandoffRequest'
-      responses:
-        '200':
-          description: Handoff iniciado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HandoffResponse'
-
-  /api/v1/dialogflow/handoff/pendientes:
-    get:
-      operationId: obtenerPendientes
-      summary: Obtener conversaciones pendientes
-      description: Lista de conversaciones esperando operador (para panel de operadores)
-      tags:
-        - Handoff
-      responses:
-        '200':
-          description: Lista de conversaciones pendientes
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ConversacionPendiente'
-
-  /api/v1/dialogflow/handoff/estadisticas:
-    get:
-      operationId: obtenerEstadisticas
-      summary: Estadísticas del chat en vivo
-      description: Devuelve estadísticas de conversaciones pendientes, activas y cerradas
-      tags:
-        - Handoff
-      responses:
-        '200':
-          description: Estadísticas obtenidas
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EstadisticasChat'
-
-  /api/v1/dialogflow/webhook:
-    post:
-      operationId: handleDialogflowWebhook
-      summary: Webhook para Dialogflow CX
-      description: Endpoint que recibe las solicitudes de fulfillment de Dialogflow CX
-      tags:
-        - Webhook
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DialogflowWebhookRequest'
-      responses:
-        '200':
-          description: Respuesta de fulfillment
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DialogflowWebhookResponse'
-
-components:
-  schemas:
-    # Base Response
-    BaseResponse:
-      type: object
-      required:
-        - success
-        - mensaje
-      properties:
-        success:
-          type: boolean
-          description: Indica si la operación fue exitosa
-        mensaje:
-          type: string
-          description: Mensaje descriptivo para el chatbot
-        error_code:
-          type: string
-          description: Código de error si aplica
-
-    # Precio Examen
-    PrecioExamen:
-      type: object
-      properties:
-        codigo:
-          type: integer
-          description: Código del examen
-        nombre:
-          type: string
-          description: Nombre del examen
-          example: Hemograma Completo
-        precio:
-          type: number
-          format: float
-          description: Precio actual en USD
-          example: 15.00
-        moneda:
-          type: string
-          description: Moneda
-          example: USD
-        categoria:
-          type: string
-          description: Categoría del examen
-          example: Hematología
-        requiere_ayuno:
-          type: boolean
-          description: Si requiere ayuno
-          example: false
-        horas_ayuno:
-          type: integer
-          description: Horas de ayuno requeridas
-          example: 8
-        tiempo_entrega_horas:
-          type: integer
-          description: Tiempo de entrega en horas
-
-    PrecioExamenResponse:
-      allOf:
-        - $ref: '#/components/schemas/BaseResponse'
-        - type: object
-          properties:
-            data:
-              $ref: '#/components/schemas/PrecioExamen'
-
-    ListaExamenesResponse:
-      allOf:
-        - $ref: '#/components/schemas/BaseResponse'
-        - type: object
-          properties:
-            data:
-              type: array
-              items:
-                $ref: '#/components/schemas/PrecioExamen'
-
-    # Rango Referencia
-    RangoReferencia:
-      type: object
-      properties:
-        nombre:
-          type: string
-          description: Nombre del examen
-          example: Glucosa en Ayunas
-        valor_min:
-          type: number
-          format: float
-          description: Valor mínimo de referencia
-          example: 70
-        valor_max:
-          type: number
-          format: float
-          description: Valor máximo de referencia
-          example: 100
-        unidad_medida:
-          type: string
-          description: Unidad de medida
-          example: mg/dL
-        valores_texto:
-          type: string
-          description: Descripción textual del rango
-          example: Negativo
-
-    RangoExamenResponse:
-      allOf:
-        - $ref: '#/components/schemas/BaseResponse'
-        - type: object
-          properties:
-            data:
-              $ref: '#/components/schemas/RangoReferencia'
-
-    # Disponibilidad
-    HorarioDisponible:
-      type: object
-      required:
-        - slot_id
-        - hora
-        - cupos
-        - sede
-        - servicio
-      properties:
-        slot_id:
-          type: integer
-          description: ID del slot
-          example: 123
-        hora:
-          type: string
-          description: Hora de inicio
-          example: '09:00'
-        cupos:
-          type: integer
-          description: Cupos disponibles
-          example: 3
-        sede:
-          type: string
-          description: Nombre de la sede
-          example: Sede Principal
-        servicio:
-          type: string
-          description: Nombre del servicio
-          example: Toma de muestras
-
-    Disponibilidad:
-      type: object
-      properties:
-        fecha:
-          type: string
-          format: date
-          description: Fecha consultada
-          example: '2025-01-15'
-        total_horarios:
-          type: integer
-          description: Total de horarios disponibles
-          example: 8
-        horarios:
-          type: array
-          items:
-            $ref: '#/components/schemas/HorarioDisponible'
-
-    DisponibilidadResponse:
-      allOf:
-        - $ref: '#/components/schemas/BaseResponse'
-        - type: object
-          properties:
-            data:
-              $ref: '#/components/schemas/Disponibilidad'
-
-    # Citas
-    AgendarCitaRequest:
-      type: object
-      required:
-        - fecha
-        - hora
-        - cedula_paciente
-      properties:
-        fecha:
-          type: string
-          format: date
-          description: Fecha de la cita en formato YYYY-MM-DD
-          example: '2025-01-15'
-        hora:
-          type: string
-          description: Hora de la cita en formato HH:MM
-          example: '09:00'
-        cedula_paciente:
-          type: string
-          description: Cédula del paciente
-          example: '1234567890'
-        examen:
-          type: string
-          description: Nombre del examen o servicio
-          example: Hemograma Completo
-        codigo_servicio:
-          type: integer
-          description: Código del servicio
-          example: 1
-        codigo_sede:
-          type: integer
-          description: Código de la sede
-          example: 1
-        observaciones:
-          type: string
-          description: Observaciones adicionales
-
-    CitaInfo:
-      type: object
-      properties:
-        codigo_cita:
-          type: integer
-          description: Código único de la cita
-          example: 456
-        fecha:
-          type: string
-          format: date
-          description: Fecha de la cita
-          example: '2025-01-15'
-        hora:
-          type: string
-          description: Hora de la cita
-          example: '09:00'
-        servicio:
-          type: string
-          description: Servicio
-          example: Toma de muestras
-        sede:
-          type: string
-          description: Sede
-          example: Sede Principal
-        estado:
-          type: string
-          description: Estado de la cita
-          example: AGENDADA
-          enum:
-            - AGENDADA
-            - CONFIRMADA
-            - EN_PROCESO
-            - COMPLETADA
-            - CANCELADA
-
-    CitaResponse:
-      allOf:
-        - $ref: '#/components/schemas/BaseResponse'
-        - type: object
-          properties:
-            data:
-              $ref: '#/components/schemas/CitaInfo'
-
-    ListaCitasResponse:
-      allOf:
-        - $ref: '#/components/schemas/BaseResponse'
-        - type: object
-          properties:
-            data:
-              type: array
-              items:
-                $ref: '#/components/schemas/CitaInfo'
-
-    # Handoff
-    SolicitarHandoffRequest:
-      type: object
-      required:
-        - session_id
-      properties:
-        session_id:
-          type: string
-          description: ID de sesión del chat
-        cedula:
-          type: string
-          description: Cédula del paciente si está identificado
-        nombre_usuario:
-          type: string
-          description: Nombre del usuario
-        motivo:
-          type: string
-          description: Motivo de la solicitud
-
-    HandoffResponse:
-      type: object
-      properties:
-        conversacion_id:
-          type: integer
-          description: ID de la conversación
-        posicion_cola:
-          type: integer
-          description: Posición en cola de espera
-        estado:
-          type: string
-          enum: [ACTIVA, ESPERANDO_OPERADOR, ATENDIDA, CERRADA]
-        operador_nombre:
-          type: string
-          description: Nombre del operador asignado
-        mensaje:
-          type: string
-          description: Mensaje para el usuario
-
-    ConversacionPendiente:
-      type: object
-      properties:
-        id:
-          type: integer
-        usuario_id:
-          type: integer
-        usuario_nombre:
-          type: string
-        usuario_email:
-          type: string
-        estado:
-          type: string
-        esperando_desde:
-          type: string
-          format: date-time
-        posicion_cola:
-          type: integer
-        ultimo_mensaje:
-          type: string
-
-    EstadisticasChat:
-      type: object
-      properties:
-        pendientes:
-          type: integer
-          description: Conversaciones esperando operador
-        activas:
-          type: integer
-          description: Conversaciones siendo atendidas
-        cerradas_hoy:
-          type: integer
-          description: Conversaciones cerradas hoy
-
-    # Error
-    ErrorResponse:
-      type: object
-      required:
-        - success
-        - mensaje
-        - error_code
-      properties:
-        success:
-          type: boolean
-          example: false
-        mensaje:
-          type: string
-          description: Mensaje de error descriptivo
-        error_code:
-          type: string
-          description: Código de error
-          enum:
-            - EXAMEN_NO_ENCONTRADO
-            - PACIENTE_NO_ENCONTRADO
-            - FECHA_INVALIDA
-            - FECHA_PASADA
-            - SLOT_NO_DISPONIBLE
-            - CITA_DUPLICADA
-            - ERROR_INTERNO
-
-    # Dialogflow CX Webhook
-    DialogflowWebhookRequest:
-      type: object
-      description: Solicitud de fulfillment de Dialogflow CX
-      properties:
-        fulfillmentInfo:
-          type: object
-          properties:
-            tag:
-              type: string
-              description: Tag del fulfillment
-              example: consultar-precio
-        sessionInfo:
-          type: object
-          properties:
-            parameters:
-              type: object
-              additionalProperties: true
-              description: Parámetros extraídos por Dialogflow
-
-    DialogflowWebhookResponse:
-      type: object
-      description: Respuesta de fulfillment para Dialogflow CX
-      properties:
-        fulfillment_response:
-          type: object
-          properties:
-            messages:
-              type: array
-              items:
                 type: object
                 properties:
-                  text:
-                    type: object
-                    properties:
-                      text:
-                        type: array
-                        items:
+                  success:
+                    type: boolean
+                  mensaje:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        codigo_cita:
+                          type: integer
+                        fecha:
                           type: string
-        sessionInfo:
-          type: object
-          properties:
-            parameters:
-              type: object
-              additionalProperties: true
+                        hora:
+                          type: string
+                        servicio:
+                          type: string
+                        sede:
+                          type: string
+                        estado:
+                          type: string
+                  error_code:
+                    type: string
