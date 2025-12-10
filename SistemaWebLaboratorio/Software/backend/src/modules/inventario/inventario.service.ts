@@ -1740,4 +1740,247 @@ export class InventarioService {
       data: { estado: 'CANCELADA' },
     });
   }
+
+  // ==================== WORKFLOW AUTOMATIZADO DE FACTURA ====================
+
+  /**
+   * Procesa los datos extraídos del OCR de factura y crea automáticamente:
+   * 1. Proveedor (si no existe)
+   * 2. Items (si no existen)
+   * 3. Lotes con las cantidades
+   */
+  async procesarFacturaAutomatico(
+    ocrData: {
+      proveedor?: {
+        ruc?: string;
+        razon_social?: string;
+        direccion?: string;
+        telefono?: string;
+      };
+      factura?: {
+        numero?: string;
+        fecha?: string;
+        total?: number;
+      };
+      items: Array<{
+        descripcion: string;
+        cantidad: number;
+        unidad?: string;
+        precio_unitario?: number;
+        numero_lote?: string;
+        fecha_vencimiento?: string;
+      }>;
+    },
+    adminId: number,
+  ) {
+    const resultados = {
+      proveedor: null as any,
+      proveedor_creado: false,
+      items_procesados: [] as any[],
+      items_no_encontrados: [] as string[],
+      lotes_creados: [] as any[],
+      errores: [] as string[],
+    };
+
+    try {
+      // 1. Buscar o crear proveedor
+      if (ocrData.proveedor?.ruc) {
+        let proveedor = await this.prisma.proveedor.findUnique({
+          where: { ruc: ocrData.proveedor.ruc },
+        });
+
+        if (!proveedor && ocrData.proveedor.razon_social) {
+          // Crear proveedor nuevo
+          try {
+            proveedor = await this.prisma.proveedor.create({
+              data: {
+                ruc: ocrData.proveedor.ruc,
+                razon_social: ocrData.proveedor.razon_social,
+                nombre_comercial: ocrData.proveedor.razon_social,
+                direccion: ocrData.proveedor.direccion || null,
+                telefono: ocrData.proveedor.telefono || null,
+                activo: true,
+              },
+            });
+            resultados.proveedor_creado = true;
+
+            // Registrar auditoría
+            await this.registrarAuditoria(
+              adminId,
+              'CREAR',
+              'PROVEEDOR',
+              proveedor.codigo_proveedor,
+              null,
+              null,
+              `Proveedor creado automáticamente desde factura: ${proveedor.razon_social}`,
+            );
+          } catch (e) {
+            resultados.errores.push(`Error creando proveedor: ${e.message}`);
+          }
+        }
+        resultados.proveedor = proveedor;
+      }
+
+      // 2. Procesar cada item de la factura
+      for (const itemFactura of ocrData.items) {
+        if (!itemFactura.descripcion || !itemFactura.cantidad) {
+          resultados.errores.push(`Item sin descripción o cantidad: ${JSON.stringify(itemFactura)}`);
+          continue;
+        }
+
+        // Buscar item en inventario (búsqueda flexible)
+        const itemEncontrado = await this.buscarItemPorDescripcion(itemFactura.descripcion);
+
+        if (itemEncontrado) {
+          // Crear lote
+          const numeroLote = itemFactura.numero_lote || this.generarNumeroLote(ocrData.factura?.numero);
+
+          try {
+            const lote = await this.createLote(
+              {
+                codigo_item: itemEncontrado.codigo_item,
+                numero_lote: numeroLote,
+                cantidad_inicial: itemFactura.cantidad,
+                fecha_vencimiento: itemFactura.fecha_vencimiento
+                  ? new Date(itemFactura.fecha_vencimiento)
+                  : undefined,
+                proveedor: resultados.proveedor?.codigo_proveedor?.toString(),
+              },
+              adminId,
+            );
+
+            resultados.lotes_creados.push({
+              item: itemEncontrado.nombre,
+              codigo_item: itemEncontrado.codigo_item,
+              lote: lote,
+              cantidad: itemFactura.cantidad,
+            });
+
+            resultados.items_procesados.push({
+              descripcion_factura: itemFactura.descripcion,
+              item_encontrado: itemEncontrado.nombre,
+              codigo_item: itemEncontrado.codigo_item,
+              cantidad: itemFactura.cantidad,
+              lote: numeroLote,
+            });
+          } catch (e) {
+            resultados.errores.push(`Error creando lote para ${itemEncontrado.nombre}: ${e.message}`);
+          }
+        } else {
+          // Item no encontrado - agregar a lista para crear manualmente
+          resultados.items_no_encontrados.push(itemFactura.descripcion);
+        }
+      }
+
+      // 3. Registrar en auditoría el procesamiento de factura
+      await this.registrarAuditoria(
+        adminId,
+        'PROCESAR_FACTURA',
+        'INVENTARIO',
+        null,
+        null,
+        null,
+        `Factura ${ocrData.factura?.numero || 'S/N'} procesada: ${resultados.lotes_creados.length} lotes creados, ${resultados.items_no_encontrados.length} items no encontrados`,
+      );
+
+      return {
+        success: true,
+        resumen: {
+          proveedor: resultados.proveedor?.razon_social || 'No identificado',
+          proveedor_nuevo: resultados.proveedor_creado,
+          factura_numero: ocrData.factura?.numero || 'N/A',
+          total_items_factura: ocrData.items.length,
+          items_procesados: resultados.items_procesados.length,
+          items_no_encontrados: resultados.items_no_encontrados.length,
+          lotes_creados: resultados.lotes_creados.length,
+        },
+        detalles: {
+          items_procesados: resultados.items_procesados,
+          items_no_encontrados: resultados.items_no_encontrados,
+          lotes: resultados.lotes_creados,
+        },
+        errores: resultados.errores,
+      };
+
+    } catch (error) {
+      this.logger.error(`Error en procesamiento automático de factura: ${error.message}`);
+      return {
+        success: false,
+        error: error.message,
+        resultados_parciales: resultados,
+      };
+    }
+  }
+
+  /**
+   * Busca un item por descripción usando búsqueda flexible
+   */
+  private async buscarItemPorDescripcion(descripcion: string) {
+    const descripcionNormalizada = this.normalizarTexto(descripcion);
+
+    // 1. Búsqueda exacta (insensitive)
+    let item = await this.prisma.item.findFirst({
+      where: {
+        nombre: { equals: descripcion, mode: 'insensitive' },
+        activo: true,
+      },
+    });
+
+    if (item) return item;
+
+    // 2. Búsqueda por contains
+    item = await this.prisma.item.findFirst({
+      where: {
+        nombre: { contains: descripcion, mode: 'insensitive' },
+        activo: true,
+      },
+    });
+
+    if (item) return item;
+
+    // 3. Búsqueda palabra por palabra
+    const palabras = descripcionNormalizada.split(' ').filter(p => p.length > 2);
+
+    for (const palabra of palabras) {
+      item = await this.prisma.item.findFirst({
+        where: {
+          nombre: { contains: palabra, mode: 'insensitive' },
+          activo: true,
+        },
+      });
+      if (item) return item;
+    }
+
+    // 4. Búsqueda en descripción del item
+    item = await this.prisma.item.findFirst({
+      where: {
+        descripcion: { contains: descripcion, mode: 'insensitive' },
+        activo: true,
+      },
+    });
+
+    return item;
+  }
+
+  /**
+   * Normaliza texto para búsqueda (quita acentos, lowercase)
+   */
+  private normalizarTexto(texto: string): string {
+    return texto
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Genera un número de lote basado en la factura
+   */
+  private generarNumeroLote(numeroFactura?: string): string {
+    const fecha = new Date();
+    const timestamp = fecha.toISOString().slice(0, 10).replace(/-/g, '');
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `LOT-${numeroFactura || 'AUTO'}-${timestamp}-${random}`;
+  }
 }

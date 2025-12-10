@@ -21,6 +21,8 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { InventarioService } from './inventario.service';
 import { OcrFacturaService } from './services/ocr-factura.service';
+import { AlertasProgramadasService } from './services/alertas-programadas.service';
+import { WhatsAppService } from '../comunicaciones/whatsapp.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -41,6 +43,8 @@ export class InventarioController {
   constructor(
     private readonly inventarioService: InventarioService,
     private readonly ocrFacturaService: OcrFacturaService,
+    private readonly alertasProgramadasService: AlertasProgramadasService,
+    private readonly whatsAppService: WhatsAppService,
   ) {}
 
   // ==================== INVENTARIO ====================
@@ -605,5 +609,179 @@ export class InventarioController {
       fallidos: results.filter(r => !r.success).length,
       results,
     };
+  }
+
+  // ==================== WORKFLOW AUTOMATIZADO ====================
+
+  @Post('inventory/factura/procesar-automatico')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Procesar factura automáticamente (OCR + crear proveedor + crear lotes)',
+    description: 'Sube una imagen de factura, extrae datos con IA y crea automáticamente el proveedor (si no existe) y los lotes de inventario',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Imagen de la factura (JPG, PNG, PDF)',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/facturas',
+        filename: (req, file, callback) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          callback(null, `factura-auto-${uniqueSuffix}${ext}`);
+        },
+      }),
+      fileFilter: (req, file, callback) => {
+        const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+        if (allowedMimes.includes(file.mimetype)) {
+          callback(null, true);
+        } else {
+          callback(new BadRequestException('Tipo de archivo no permitido. Use JPG, PNG o PDF.'), false);
+        }
+      },
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB max
+      },
+    }),
+  )
+  async procesarFacturaAutomatico(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    // 1. Procesar imagen con OCR
+    const ocrResult = await this.ocrFacturaService.processFacturaImage(file.path);
+
+    // Eliminar archivo después de procesar
+    const fs = await import('fs');
+    try {
+      fs.unlinkSync(file.path);
+    } catch (e) {
+      // Ignorar error si no se puede eliminar
+    }
+
+    if (!ocrResult.success) {
+      throw new BadRequestException(`Error procesando factura: ${ocrResult.error}`);
+    }
+
+    // 2. Procesar datos extraídos y crear proveedor/lotes
+    const resultado = await this.inventarioService.procesarFacturaAutomatico(
+      {
+        proveedor: ocrResult.proveedor,
+        factura: ocrResult.factura,
+        items: ocrResult.items,
+      },
+      adminId,
+    );
+
+    return {
+      ocr: {
+        success: ocrResult.success,
+        proveedor_detectado: ocrResult.proveedor,
+        factura_detectada: ocrResult.factura,
+        items_detectados: ocrResult.items.length,
+      },
+      procesamiento: resultado,
+    };
+  }
+
+  @Post('inventory/factura/procesar-automatico-base64')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Procesar factura automáticamente desde base64',
+    description: 'Envía imagen en base64, extrae datos con IA y crea automáticamente proveedor y lotes',
+  })
+  async procesarFacturaAutomaticoBase64(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() data: { image: string; mimeType?: string },
+  ) {
+    if (!data.image) {
+      throw new BadRequestException('No se proporcionó ninguna imagen');
+    }
+
+    // 1. Procesar imagen con OCR
+    const mimeType = data.mimeType || 'image/jpeg';
+    const ocrResult = await this.ocrFacturaService.processFacturaBase64(data.image, mimeType);
+
+    if (!ocrResult.success) {
+      throw new BadRequestException(`Error procesando factura: ${ocrResult.error}`);
+    }
+
+    // 2. Procesar datos extraídos y crear proveedor/lotes
+    const resultado = await this.inventarioService.procesarFacturaAutomatico(
+      {
+        proveedor: ocrResult.proveedor,
+        factura: ocrResult.factura,
+        items: ocrResult.items,
+      },
+      adminId,
+    );
+
+    return {
+      ocr: {
+        success: ocrResult.success,
+        proveedor_detectado: ocrResult.proveedor,
+        factura_detectada: ocrResult.factura,
+        items_detectados: ocrResult.items.length,
+      },
+      procesamiento: resultado,
+    };
+  }
+
+  // ==================== WHATSAPP Y ALERTAS ====================
+
+  @Get('inventory/whatsapp/config')
+  @ApiOperation({ summary: 'Verificar configuración de WhatsApp' })
+  async getWhatsAppConfig() {
+    return this.whatsAppService.getConfig();
+  }
+
+  @Post('inventory/whatsapp/test')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Enviar mensaje de prueba por WhatsApp' })
+  async testWhatsApp(
+    @Body() data: { mensaje?: string; numero?: string },
+  ) {
+    const mensaje = data.mensaje || '🔬 Mensaje de prueba del Sistema de Laboratorio';
+    return this.whatsAppService.sendMessage({
+      to: data.numero || '',
+      message: mensaje,
+      tipo: 'GENERAL',
+    });
+  }
+
+  @Post('inventory/alertas/enviar-ahora')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Forzar envío inmediato de todas las alertas (stock bajo + vencimientos)' })
+  async forzarEnvioAlertas() {
+    return this.alertasProgramadasService.forzarEnvioAlertas();
+  }
+
+  @Post('inventory/alertas/stock-bajo')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Enviar alerta de stock bajo por WhatsApp' })
+  async enviarAlertaStockBajo() {
+    return this.alertasProgramadasService.enviarAlertasStockBajo();
+  }
+
+  @Post('inventory/alertas/vencimientos')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Enviar alerta de vencimientos por WhatsApp' })
+  async enviarAlertaVencimientos() {
+    return this.alertasProgramadasService.enviarAlertasVencimiento();
   }
 }
