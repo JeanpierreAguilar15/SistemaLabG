@@ -13,17 +13,21 @@ info:
 servers:
   - url: https://api.laboratoriofranz.com
     description: Servidor de producción
-  - url: http://localhost:3000
-    description: Servidor de desarrollo
+  - url: http://localhost:3001
+    description: Servidor de desarrollo local
 
 tags:
   - name: Exámenes
     description: Operaciones relacionadas con exámenes de laboratorio
   - name: Citas
     description: Operaciones relacionadas con agendamiento de citas
+  - name: Handoff
+    description: Transferencia a operador humano
+  - name: Webhook
+    description: Webhook para Dialogflow CX
 
 paths:
-  /api/dialogflow/examenes:
+  /api/v1/dialogflow/examenes:
     get:
       operationId: listarExamenes
       summary: Listar todos los exámenes disponibles
@@ -38,7 +42,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListaExamenesResponse'
 
-  /api/dialogflow/examenes/precio/{nombre}:
+  /api/v1/dialogflow/examenes/precio/{nombre}:
     get:
       operationId: consultarPrecioExamen
       summary: Consultar precio de un examen
@@ -61,7 +65,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PrecioExamenResponse'
 
-  /api/dialogflow/examenes/rango/{nombre}:
+  /api/v1/dialogflow/examenes/rango/{nombre}:
     get:
       operationId: consultarRangoExamen
       summary: Consultar valores de referencia de un examen
@@ -84,7 +88,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/RangoExamenResponse'
 
-  /api/dialogflow/citas/disponibilidad:
+  /api/v1/dialogflow/citas/disponibilidad:
     get:
       operationId: consultarDisponibilidad
       summary: Consultar disponibilidad de horarios
@@ -115,7 +119,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DisponibilidadResponse'
 
-  /api/dialogflow/citas/agendar:
+  /api/v1/dialogflow/citas/agendar:
     post:
       operationId: agendarCita
       summary: Agendar una nueva cita
@@ -142,7 +146,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/dialogflow/citas/paciente/{cedula}:
+  /api/v1/dialogflow/citas/paciente/{cedula}:
     get:
       operationId: consultarCitasPaciente
       summary: Consultar citas de un paciente
@@ -165,7 +169,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListaCitasResponse'
 
-  /api/dialogflow/webhook:
+  /api/v1/dialogflow/handoff/solicitar:
+    post:
+      operationId: solicitarHandoff
+      summary: Solicitar transferencia a operador humano
+      description: Inicia el proceso de handoff para conectar con un operador
+      tags:
+        - Handoff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitarHandoffRequest'
+      responses:
+        '200':
+          description: Handoff iniciado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoffResponse'
+
+  /api/v1/dialogflow/handoff/pendientes:
+    get:
+      operationId: obtenerPendientes
+      summary: Obtener conversaciones pendientes
+      description: Lista de conversaciones esperando operador (para panel de operadores)
+      tags:
+        - Handoff
+      responses:
+        '200':
+          description: Lista de conversaciones pendientes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConversacionPendiente'
+
+  /api/v1/dialogflow/handoff/estadisticas:
+    get:
+      operationId: obtenerEstadisticas
+      summary: Estadísticas del chat en vivo
+      description: Devuelve estadísticas de conversaciones pendientes, activas y cerradas
+      tags:
+        - Handoff
+      responses:
+        '200':
+          description: Estadísticas obtenidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadisticasChat'
+
+  /api/v1/dialogflow/webhook:
     post:
       operationId: handleDialogflowWebhook
       summary: Webhook para Dialogflow CX
@@ -209,6 +266,9 @@ components:
     PrecioExamen:
       type: object
       properties:
+        codigo:
+          type: integer
+          description: Código del examen
         nombre:
           type: string
           description: Nombre del examen
@@ -234,6 +294,9 @@ components:
           type: integer
           description: Horas de ayuno requeridas
           example: 8
+        tiempo_entrega_horas:
+          type: integer
+          description: Tiempo de entrega en horas
 
     PrecioExamenResponse:
       allOf:
@@ -433,6 +496,78 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/CitaInfo'
+
+    # Handoff
+    SolicitarHandoffRequest:
+      type: object
+      required:
+        - session_id
+      properties:
+        session_id:
+          type: string
+          description: ID de sesión del chat
+        cedula:
+          type: string
+          description: Cédula del paciente si está identificado
+        nombre_usuario:
+          type: string
+          description: Nombre del usuario
+        motivo:
+          type: string
+          description: Motivo de la solicitud
+
+    HandoffResponse:
+      type: object
+      properties:
+        conversacion_id:
+          type: integer
+          description: ID de la conversación
+        posicion_cola:
+          type: integer
+          description: Posición en cola de espera
+        estado:
+          type: string
+          enum: [ACTIVA, ESPERANDO_OPERADOR, ATENDIDA, CERRADA]
+        operador_nombre:
+          type: string
+          description: Nombre del operador asignado
+        mensaje:
+          type: string
+          description: Mensaje para el usuario
+
+    ConversacionPendiente:
+      type: object
+      properties:
+        id:
+          type: integer
+        usuario_id:
+          type: integer
+        usuario_nombre:
+          type: string
+        usuario_email:
+          type: string
+        estado:
+          type: string
+        esperando_desde:
+          type: string
+          format: date-time
+        posicion_cola:
+          type: integer
+        ultimo_mensaje:
+          type: string
+
+    EstadisticasChat:
+      type: object
+      properties:
+        pendientes:
+          type: integer
+          description: Conversaciones esperando operador
+        activas:
+          type: integer
+          description: Conversaciones siendo atendidas
+        cerradas_hoy:
+          type: integer
+          description: Conversaciones cerradas hoy
 
     # Error
     ErrorResponse:
