@@ -11,10 +11,8 @@ info:
     email: soporte@laboratoriofranz.com
 
 servers:
-  - url: https://api.laboratoriofranz.com
-    description: Servidor de producción
-  - url: http://localhost:3000
-    description: Servidor de desarrollo
+  - url: https://gnomologic-verecund-margret.ngrok-free.dev
+    description: Servidor de desarrollo (ngrok)
 
 tags:
   - name: Exámenes
