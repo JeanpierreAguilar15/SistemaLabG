@@ -319,6 +319,14 @@ export default function InventarioPage() {
   const [quickKardexData, setQuickKardexData] = useState<KardexResponse | null>(null)
   const [quickKardexLoading, setQuickKardexLoading] = useState(false)
 
+  // Historial de cambios state
+  const [showHistorialModal, setShowHistorialModal] = useState(false)
+  const [historialItem, setHistorialItem] = useState<ItemInventario | null>(null)
+  const [historialData, setHistorialData] = useState<any[]>([])
+  const [historialLoading, setHistorialLoading] = useState(false)
+  const [historialPage, setHistorialPage] = useState(1)
+  const [historialTotal, setHistorialTotal] = useState(0)
+
   // OCR Factura state
   const [showOcrModal, setShowOcrModal] = useState(false)
   const [ocrLoading, setOcrLoading] = useState(false)
@@ -938,6 +946,48 @@ export default function InventarioPage() {
     setShowQuickKardex(false)
     setQuickKardexItem(null)
     setQuickKardexData(null)
+  }
+
+  // ==================== HISTORIAL FUNCTIONS ====================
+  const openHistorialModal = async (item: ItemInventario) => {
+    setHistorialItem(item)
+    setShowHistorialModal(true)
+    setHistorialPage(1)
+    await loadHistorial(item.codigo_item, 1)
+  }
+
+  const loadHistorial = async (codigoItem: number, page: number) => {
+    setHistorialLoading(true)
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items/${codigoItem}/historial?page=${page}&limit=20`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const result = await response.json()
+        setHistorialData(result.data || [])
+        setHistorialTotal(result.pagination?.total || 0)
+      } else {
+        setMessage({ type: 'error', text: 'Error al cargar historial del item' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setHistorialLoading(false)
+    }
+  }
+
+  const closeHistorialModal = () => {
+    setShowHistorialModal(false)
+    setHistorialItem(null)
+    setHistorialData([])
+    setHistorialPage(1)
+    setHistorialTotal(0)
   }
 
   // ==================== LOTES FUNCTIONS ====================
@@ -1620,6 +1670,17 @@ export default function InventarioPage() {
                               >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openHistorialModal(item)}
+                                className="text-lab-neutral-600 hover:text-lab-neutral-700"
+                                title="Ver Historial de Cambios"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               </Button>
                               <Button
@@ -3548,6 +3609,158 @@ export default function InventarioPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== HISTORIAL DE CAMBIOS MODAL ==================== */}
+      {showHistorialModal && historialItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full my-8 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-lab-neutral-900">Historial de Cambios</h2>
+                <p className="text-sm text-lab-neutral-600 mt-1">
+                  <span className="font-mono">{historialItem.codigo_interno}</span> - {historialItem.nombre}
+                </p>
+              </div>
+              <Button variant="outline" onClick={closeHistorialModal}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {historialLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
+                </div>
+              ) : historialData.length > 0 ? (
+                <div className="space-y-4">
+                  {historialData.map((entry: any, index: number) => (
+                    <div key={index} className="p-4 bg-lab-neutral-50 rounded-lg border border-lab-neutral-200">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            entry.accion === 'CREATE' ? 'bg-green-100 text-green-700' :
+                            entry.accion === 'UPDATE' ? 'bg-blue-100 text-blue-700' :
+                            entry.accion === 'DELETE' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {entry.accion === 'CREATE' && (
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                            )}
+                            {entry.accion === 'UPDATE' && (
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            )}
+                            {entry.accion === 'DELETE' && (
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium text-lab-neutral-900">
+                              {entry.accion === 'CREATE' ? 'Creación' :
+                               entry.accion === 'UPDATE' ? 'Actualización' :
+                               entry.accion === 'DELETE' ? 'Eliminación' : entry.accion}
+                            </p>
+                            <p className="text-sm text-lab-neutral-600">
+                              {entry.usuario?.nombres} {entry.usuario?.apellidos}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right text-sm text-lab-neutral-500">
+                          {new Date(entry.fecha_actividad).toLocaleString('es-BO')}
+                        </div>
+                      </div>
+
+                      {/* Show changes if it's an update */}
+                      {entry.accion === 'UPDATE' && entry.datos_anteriores && entry.datos_nuevos && (
+                        <div className="mt-4 pt-4 border-t border-lab-neutral-200">
+                          <p className="text-sm font-medium text-lab-neutral-700 mb-2">Campos modificados:</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            {Object.keys(entry.datos_nuevos).filter(key =>
+                              JSON.stringify(entry.datos_anteriores?.[key]) !== JSON.stringify(entry.datos_nuevos[key])
+                            ).map(key => (
+                              <div key={key} className="bg-white p-2 rounded border">
+                                <span className="font-medium text-lab-neutral-700">{key}:</span>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-red-600 line-through text-xs">
+                                    {JSON.stringify(entry.datos_anteriores?.[key]) || 'null'}
+                                  </span>
+                                  <svg className="w-4 h-4 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                  </svg>
+                                  <span className="text-green-600 text-xs">
+                                    {JSON.stringify(entry.datos_nuevos[key])}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {entry.descripcion && (
+                        <p className="mt-3 text-sm text-lab-neutral-600">{entry.descripcion}</p>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Pagination */}
+                  {historialTotal > 20 && (
+                    <div className="flex justify-center items-center gap-2 pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={historialPage === 1}
+                        onClick={() => {
+                          const newPage = historialPage - 1
+                          setHistorialPage(newPage)
+                          loadHistorial(historialItem.codigo_item, newPage)
+                        }}
+                      >
+                        Anterior
+                      </Button>
+                      <span className="text-sm text-lab-neutral-600">
+                        Página {historialPage} de {Math.ceil(historialTotal / 20)}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={historialPage >= Math.ceil(historialTotal / 20)}
+                        onClick={() => {
+                          const newPage = historialPage + 1
+                          setHistorialPage(newPage)
+                          loadHistorial(historialItem.codigo_item, newPage)
+                        }}
+                      >
+                        Siguiente
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-lab-neutral-500">
+                  <svg className="mx-auto h-12 w-12 text-lab-neutral-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p>No hay historial de cambios para este item</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-lab-neutral-200 flex justify-end">
+              <Button variant="outline" onClick={closeHistorialModal}>
+                Cerrar
+              </Button>
+            </div>
           </div>
         </div>
       )}

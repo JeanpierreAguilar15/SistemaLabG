@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-type ReportType = 'dashboard' | 'ventas' | 'examenes' | 'citas' | 'cotizaciones' | 'kardex' | 'pacientes' | 'resultados'
+type ReportType = 'dashboard' | 'ventas' | 'examenes' | 'citas' | 'cotizaciones' | 'kardex' | 'pacientes' | 'resultados' | 'consumo_servicio' | 'compras_proveedor'
 
 interface DashboardData {
   ingresos_mes_actual: number
@@ -38,8 +38,16 @@ export default function ReportesPage() {
       if (fechaDesde) params.append('fecha_desde', fechaDesde)
       if (fechaHasta) params.append('fecha_hasta', fechaHasta)
 
+      // Map inventory reports to their specific endpoints
+      let endpoint = `${process.env.NEXT_PUBLIC_API_URL}/reports/${activeReport}`
+      if (activeReport === 'consumo_servicio') {
+        endpoint = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/reportes/consumo-servicio`
+      } else if (activeReport === 'compras_proveedor') {
+        endpoint = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/reportes/compras-proveedor`
+      }
+
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/reports/${activeReport}?${params}`,
+        `${endpoint}?${params}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       )
 
@@ -51,6 +59,48 @@ export default function ReportesPage() {
       console.error('Error loading report:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleExportPdf = async (reportType: string) => {
+    try {
+      const params = new URLSearchParams()
+      if (fechaDesde) params.append('fecha_desde', fechaDesde)
+      if (fechaHasta) params.append('fecha_hasta', fechaHasta)
+
+      let endpoint = ''
+      let filename = ''
+      if (reportType === 'consumo_servicio') {
+        endpoint = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/reportes/consumo-servicio/pdf`
+        filename = 'reporte-consumo-servicio.pdf'
+      } else if (reportType === 'compras_proveedor') {
+        endpoint = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/reportes/compras-proveedor/pdf`
+        filename = 'reporte-compras-proveedor.pdf'
+      } else if (reportType === 'kardex') {
+        endpoint = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/reportes/kardex-completo/pdf`
+        filename = 'reporte-kardex.pdf'
+      }
+
+      if (!endpoint) return
+
+      const response = await fetch(
+        `${endpoint}?${params}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      }
+    } catch (error) {
+      console.error('Error exporting PDF:', error)
     }
   }
 
@@ -70,6 +120,8 @@ export default function ReportesPage() {
     { id: 'cotizaciones', label: 'Cotizaciones', icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z' },
     { id: 'kardex', label: 'Kardex', icon: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4' },
     { id: 'pacientes', label: 'Pacientes', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
+    { id: 'consumo_servicio', label: 'Consumo x Servicio', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+    { id: 'compras_proveedor', label: 'Compras x Proveedor', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z' },
   ]
 
   const renderDashboard = (data: DashboardData) => (
@@ -369,6 +421,20 @@ export default function ReportesPage() {
 
   const renderKardex = (data: any) => (
     <div className="space-y-6">
+      {/* Header with PDF export */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-bold text-lab-neutral-900">Reporte Kardex de Inventario</h2>
+          <p className="text-sm text-lab-neutral-600 mt-1">Resumen de movimientos y estado del inventario</p>
+        </div>
+        <Button onClick={() => handleExportPdf('kardex')} variant="outline">
+          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Exportar PDF
+        </Button>
+      </div>
+
       {/* Alertas */}
       {data.alertas?.items_stock_bajo > 0 && (
         <Card className="border-red-200 bg-red-50">
@@ -646,6 +712,243 @@ export default function ReportesPage() {
     </div>
   )
 
+  const renderConsumoServicio = (data: any) => (
+    <div className="space-y-6">
+      {/* Header with PDF export */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-bold text-lab-neutral-900">Consumo de Inventario por Servicio/Examen</h2>
+          <p className="text-sm text-lab-neutral-600 mt-1">Análisis de uso de reactivos e insumos por servicio</p>
+        </div>
+        <Button onClick={() => handleExportPdf('consumo_servicio')} variant="outline">
+          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Exportar PDF
+        </Button>
+      </div>
+
+      {/* Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-sm text-lab-neutral-600">Total Salidas</div>
+            <div className="text-2xl font-bold text-blue-600 mt-2">{data.resumen?.total_salidas || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-sm text-lab-neutral-600">Unidades Consumidas</div>
+            <div className="text-2xl font-bold text-purple-600 mt-2">{data.resumen?.unidades_totales || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-sm text-lab-neutral-600">Valor Total</div>
+            <div className="text-2xl font-bold text-green-600 mt-2">{formatCurrency(data.resumen?.valor_total || 0)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-sm text-lab-neutral-600">Items Diferentes</div>
+            <div className="text-2xl font-bold text-lab-neutral-700 mt-2">{data.resumen?.items_diferentes || 0}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Consumo por Servicio */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Consumo por Servicio/Examen</CardTitle>
+          <CardDescription>Detalle del consumo de inventario agrupado por servicio</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {data.por_servicio?.length > 0 ? (
+            <div className="space-y-3">
+              {data.por_servicio.map((s: any, i: number) => (
+                <div key={i} className="flex items-center justify-between p-4 bg-lab-neutral-50 rounded-lg">
+                  <div>
+                    <div className="font-medium text-lab-neutral-900">{s.servicio || 'Sin especificar'}</div>
+                    <div className="text-sm text-lab-neutral-500">{s.movimientos} movimientos</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-blue-600">{s.unidades} unidades</div>
+                    <div className="text-sm text-green-600">{formatCurrency(s.valor || 0)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-lab-neutral-500">No hay datos de consumo en el período seleccionado</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Items más consumidos */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Top Items Más Consumidos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.items_mas_consumidos?.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-2">Item</th>
+                    <th className="text-right p-2">Cantidad</th>
+                    <th className="text-right p-2">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.items_mas_consumidos.map((item: any, i: number) => (
+                    <tr key={i} className="border-b border-lab-neutral-100">
+                      <td className="p-2">
+                        <div className="font-medium">{item.nombre}</div>
+                        <div className="text-xs text-lab-neutral-500">{item.codigo_interno}</div>
+                      </td>
+                      <td className="text-right p-2">{item.cantidad}</td>
+                      <td className="text-right p-2 text-green-600">{formatCurrency(item.valor || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-lab-neutral-500">No hay datos disponibles</div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+
+  const renderComprasProveedor = (data: any) => (
+    <div className="space-y-6">
+      {/* Header with PDF export */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-bold text-lab-neutral-900">Reporte de Compras por Proveedor</h2>
+          <p className="text-sm text-lab-neutral-600 mt-1">Análisis de órdenes de compra y gastos por proveedor</p>
+        </div>
+        <Button onClick={() => handleExportPdf('compras_proveedor')} variant="outline">
+          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Exportar PDF
+        </Button>
+      </div>
+
+      {/* Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-sm text-lab-neutral-600">Total Órdenes</div>
+            <div className="text-2xl font-bold text-blue-600 mt-2">{data.resumen?.total_ordenes || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-sm text-lab-neutral-600">Órdenes Recibidas</div>
+            <div className="text-2xl font-bold text-green-600 mt-2">{data.resumen?.ordenes_recibidas || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-sm text-lab-neutral-600">Órdenes Pendientes</div>
+            <div className="text-2xl font-bold text-yellow-600 mt-2">{data.resumen?.ordenes_pendientes || 0}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
+          <CardContent className="pt-6">
+            <div className="text-sm opacity-80">Monto Total</div>
+            <div className="text-2xl font-bold mt-2">{formatCurrency(data.resumen?.monto_total || 0)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Compras por Proveedor */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Desglose por Proveedor</CardTitle>
+          <CardDescription>Órdenes de compra agrupadas por proveedor</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {data.por_proveedor?.length > 0 ? (
+            <div className="space-y-3">
+              {data.por_proveedor.map((p: any, i: number) => (
+                <div key={i} className="p-4 bg-lab-neutral-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <div className="font-medium text-lab-neutral-900">{p.proveedor}</div>
+                      <div className="text-xs text-lab-neutral-500">RUC: {p.ruc || 'N/A'}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-green-600 text-lg">{formatCurrency(p.monto_total || 0)}</div>
+                      <div className="text-xs text-lab-neutral-500">{p.ordenes} órdenes</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 text-xs text-lab-neutral-600">
+                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded">Recibidas: {p.recibidas || 0}</span>
+                    <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded">Emitidas: {p.emitidas || 0}</span>
+                    <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Pendientes: {p.pendientes || 0}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-lab-neutral-500">No hay compras en el período seleccionado</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Últimas órdenes */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Últimas Órdenes de Compra</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.ultimas_ordenes?.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-2">N° Orden</th>
+                    <th className="text-left p-2">Proveedor</th>
+                    <th className="text-left p-2">Fecha</th>
+                    <th className="text-left p-2">Estado</th>
+                    <th className="text-right p-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.ultimas_ordenes.map((orden: any, i: number) => (
+                    <tr key={i} className="border-b border-lab-neutral-100">
+                      <td className="p-2 font-mono text-xs">{orden.numero_orden}</td>
+                      <td className="p-2">{orden.proveedor}</td>
+                      <td className="p-2">{new Date(orden.fecha).toLocaleDateString('es-BO')}</td>
+                      <td className="p-2">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          orden.estado === 'RECIBIDA' ? 'bg-green-100 text-green-700' :
+                          orden.estado === 'EMITIDA' ? 'bg-blue-100 text-blue-700' :
+                          orden.estado === 'BORRADOR' ? 'bg-gray-100 text-gray-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {orden.estado}
+                        </span>
+                      </td>
+                      <td className="text-right p-2 font-medium">{formatCurrency(orden.total || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-lab-neutral-500">No hay órdenes disponibles</div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+
   const renderReport = () => {
     if (loading) {
       return (
@@ -676,6 +979,10 @@ export default function ReportesPage() {
         return renderKardex(reportData)
       case 'pacientes':
         return renderPacientes(reportData)
+      case 'consumo_servicio':
+        return renderConsumoServicio(reportData)
+      case 'compras_proveedor':
+        return renderComprasProveedor(reportData)
       default:
         return null
     }

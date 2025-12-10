@@ -23,6 +23,20 @@ interface Alerta {
   dias_hasta_vencimiento?: number
 }
 
+interface ItemSinMovimiento {
+  codigo_item: number
+  codigo_interno: string
+  nombre: string
+  categoria: string
+  stock_actual: number
+  unidad_medida: string
+  ultimo_movimiento: string | null
+  dias_sin_movimiento: number | null
+  tipo_alerta: string
+  mensaje: string
+  prioridad: string
+}
+
 interface Estadisticas {
   total: number
   criticas: number
@@ -59,10 +73,13 @@ const PRIORIDAD_CONFIG = {
 export default function AlertasStockPage() {
   const { accessToken } = useAuthStore()
   const [alertas, setAlertas] = useState<Alerta[]>([])
+  const [itemsSinMovimiento, setItemsSinMovimiento] = useState<ItemSinMovimiento[]>([])
   const [estadisticas, setEstadisticas] = useState<Estadisticas | null>(null)
   const [loading, setLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [message, setMessage] = useState<Message | null>(null)
+  const [activeTab, setActiveTab] = useState<'alertas' | 'sin_movimiento'>('alertas')
+  const [diasSinMovimiento, setDiasSinMovimiento] = useState(30)
 
   // Filtros
   const [filterTipo, setFilterTipo] = useState('')
@@ -76,6 +93,7 @@ export default function AlertasStockPage() {
     if (mounted && accessToken) {
       loadAlertas()
       loadEstadisticas()
+      loadItemsSinMovimiento()
     }
   }, [accessToken, mounted])
 
@@ -135,6 +153,26 @@ export default function AlertasStockPage() {
     }
   }
 
+  const loadItemsSinMovimiento = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/alertas/sin-movimientos?dias=${diasSinMovimiento}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setItemsSinMovimiento(data.items || [])
+      }
+    } catch (error) {
+      console.error('Error loading items sin movimiento:', error)
+    }
+  }
+
   const handleApplyFilters = () => {
     loadAlertas()
   }
@@ -178,10 +216,10 @@ export default function AlertasStockPage() {
         <div>
           <h1 className="text-3xl font-bold text-lab-neutral-900">Alertas de Inventario</h1>
           <p className="text-lab-neutral-600 mt-2">
-            Monitoreo de stock bajo, productos vencidos y próximos a vencer
+            Monitoreo de stock bajo, productos vencidos, próximos a vencer e ítems sin rotación
           </p>
         </div>
-        <Button onClick={loadAlertas} className="bg-lab-primary-600 hover:bg-lab-primary-700">
+        <Button onClick={() => { loadAlertas(); loadItemsSinMovimiento(); }} className="bg-lab-primary-600 hover:bg-lab-primary-700">
           <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
@@ -189,6 +227,40 @@ export default function AlertasStockPage() {
         </Button>
       </div>
 
+      {/* Tabs */}
+      <div className="border-b border-lab-neutral-200">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('alertas')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'alertas'
+                ? 'border-lab-primary-600 text-lab-primary-600'
+                : 'border-transparent text-lab-neutral-500 hover:text-lab-neutral-700 hover:border-lab-neutral-300'
+            }`}
+          >
+            Alertas de Stock y Vencimiento
+          </button>
+          <button
+            onClick={() => setActiveTab('sin_movimiento')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+              activeTab === 'sin_movimiento'
+                ? 'border-lab-primary-600 text-lab-primary-600'
+                : 'border-transparent text-lab-neutral-500 hover:text-lab-neutral-700 hover:border-lab-neutral-300'
+            }`}
+          >
+            Sin Movimientos
+            {itemsSinMovimiento.length > 0 && (
+              <span className="ml-2 bg-lab-warning-100 text-lab-warning-800 text-xs px-2 py-0.5 rounded-full">
+                {itemsSinMovimiento.length}
+              </span>
+            )}
+          </button>
+        </nav>
+      </div>
+
+      {/* Tab: Alertas de Stock y Vencimiento */}
+      {activeTab === 'alertas' && (
+        <>
       {/* Estadísticas */}
       {estadisticas && (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -424,6 +496,134 @@ export default function AlertasStockPage() {
           )}
         </CardContent>
       </Card>
+        </>
+      )}
+
+      {/* Tab: Ítems Sin Movimientos */}
+      {activeTab === 'sin_movimiento' && (
+        <>
+          {/* Filtro de días */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Configuración</CardTitle>
+              <CardDescription>
+                Ítems que no han tenido movimientos (entrada/salida) en el período especificado
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                    Días sin movimiento
+                  </label>
+                  <select
+                    value={diasSinMovimiento}
+                    onChange={(e) => setDiasSinMovimiento(parseInt(e.target.value))}
+                    className="block w-48 rounded-md border border-lab-neutral-300 px-3 py-2"
+                  >
+                    <option value={15}>15 días</option>
+                    <option value={30}>30 días</option>
+                    <option value={60}>60 días</option>
+                    <option value={90}>90 días</option>
+                    <option value={180}>180 días</option>
+                  </select>
+                </div>
+                <Button onClick={loadItemsSinMovimiento} className="bg-lab-primary-600 hover:bg-lab-primary-700">
+                  Buscar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de ítems sin movimiento */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                Ítems Sin Movimientos
+                <span className="ml-2 text-sm font-normal text-lab-neutral-600">
+                  ({itemsSinMovimiento.length} encontrados)
+                </span>
+              </CardTitle>
+              <CardDescription>
+                Productos que pueden requerir revisión de rotación o ajuste de inventario
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-lab-neutral-200">
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Prioridad</th>
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Producto</th>
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Categoría</th>
+                      <th className="text-center p-4 font-semibold text-lab-neutral-900">Stock</th>
+                      <th className="text-center p-4 font-semibold text-lab-neutral-900">Último Mov.</th>
+                      <th className="text-center p-4 font-semibold text-lab-neutral-900">Días Sin Mov.</th>
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Observación</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itemsSinMovimiento.map((item, index) => (
+                      <tr key={index} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
+                        <td className="p-4">
+                          <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
+                            item.prioridad === 'ALTA'
+                              ? 'bg-lab-warning-600 text-white'
+                              : 'bg-lab-primary-500 text-white'
+                          }`}>
+                            {item.prioridad === 'ALTA' ? '🟠' : '🟡'} {item.prioridad}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <div className="font-medium text-lab-neutral-900">{item.nombre}</div>
+                          <div className="text-xs text-lab-neutral-600">{item.codigo_interno}</div>
+                        </td>
+                        <td className="p-4 text-sm text-lab-neutral-700">
+                          {item.categoria}
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="font-semibold text-lab-neutral-900">
+                            {item.stock_actual} {item.unidad_medida}
+                          </div>
+                        </td>
+                        <td className="p-4 text-center text-sm text-lab-neutral-600">
+                          {item.ultimo_movimiento ? formatDate(item.ultimo_movimiento) : 'Nunca'}
+                        </td>
+                        <td className="p-4 text-center">
+                          <span className={`font-semibold ${
+                            item.dias_sin_movimiento === null
+                              ? 'text-lab-danger-600'
+                              : item.dias_sin_movimiento > 60
+                              ? 'text-lab-warning-600'
+                              : 'text-lab-neutral-900'
+                          }`}>
+                            {item.dias_sin_movimiento !== null ? `${item.dias_sin_movimiento} días` : '∞'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-sm text-lab-neutral-700">
+                          {item.mensaje}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {itemsSinMovimiento.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">✅</div>
+                    <div className="text-xl font-semibold text-lab-success-600 mb-2">
+                      ¡Buena rotación de inventario!
+                    </div>
+                    <div className="text-lab-neutral-600">
+                      Todos los ítems han tenido movimientos en los últimos {diasSinMovimiento} días
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   )
 }

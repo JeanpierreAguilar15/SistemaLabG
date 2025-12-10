@@ -42,6 +42,15 @@ export class AlertasProgramadasService implements OnModuleInit {
   }
 
   /**
+   * Verifica ítems sin movimientos todos los lunes a las 10:00 AM
+   */
+  @Cron('0 10 * * 1') // 10:00 AM cada lunes
+  async verificarItemsSinMovimientos() {
+    this.logger.log('Ejecutando verificación semanal de ítems sin movimientos...');
+    await this.enviarAlertasSinMovimientos();
+  }
+
+  /**
    * Verifica stock crítico cada 4 horas (urgente)
    */
   @Cron('0 */4 * * *') // Cada 4 horas
@@ -216,22 +225,123 @@ export class AlertasProgramadasService implements OnModuleInit {
   }
 
   /**
+   * Envía alertas de ítems sin movimientos en los últimos n días
+   */
+  async enviarAlertasSinMovimientos(dias: number = 30): Promise<{ success: boolean; enviados: number }> {
+    try {
+      const fechaLimite = new Date();
+      fechaLimite.setDate(fechaLimite.getDate() - dias);
+
+      // Obtener ítems sin movimientos recientes usando raw query
+      const itemsSinMovimiento = await this.prisma.$queryRaw<Array<{
+        codigo_item: number;
+        nombre: string;
+        stock_actual: number;
+        ultimo_movimiento: Date | null;
+        dias_sin_movimiento: number | null;
+      }>>`
+        SELECT
+          i.codigo_item,
+          i.nombre,
+          i.stock_actual,
+          MAX(m.fecha_movimiento) as ultimo_movimiento,
+          CASE
+            WHEN MAX(m.fecha_movimiento) IS NULL THEN NULL
+            ELSE EXTRACT(DAY FROM NOW() - MAX(m.fecha_movimiento))
+          END as dias_sin_movimiento
+        FROM inventario.item i
+        LEFT JOIN inventario.movimiento m ON i.codigo_item = m.codigo_item
+        WHERE i.activo = true
+        GROUP BY i.codigo_item, i.nombre, i.stock_actual
+        HAVING MAX(m.fecha_movimiento) IS NULL
+           OR MAX(m.fecha_movimiento) < ${fechaLimite}
+        ORDER BY MAX(m.fecha_movimiento) ASC NULLS FIRST
+      `;
+
+      if (itemsSinMovimiento.length === 0) {
+        this.logger.log('No hay ítems sin movimientos recientes');
+        return { success: true, enviados: 0 };
+      }
+
+      this.logger.log(`Encontrados ${itemsSinMovimiento.length} ítems sin movimientos en ${dias} días`);
+
+      // Formatear mensaje
+      const mensaje = this.formatearMensajeSinMovimientos(itemsSinMovimiento, dias);
+
+      // Enviar por WhatsApp
+      const resultado = await this.whatsAppService.sendMessage({
+        to: '',
+        message: mensaje,
+        tipo: 'ALERTA',
+      });
+
+      return { success: resultado.success, enviados: resultado.success ? 1 : 0 };
+    } catch (error) {
+      this.logger.error(`Error verificando ítems sin movimientos: ${error.message}`);
+      return { success: false, enviados: 0 };
+    }
+  }
+
+  /**
+   * Formatea el mensaje de alertas de ítems sin movimientos
+   */
+  private formatearMensajeSinMovimientos(
+    items: Array<{ nombre: string; stock_actual: number; dias_sin_movimiento: number | null }>,
+    dias: number
+  ): string {
+    let mensaje = `⚠️ *ALERTA: ÍTEMS SIN MOVIMIENTOS*\n`;
+    mensaje += `📅 Período analizado: ${dias} días\n`;
+    mensaje += `📦 Total ítems: ${items.length}\n\n`;
+
+    const itemsConMov = items.filter(i => i.dias_sin_movimiento !== null);
+    const itemsSinMov = items.filter(i => i.dias_sin_movimiento === null);
+
+    if (itemsSinMov.length > 0) {
+      mensaje += `❌ *Nunca han tenido movimientos:*\n`;
+      itemsSinMov.slice(0, 5).forEach(item => {
+        mensaje += `  • ${item.nombre} (Stock: ${item.stock_actual})\n`;
+      });
+      if (itemsSinMov.length > 5) {
+        mensaje += `  ... y ${itemsSinMov.length - 5} más\n`;
+      }
+      mensaje += `\n`;
+    }
+
+    if (itemsConMov.length > 0) {
+      mensaje += `⏰ *Sin movimientos recientes:*\n`;
+      itemsConMov.slice(0, 5).forEach(item => {
+        mensaje += `  • ${item.nombre} (${item.dias_sin_movimiento} días)\n`;
+      });
+      if (itemsConMov.length > 5) {
+        mensaje += `  ... y ${itemsConMov.length - 5} más\n`;
+      }
+    }
+
+    mensaje += `\n💡 Revise estos ítems para evaluar rotación o ajuste de inventario.`;
+
+    return mensaje;
+  }
+
+  /**
    * Fuerza el envío de alertas (para testing o llamada manual)
    */
   async forzarEnvioAlertas(): Promise<{
     stock_bajo: { success: boolean; enviados: number };
     vencimientos: { success: boolean; enviados: number };
+    sin_movimientos: { success: boolean; enviados: number };
   }> {
     this.logger.log('Forzando envío de todas las alertas...');
 
-    const [stockBajo, vencimientos] = await Promise.all([
+    const [stockBajo, vencimientos, sinMovimientos] = await Promise.all([
       this.enviarAlertasStockBajo(),
       this.enviarAlertasVencimiento(),
+      this.enviarAlertasSinMovimientos(),
     ]);
 
     return {
       stock_bajo: stockBajo,
       vencimientos,
+      sin_movimientos: sinMovimientos,
     };
   }
 }

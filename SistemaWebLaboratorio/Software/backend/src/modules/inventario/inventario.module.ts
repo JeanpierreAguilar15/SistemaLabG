@@ -4,13 +4,14 @@ import { InventarioController } from './inventario.controller';
 import { InventarioService } from './inventario.service';
 import { OcrFacturaService } from './services/ocr-factura.service';
 import { AlertasProgramadasService } from './services/alertas-programadas.service';
+import { PdfInventarioService } from './services/pdf-inventario.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { ComunicacionesModule } from '../comunicaciones/comunicaciones.module';
 
 @Module({
     imports: [PrismaModule, ConfigModule, ComunicacionesModule],
     controllers: [InventarioController],
-    providers: [InventarioService, OcrFacturaService, AlertasProgramadasService],
-    exports: [InventarioService, AlertasProgramadasService],
+    providers: [InventarioService, OcrFacturaService, AlertasProgramadasService, PdfInventarioService],
+    exports: [InventarioService, AlertasProgramadasService, PdfInventarioService],
 })
 export class InventarioModule { }

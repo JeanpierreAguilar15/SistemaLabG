@@ -351,6 +351,36 @@ export default function OrdenesCompraPage() {
     }, 0)
   }
 
+  const handleExportPdf = async (codigoOrden: number) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders/${codigoOrden}/pdf`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `OC-${codigoOrden}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        setMessage({ type: 'success', text: 'PDF descargado correctamente' })
+      } else {
+        setMessage({ type: 'error', text: 'Error al generar PDF' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al generar PDF' })
+    }
+  }
+
   if (loading && ordenes.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -449,6 +479,16 @@ export default function OrdenesCompraPage() {
                     <td className="p-4 text-right space-x-1">
                       <Button size="sm" variant="outline" onClick={() => handleViewDetails(orden)}>
                         Ver
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleExportPdf(orden.codigo_orden)}
+                        title="Exportar a PDF"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
                       </Button>
                       {orden.estado === 'BORRADOR' && (
                         <>
@@ -742,7 +782,16 @@ export default function OrdenesCompraPage() {
                 </table>
               </div>
 
-              <div className="flex justify-end pt-4 border-t">
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => handleExportPdf(selectedOrden.codigo_orden)}
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Exportar PDF
+                </Button>
                 <Button variant="outline" onClick={() => setShowDetailsModal(false)}>
                   Cerrar
                 </Button>

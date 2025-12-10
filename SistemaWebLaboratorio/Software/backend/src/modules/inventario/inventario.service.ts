@@ -1983,4 +1983,596 @@ export class InventarioService {
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     return `LOT-${numeroFactura || 'AUTO'}-${timestamp}-${random}`;
   }
+
+  // ==================== HISTÓRICO DE CAMBIOS (HU-30) ====================
+
+  /**
+   * Obtiene el historial de cambios de un ítem específico
+   * Incluye auditoría de LogActividad y AuditoriaTabla
+   */
+  async getHistorialCambiosItem(
+    codigoItem: number,
+    page: number = 1,
+    limit: number = 20,
+    fechaDesde?: string,
+    fechaHasta?: string
+  ) {
+    // Verificar que el ítem existe
+    const item = await this.prisma.item.findUnique({
+      where: { codigo_item: codigoItem },
+      include: { categoria: true },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Ítem no encontrado');
+    }
+
+    const skip = (page - 1) * limit;
+
+    // Construir filtro de fechas
+    const fechaWhere: any = {};
+    if (fechaDesde) {
+      fechaWhere.gte = new Date(fechaDesde);
+    }
+    if (fechaHasta) {
+      const fechaFin = new Date(fechaHasta);
+      fechaFin.setHours(23, 59, 59, 999);
+      fechaWhere.lte = fechaFin;
+    }
+
+    // Obtener logs de LogActividad relacionados con este ítem
+    const [logsActividad, totalActividad] = await Promise.all([
+      this.prisma.logActividad.findMany({
+        where: {
+          entidad: 'Item',
+          descripcion: { contains: item.codigo_interno },
+          ...(Object.keys(fechaWhere).length > 0 ? { fecha_accion: fechaWhere } : {}),
+        },
+        include: {
+          usuario: {
+            select: {
+              codigo_usuario: true,
+              nombres: true,
+              apellidos: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: { fecha_accion: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.logActividad.count({
+        where: {
+          entidad: 'Item',
+          descripcion: { contains: item.codigo_interno },
+          ...(Object.keys(fechaWhere).length > 0 ? { fecha_accion: fechaWhere } : {}),
+        },
+      }),
+    ]);
+
+    // Obtener logs de AuditoriaTabla relacionados con este ítem
+    const [logsAuditoria, totalAuditoria] = await Promise.all([
+      this.prisma.auditoriaTabla.findMany({
+        where: {
+          tabla: 'item',
+          codigo_registro: codigoItem,
+          ...(Object.keys(fechaWhere).length > 0 ? { fecha_operacion: fechaWhere } : {}),
+        },
+        orderBy: { fecha_operacion: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.auditoriaTabla.count({
+        where: {
+          tabla: 'item',
+          codigo_registro: codigoItem,
+          ...(Object.keys(fechaWhere).length > 0 ? { fecha_operacion: fechaWhere } : {}),
+        },
+      }),
+    ]);
+
+    // Combinar y formatear los registros
+    const historial = [
+      ...logsActividad.map(log => ({
+        tipo: 'actividad',
+        fecha: log.fecha_accion,
+        accion: log.accion,
+        descripcion: log.descripcion,
+        usuario: log.usuario ? `${log.usuario.nombres} ${log.usuario.apellidos}` : 'Sistema',
+        email_usuario: log.usuario?.email,
+        ip_address: log.ip_address,
+        datos_anteriores: null,
+        datos_nuevos: null,
+      })),
+      ...logsAuditoria.map(log => ({
+        tipo: 'auditoria',
+        fecha: log.fecha_operacion,
+        accion: log.operacion,
+        descripcion: `${log.operacion} en tabla ${log.tabla}`,
+        usuario: null,
+        email_usuario: null,
+        ip_address: log.ip_address,
+        datos_anteriores: log.datos_anteriores,
+        datos_nuevos: log.datos_nuevos,
+      })),
+    ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+    const total = totalActividad + totalAuditoria;
+
+    return {
+      item: {
+        codigo_item: item.codigo_item,
+        codigo_interno: item.codigo_interno,
+        nombre: item.nombre,
+        categoria: item.categoria?.nombre,
+      },
+      historial: historial.slice(0, limit),
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  // ==================== ALERTAS SIN MOVIMIENTOS (HU-33) ====================
+
+  /**
+   * Obtiene ítems sin movimientos en los últimos n días
+   */
+  async getItemsSinMovimientos(dias: number = 30) {
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() - dias);
+
+    // Obtener todos los ítems activos
+    const items = await this.prisma.item.findMany({
+      where: { activo: true },
+      include: {
+        categoria: true,
+        movimientos: {
+          where: {
+            fecha_movimiento: { gte: fechaLimite },
+          },
+          orderBy: { fecha_movimiento: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    // Filtrar ítems sin movimientos recientes
+    const itemsSinMovimiento = items.filter(item => item.movimientos.length === 0);
+
+    // Para cada ítem sin movimiento reciente, obtener el último movimiento
+    const resultado = await Promise.all(
+      itemsSinMovimiento.map(async item => {
+        const ultimoMovimiento = await this.prisma.movimiento.findFirst({
+          where: { codigo_item: item.codigo_item },
+          orderBy: { fecha_movimiento: 'desc' },
+        });
+
+        const diasSinMovimiento = ultimoMovimiento
+          ? Math.floor(
+              (new Date().getTime() - new Date(ultimoMovimiento.fecha_movimiento).getTime()) /
+                (1000 * 60 * 60 * 24)
+            )
+          : null;
+
+        return {
+          codigo_item: item.codigo_item,
+          codigo_interno: item.codigo_interno,
+          nombre: item.nombre,
+          categoria: item.categoria?.nombre || 'Sin categoría',
+          stock_actual: item.stock_actual,
+          unidad_medida: item.unidad_medida,
+          ultimo_movimiento: ultimoMovimiento?.fecha_movimiento || null,
+          dias_sin_movimiento: diasSinMovimiento,
+          tipo_alerta: 'SIN_MOVIMIENTO',
+          mensaje: ultimoMovimiento
+            ? `Sin movimientos desde hace ${diasSinMovimiento} días`
+            : 'Nunca ha tenido movimientos',
+          prioridad: diasSinMovimiento === null || diasSinMovimiento > 60 ? 'ALTA' : 'MEDIA',
+        };
+      })
+    );
+
+    return {
+      total: resultado.length,
+      dias_umbral: dias,
+      items: resultado.sort((a, b) => (b.dias_sin_movimiento || 999) - (a.dias_sin_movimiento || 999)),
+    };
+  }
+
+  // ==================== REPORTES DE INVENTARIO (HU-34) ====================
+
+  /**
+   * Reporte de consumo por servicio/examen
+   * Usa ExamenInsumo para vincular ítems con exámenes realizados
+   */
+  async getReporteConsumoPorServicio(
+    fechaDesde?: string,
+    fechaHasta?: string,
+    codigoCategoria?: number
+  ) {
+    // Determinar rango de fechas
+    const fechaInicio = fechaDesde ? new Date(fechaDesde) : new Date(new Date().setMonth(new Date().getMonth() - 1));
+    const fechaFin = fechaHasta ? new Date(fechaHasta) : new Date();
+    fechaFin.setHours(23, 59, 59, 999);
+
+    // Obtener resultados en el período (exámenes realizados)
+    const resultados = await this.prisma.resultado.findMany({
+      where: {
+        fecha_resultado: {
+          gte: fechaInicio,
+          lte: fechaFin,
+        },
+        estado: { in: ['COMPLETADO', 'VALIDADO', 'ENTREGADO'] },
+      },
+      include: {
+        examen: {
+          include: {
+            insumos: {
+              include: {
+                item: {
+                  include: { categoria: true },
+                },
+              },
+              where: codigoCategoria ? { item: { codigo_categoria: codigoCategoria } } : {},
+            },
+          },
+        },
+      },
+    });
+
+    // Calcular consumo por ítem
+    const consumoPorItem: Record<number, {
+      codigo_item: number;
+      codigo_interno: string;
+      nombre: string;
+      categoria: string;
+      unidad_medida: string;
+      cantidad_consumida: number;
+      costo_unitario: number;
+      costo_total: number;
+      examenes_relacionados: Set<string>;
+    }> = {};
+
+    for (const resultado of resultados) {
+      for (const insumo of resultado.examen.insumos) {
+        const item = insumo.item;
+        if (!consumoPorItem[item.codigo_item]) {
+          consumoPorItem[item.codigo_item] = {
+            codigo_item: item.codigo_item,
+            codigo_interno: item.codigo_interno,
+            nombre: item.nombre,
+            categoria: item.categoria?.nombre || 'Sin categoría',
+            unidad_medida: item.unidad_medida,
+            cantidad_consumida: 0,
+            costo_unitario: Number(item.costo_unitario) || 0,
+            costo_total: 0,
+            examenes_relacionados: new Set(),
+          };
+        }
+        consumoPorItem[item.codigo_item].cantidad_consumida += Number(insumo.cantidad_requerida);
+        consumoPorItem[item.codigo_item].costo_total +=
+          Number(insumo.cantidad_requerida) * (Number(item.costo_unitario) || 0);
+        consumoPorItem[item.codigo_item].examenes_relacionados.add(resultado.examen.nombre);
+      }
+    }
+
+    // Convertir a array y ordenar por costo total
+    const items = Object.values(consumoPorItem)
+      .map(item => ({
+        ...item,
+        examenes_relacionados: Array.from(item.examenes_relacionados),
+      }))
+      .sort((a, b) => b.costo_total - a.costo_total);
+
+    // Calcular totales
+    const totalConsumo = items.reduce((sum, item) => sum + item.cantidad_consumida, 0);
+    const costoTotal = items.reduce((sum, item) => sum + item.costo_total, 0);
+
+    return {
+      periodo: {
+        desde: fechaInicio.toISOString().split('T')[0],
+        hasta: fechaFin.toISOString().split('T')[0],
+      },
+      resumen: {
+        total_examenes_realizados: resultados.length,
+        total_items_consumidos: items.length,
+        cantidad_total_consumida: totalConsumo,
+        costo_total: costoTotal,
+      },
+      items,
+    };
+  }
+
+  /**
+   * Reporte de compras por proveedor
+   */
+  async getReporteComprasPorProveedor(
+    fechaDesde?: string,
+    fechaHasta?: string,
+    codigoProveedor?: number
+  ) {
+    const fechaInicio = fechaDesde ? new Date(fechaDesde) : new Date(new Date().setMonth(new Date().getMonth() - 3));
+    const fechaFin = fechaHasta ? new Date(fechaHasta) : new Date();
+    fechaFin.setHours(23, 59, 59, 999);
+
+    const whereOrdenes: any = {
+      fecha_orden: {
+        gte: fechaInicio,
+        lte: fechaFin,
+      },
+      estado: { in: ['EMITIDA', 'RECIBIDA'] },
+    };
+
+    if (codigoProveedor) {
+      whereOrdenes.codigo_proveedor = codigoProveedor;
+    }
+
+    // Obtener órdenes de compra
+    const ordenes = await this.prisma.ordenCompra.findMany({
+      where: whereOrdenes,
+      include: {
+        proveedor: true,
+        detalles: {
+          include: {
+            item: {
+              include: { categoria: true },
+            },
+          },
+        },
+      },
+      orderBy: { fecha_orden: 'desc' },
+    });
+
+    // Agrupar por proveedor
+    const comprasPorProveedor: Record<number, {
+      codigo_proveedor: number;
+      ruc: string;
+      razon_social: string;
+      total_ordenes: number;
+      ordenes_recibidas: number;
+      ordenes_pendientes: number;
+      monto_total: number;
+      items_comprados: Record<number, {
+        codigo_item: number;
+        nombre: string;
+        categoria: string;
+        cantidad_total: number;
+        monto_total: number;
+      }>;
+    }> = {};
+
+    for (const orden of ordenes) {
+      const prov = orden.proveedor;
+      if (!comprasPorProveedor[prov.codigo_proveedor]) {
+        comprasPorProveedor[prov.codigo_proveedor] = {
+          codigo_proveedor: prov.codigo_proveedor,
+          ruc: prov.ruc,
+          razon_social: prov.razon_social,
+          total_ordenes: 0,
+          ordenes_recibidas: 0,
+          ordenes_pendientes: 0,
+          monto_total: 0,
+          items_comprados: {},
+        };
+      }
+
+      comprasPorProveedor[prov.codigo_proveedor].total_ordenes++;
+      comprasPorProveedor[prov.codigo_proveedor].monto_total += Number(orden.total);
+
+      if (orden.estado === 'RECIBIDA') {
+        comprasPorProveedor[prov.codigo_proveedor].ordenes_recibidas++;
+      } else {
+        comprasPorProveedor[prov.codigo_proveedor].ordenes_pendientes++;
+      }
+
+      // Agregar items
+      for (const detalle of orden.detalles) {
+        const itemId = detalle.codigo_item;
+        if (!comprasPorProveedor[prov.codigo_proveedor].items_comprados[itemId]) {
+          comprasPorProveedor[prov.codigo_proveedor].items_comprados[itemId] = {
+            codigo_item: itemId,
+            nombre: detalle.item.nombre,
+            categoria: detalle.item.categoria?.nombre || 'Sin categoría',
+            cantidad_total: 0,
+            monto_total: 0,
+          };
+        }
+        comprasPorProveedor[prov.codigo_proveedor].items_comprados[itemId].cantidad_total += detalle.cantidad;
+        comprasPorProveedor[prov.codigo_proveedor].items_comprados[itemId].monto_total += Number(detalle.total_linea);
+      }
+    }
+
+    // Convertir a array
+    const proveedores = Object.values(comprasPorProveedor).map(prov => ({
+      ...prov,
+      items_comprados: Object.values(prov.items_comprados).sort((a, b) => b.monto_total - a.monto_total),
+    })).sort((a, b) => b.monto_total - a.monto_total);
+
+    // Calcular totales generales
+    const totalOrdenes = proveedores.reduce((sum, p) => sum + p.total_ordenes, 0);
+    const montoTotal = proveedores.reduce((sum, p) => sum + p.monto_total, 0);
+
+    return {
+      periodo: {
+        desde: fechaInicio.toISOString().split('T')[0],
+        hasta: fechaFin.toISOString().split('T')[0],
+      },
+      resumen: {
+        total_proveedores: proveedores.length,
+        total_ordenes: totalOrdenes,
+        monto_total: montoTotal,
+      },
+      proveedores,
+    };
+  }
+
+  /**
+   * Reporte de compras por categoría
+   */
+  async getReporteComprasPorCategoria(fechaDesde?: string, fechaHasta?: string) {
+    const fechaInicio = fechaDesde ? new Date(fechaDesde) : new Date(new Date().setMonth(new Date().getMonth() - 3));
+    const fechaFin = fechaHasta ? new Date(fechaHasta) : new Date();
+    fechaFin.setHours(23, 59, 59, 999);
+
+    // Obtener órdenes con detalles
+    const ordenes = await this.prisma.ordenCompra.findMany({
+      where: {
+        fecha_orden: { gte: fechaInicio, lte: fechaFin },
+        estado: { in: ['EMITIDA', 'RECIBIDA'] },
+      },
+      include: {
+        detalles: {
+          include: {
+            item: {
+              include: { categoria: true },
+            },
+          },
+        },
+      },
+    });
+
+    // Agrupar por categoría
+    const comprasPorCategoria: Record<number | string, {
+      codigo_categoria: number | null;
+      nombre: string;
+      total_items: number;
+      cantidad_total: number;
+      monto_total: number;
+    }> = {};
+
+    for (const orden of ordenes) {
+      for (const detalle of orden.detalles) {
+        const catId = detalle.item.codigo_categoria || 'sin_categoria';
+        const catNombre = detalle.item.categoria?.nombre || 'Sin categoría';
+
+        if (!comprasPorCategoria[catId]) {
+          comprasPorCategoria[catId] = {
+            codigo_categoria: detalle.item.codigo_categoria,
+            nombre: catNombre,
+            total_items: 0,
+            cantidad_total: 0,
+            monto_total: 0,
+          };
+        }
+
+        comprasPorCategoria[catId].total_items++;
+        comprasPorCategoria[catId].cantidad_total += detalle.cantidad;
+        comprasPorCategoria[catId].monto_total += Number(detalle.total_linea);
+      }
+    }
+
+    const categorias = Object.values(comprasPorCategoria).sort((a, b) => b.monto_total - a.monto_total);
+    const montoTotal = categorias.reduce((sum, c) => sum + c.monto_total, 0);
+
+    return {
+      periodo: {
+        desde: fechaInicio.toISOString().split('T')[0],
+        hasta: fechaFin.toISOString().split('T')[0],
+      },
+      resumen: {
+        total_categorias: categorias.length,
+        monto_total: montoTotal,
+      },
+      categorias,
+    };
+  }
+
+  /**
+   * Reporte Kardex completo para exportación
+   */
+  async getReporteKardexCompleto(fechaDesde?: string, fechaHasta?: string, codigoCategoria?: number) {
+    const fechaInicio = fechaDesde ? new Date(fechaDesde) : new Date(new Date().setMonth(new Date().getMonth() - 1));
+    const fechaFin = fechaHasta ? new Date(fechaHasta) : new Date();
+    fechaFin.setHours(23, 59, 59, 999);
+
+    const whereItems: any = { activo: true };
+    if (codigoCategoria) {
+      whereItems.codigo_categoria = codigoCategoria;
+    }
+
+    const items = await this.prisma.item.findMany({
+      where: whereItems,
+      include: {
+        categoria: true,
+        movimientos: {
+          where: {
+            fecha_movimiento: { gte: fechaInicio, lte: fechaFin },
+          },
+          include: {
+            usuario: { select: { nombres: true, apellidos: true } },
+            lote: { select: { numero_lote: true } },
+          },
+          orderBy: { fecha_movimiento: 'asc' },
+        },
+      },
+      orderBy: { nombre: 'asc' },
+    });
+
+    const kardexItems = items.map(item => {
+      let saldoInicial = item.stock_actual;
+      // Calcular saldo inicial restando movimientos del período
+      for (const mov of item.movimientos) {
+        if (mov.tipo_movimiento === 'ENTRADA' || mov.tipo_movimiento === 'AJUSTE_POSITIVO') {
+          saldoInicial -= mov.cantidad;
+        } else {
+          saldoInicial += mov.cantidad;
+        }
+      }
+
+      const entradas = item.movimientos
+        .filter(m => m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'AJUSTE_POSITIVO')
+        .reduce((sum, m) => sum + m.cantidad, 0);
+
+      const salidas = item.movimientos
+        .filter(m => m.tipo_movimiento === 'SALIDA' || m.tipo_movimiento === 'AJUSTE_NEGATIVO')
+        .reduce((sum, m) => sum + m.cantidad, 0);
+
+      return {
+        codigo_item: item.codigo_item,
+        codigo_interno: item.codigo_interno,
+        nombre: item.nombre,
+        categoria: item.categoria?.nombre || 'Sin categoría',
+        unidad_medida: item.unidad_medida,
+        costo_unitario: Number(item.costo_unitario) || 0,
+        saldo_inicial: saldoInicial,
+        total_entradas: entradas,
+        total_salidas: salidas,
+        saldo_final: item.stock_actual,
+        valor_inventario: item.stock_actual * (Number(item.costo_unitario) || 0),
+        movimientos: item.movimientos.map(m => ({
+          fecha: m.fecha_movimiento,
+          tipo: m.tipo_movimiento,
+          cantidad: m.cantidad,
+          motivo: m.motivo,
+          lote: m.lote?.numero_lote,
+          usuario: m.usuario ? `${m.usuario.nombres} ${m.usuario.apellidos}` : 'Sistema',
+          stock_anterior: m.stock_anterior,
+          stock_nuevo: m.stock_nuevo,
+        })),
+      };
+    });
+
+    const totalValorInventario = kardexItems.reduce((sum, item) => sum + item.valor_inventario, 0);
+    const totalEntradas = kardexItems.reduce((sum, item) => sum + item.total_entradas, 0);
+    const totalSalidas = kardexItems.reduce((sum, item) => sum + item.total_salidas, 0);
+
+    return {
+      periodo: {
+        desde: fechaInicio.toISOString().split('T')[0],
+        hasta: fechaFin.toISOString().split('T')[0],
+      },
+      resumen: {
+        total_items: kardexItems.length,
+        valor_total_inventario: totalValorInventario,
+        total_entradas: totalEntradas,
+        total_salidas: totalSalidas,
+      },
+      items: kardexItems,
+    };
+  }
 }

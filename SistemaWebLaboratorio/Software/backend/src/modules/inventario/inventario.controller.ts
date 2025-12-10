@@ -14,14 +14,17 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiOperation, ApiTags, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { ApiOperation, ApiTags, ApiConsumes, ApiBody, ApiQuery, ApiProduces } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { Response } from 'express';
 import { InventarioService } from './inventario.service';
 import { OcrFacturaService } from './services/ocr-factura.service';
 import { AlertasProgramadasService } from './services/alertas-programadas.service';
+import { PdfInventarioService } from './services/pdf-inventario.service';
 import { WhatsAppService } from '../comunicaciones/whatsapp.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -44,6 +47,7 @@ export class InventarioController {
     private readonly inventarioService: InventarioService,
     private readonly ocrFacturaService: OcrFacturaService,
     private readonly alertasProgramadasService: AlertasProgramadasService,
+    private readonly pdfInventarioService: PdfInventarioService,
     private readonly whatsAppService: WhatsAppService,
   ) {}
 
@@ -783,5 +787,204 @@ export class InventarioController {
   @ApiOperation({ summary: 'Enviar alerta de vencimientos por WhatsApp' })
   async enviarAlertaVencimientos() {
     return this.alertasProgramadasService.enviarAlertasVencimiento();
+  }
+
+  // ==================== HISTÓRICO DE CAMBIOS (HU-30) ====================
+
+  @Get('inventory/items/:id/historial')
+  @ApiOperation({
+    summary: 'Obtener historial de cambios de un ítem',
+    description: 'Retorna el historial de todas las modificaciones realizadas a un ítem específico, incluyendo quién y cuándo',
+  })
+  @ApiQuery({ name: 'page', required: false, description: 'Número de página' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Registros por página' })
+  @ApiQuery({ name: 'fecha_desde', required: false, description: 'Fecha inicio (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'fecha_hasta', required: false, description: 'Fecha fin (YYYY-MM-DD)' })
+  async getHistorialCambiosItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('fecha_desde') fechaDesde?: string,
+    @Query('fecha_hasta') fechaHasta?: string,
+  ) {
+    return this.inventarioService.getHistorialCambiosItem(
+      id,
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 20,
+      fechaDesde,
+      fechaHasta,
+    );
+  }
+
+  // ==================== ALERTAS SIN MOVIMIENTOS (HU-33) ====================
+
+  @Get('inventory/alertas/sin-movimientos')
+  @ApiOperation({
+    summary: 'Obtener ítems sin movimientos en n días',
+    description: 'Retorna lista de ítems que no han tenido movimientos en el período especificado',
+  })
+  @ApiQuery({ name: 'dias', required: false, description: 'Número de días sin movimiento (default: 30)' })
+  async getItemsSinMovimientos(@Query('dias') dias?: string) {
+    return this.inventarioService.getItemsSinMovimientos(dias ? parseInt(dias) : 30);
+  }
+
+  // ==================== REPORTES DE INVENTARIO (HU-34) ====================
+
+  @Get('inventory/reportes/consumo-servicio')
+  @ApiOperation({
+    summary: 'Reporte de consumo por servicio/examen',
+    description: 'Calcula el consumo de insumos basado en los exámenes realizados',
+  })
+  @ApiQuery({ name: 'fecha_desde', required: false })
+  @ApiQuery({ name: 'fecha_hasta', required: false })
+  @ApiQuery({ name: 'codigo_categoria', required: false })
+  async getReporteConsumoPorServicio(
+    @Query('fecha_desde') fechaDesde?: string,
+    @Query('fecha_hasta') fechaHasta?: string,
+    @Query('codigo_categoria') codigoCategoria?: string,
+  ) {
+    return this.inventarioService.getReporteConsumoPorServicio(
+      fechaDesde,
+      fechaHasta,
+      codigoCategoria ? parseInt(codigoCategoria) : undefined,
+    );
+  }
+
+  @Get('inventory/reportes/compras-proveedor')
+  @ApiOperation({
+    summary: 'Reporte de compras por proveedor',
+    description: 'Agrupa las órdenes de compra por proveedor con detalle de ítems comprados',
+  })
+  @ApiQuery({ name: 'fecha_desde', required: false })
+  @ApiQuery({ name: 'fecha_hasta', required: false })
+  @ApiQuery({ name: 'codigo_proveedor', required: false })
+  async getReporteComprasPorProveedor(
+    @Query('fecha_desde') fechaDesde?: string,
+    @Query('fecha_hasta') fechaHasta?: string,
+    @Query('codigo_proveedor') codigoProveedor?: string,
+  ) {
+    return this.inventarioService.getReporteComprasPorProveedor(
+      fechaDesde,
+      fechaHasta,
+      codigoProveedor ? parseInt(codigoProveedor) : undefined,
+    );
+  }
+
+  @Get('inventory/reportes/compras-categoria')
+  @ApiOperation({
+    summary: 'Reporte de compras por categoría',
+    description: 'Agrupa las compras por categoría de ítem',
+  })
+  @ApiQuery({ name: 'fecha_desde', required: false })
+  @ApiQuery({ name: 'fecha_hasta', required: false })
+  async getReporteComprasPorCategoria(
+    @Query('fecha_desde') fechaDesde?: string,
+    @Query('fecha_hasta') fechaHasta?: string,
+  ) {
+    return this.inventarioService.getReporteComprasPorCategoria(fechaDesde, fechaHasta);
+  }
+
+  @Get('inventory/reportes/kardex-completo')
+  @ApiOperation({
+    summary: 'Reporte Kardex completo para exportación',
+    description: 'Genera un reporte completo del kardex con saldos iniciales, movimientos y saldos finales',
+  })
+  @ApiQuery({ name: 'fecha_desde', required: false })
+  @ApiQuery({ name: 'fecha_hasta', required: false })
+  @ApiQuery({ name: 'codigo_categoria', required: false })
+  async getReporteKardexCompleto(
+    @Query('fecha_desde') fechaDesde?: string,
+    @Query('fecha_hasta') fechaHasta?: string,
+    @Query('codigo_categoria') codigoCategoria?: string,
+  ) {
+    return this.inventarioService.getReporteKardexCompleto(
+      fechaDesde,
+      fechaHasta,
+      codigoCategoria ? parseInt(codigoCategoria) : undefined,
+    );
+  }
+
+  // ==================== EXPORTACIÓN PDF (HU-32, HU-34) ====================
+
+  @Get('purchase-orders/:id/pdf')
+  @ApiOperation({
+    summary: 'Exportar orden de compra a PDF',
+    description: 'Genera un documento PDF de la orden de compra para imprimir o descargar',
+  })
+  @ApiProduces('application/pdf')
+  async exportOrdenCompraPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    return this.pdfInventarioService.generateOrdenCompraPdf(id, res);
+  }
+
+  @Get('inventory/reportes/kardex-completo/pdf')
+  @ApiOperation({
+    summary: 'Exportar reporte Kardex a PDF',
+    description: 'Genera un documento PDF del reporte Kardex completo',
+  })
+  @ApiProduces('application/pdf')
+  @ApiQuery({ name: 'fecha_desde', required: false })
+  @ApiQuery({ name: 'fecha_hasta', required: false })
+  @ApiQuery({ name: 'codigo_categoria', required: false })
+  async exportKardexPdf(
+    @Res() res: Response,
+    @Query('fecha_desde') fechaDesde?: string,
+    @Query('fecha_hasta') fechaHasta?: string,
+    @Query('codigo_categoria') codigoCategoria?: string,
+  ) {
+    const data = await this.inventarioService.getReporteKardexCompleto(
+      fechaDesde,
+      fechaHasta,
+      codigoCategoria ? parseInt(codigoCategoria) : undefined,
+    );
+    return this.pdfInventarioService.generateKardexPdf(data, res);
+  }
+
+  @Get('inventory/reportes/compras-proveedor/pdf')
+  @ApiOperation({
+    summary: 'Exportar reporte de compras por proveedor a PDF',
+    description: 'Genera un documento PDF del reporte de compras agrupado por proveedor',
+  })
+  @ApiProduces('application/pdf')
+  @ApiQuery({ name: 'fecha_desde', required: false })
+  @ApiQuery({ name: 'fecha_hasta', required: false })
+  @ApiQuery({ name: 'codigo_proveedor', required: false })
+  async exportComprasProveedorPdf(
+    @Res() res: Response,
+    @Query('fecha_desde') fechaDesde?: string,
+    @Query('fecha_hasta') fechaHasta?: string,
+    @Query('codigo_proveedor') codigoProveedor?: string,
+  ) {
+    const data = await this.inventarioService.getReporteComprasPorProveedor(
+      fechaDesde,
+      fechaHasta,
+      codigoProveedor ? parseInt(codigoProveedor) : undefined,
+    );
+    return this.pdfInventarioService.generateComprasProveedorPdf(data, res);
+  }
+
+  @Get('inventory/reportes/consumo-servicio/pdf')
+  @ApiOperation({
+    summary: 'Exportar reporte de consumo por servicio a PDF',
+    description: 'Genera un documento PDF del reporte de consumo de insumos por exámenes',
+  })
+  @ApiProduces('application/pdf')
+  @ApiQuery({ name: 'fecha_desde', required: false })
+  @ApiQuery({ name: 'fecha_hasta', required: false })
+  @ApiQuery({ name: 'codigo_categoria', required: false })
+  async exportConsumoPdf(
+    @Res() res: Response,
+    @Query('fecha_desde') fechaDesde?: string,
+    @Query('fecha_hasta') fechaHasta?: string,
+    @Query('codigo_categoria') codigoCategoria?: string,
+  ) {
+    const data = await this.inventarioService.getReporteConsumoPorServicio(
+      fechaDesde,
+      fechaHasta,
+      codigoCategoria ? parseInt(codigoCategoria) : undefined,
+    );
+    return this.pdfInventarioService.generateConsumoPdf(data, res);
   }
 }
