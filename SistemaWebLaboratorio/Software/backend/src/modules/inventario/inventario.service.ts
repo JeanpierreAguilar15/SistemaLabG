@@ -23,27 +23,93 @@ export class InventarioService {
     const skip = (page - 1) * limit;
     const where: Prisma.ItemWhereInput = {};
 
+    // Filtro por búsqueda de texto (nombre, código interno, descripción)
     if (filters?.search) {
       where.OR = [
         { nombre: { contains: filters.search, mode: 'insensitive' } },
         { codigo_interno: { contains: filters.search, mode: 'insensitive' } },
+        { descripcion: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
-    if (filters?.tipo) {
-      // where.tipo = filters.tipo; // 'tipo' no existe en el modelo Item, tal vez es categoria?
-      // Revisando schema: Item tiene codigo_categoria. No tiene campo 'tipo'.
-      // Ignoramos filtro tipo por ahora o lo mapeamos a categoria si aplica.
+    // Filtro por categoría
+    if (filters?.codigo_categoria) {
+      where.codigo_categoria = parseInt(filters.codigo_categoria, 10);
     }
 
+    // Filtro por estado activo/inactivo
     if (filters?.activo !== undefined) {
       where.activo = filters.activo === 'true';
+    }
+
+    // Filtro por stock bajo se aplica después en memoria
+    // (Prisma no soporta comparar campos entre sí directamente)
+
+    // Filtro por rango de stock
+    if (filters?.stock_min !== undefined) {
+      where.stock_actual = {
+        ...(where.stock_actual as object || {}),
+        gte: parseFloat(filters.stock_min),
+      };
+    }
+    if (filters?.stock_max !== undefined) {
+      where.stock_actual = {
+        ...(where.stock_actual as object || {}),
+        lte: parseFloat(filters.stock_max),
+      };
+    }
+
+    // Filtro por rango de costo unitario
+    if (filters?.costo_min !== undefined) {
+      where.costo_unitario = {
+        ...(where.costo_unitario as object || {}),
+        gte: parseFloat(filters.costo_min),
+      };
+    }
+    if (filters?.costo_max !== undefined) {
+      where.costo_unitario = {
+        ...(where.costo_unitario as object || {}),
+        lte: parseFloat(filters.costo_max),
+      };
+    }
+
+    // Filtro por unidad de medida
+    if (filters?.unidad_medida) {
+      where.unidad_medida = { contains: filters.unidad_medida, mode: 'insensitive' };
+    }
+
+    // Determinar ordenamiento
+    let orderBy: any = { nombre: 'asc' };
+    if (filters?.sort_by) {
+      const sortOrder = filters.sort_order === 'desc' ? 'desc' : 'asc';
+      switch (filters.sort_by) {
+        case 'nombre':
+          orderBy = { nombre: sortOrder };
+          break;
+        case 'codigo_interno':
+          orderBy = { codigo_interno: sortOrder };
+          break;
+        case 'stock_actual':
+          orderBy = { stock_actual: sortOrder };
+          break;
+        case 'costo_unitario':
+          orderBy = { costo_unitario: sortOrder };
+          break;
+        case 'fecha_creacion':
+          orderBy = { fecha_creacion: sortOrder };
+          break;
+        case 'categoria':
+          orderBy = { categoria: { nombre: sortOrder } };
+          break;
+        default:
+          orderBy = { nombre: 'asc' };
+      }
     }
 
     const [items, total] = await Promise.all([
       this.prisma.item.findMany({
         where,
-        orderBy: { nombre: 'asc' },
+        orderBy,
         skip,
         take: limit,
         include: { categoria: true },
@@ -51,13 +117,34 @@ export class InventarioService {
       this.prisma.item.count({ where }),
     ]);
 
+    // Si se filtró por stock_bajo, filtrar en memoria (Prisma no soporta comparar campos directamente)
+    let itemsFiltrados = items;
+    if (filters?.stock_bajo === 'true') {
+      itemsFiltrados = items.filter(item =>
+        item.stock_actual <= (item.stock_minimo || 0)
+      );
+    }
+
     return {
-      data: items,
+      data: itemsFiltrados,
       pagination: {
-        total,
+        total: filters?.stock_bajo === 'true' ? itemsFiltrados.length : total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil((filters?.stock_bajo === 'true' ? itemsFiltrados.length : total) / limit),
+      },
+      filters_applied: {
+        search: filters?.search || null,
+        codigo_categoria: filters?.codigo_categoria || null,
+        activo: filters?.activo || null,
+        stock_bajo: filters?.stock_bajo || null,
+        stock_min: filters?.stock_min || null,
+        stock_max: filters?.stock_max || null,
+        costo_min: filters?.costo_min || null,
+        costo_max: filters?.costo_max || null,
+        unidad_medida: filters?.unidad_medida || null,
+        sort_by: filters?.sort_by || 'nombre',
+        sort_order: filters?.sort_order || 'asc',
       },
     };
   }
@@ -800,27 +887,48 @@ export class InventarioService {
   }
 
   async createSupplier(data: CreateSupplierDto, adminId: number) {
+    // 1. Validar formato de RUC ecuatoriano
     if (!ValidateRucEcuador(data.ruc)) {
-      throw new BadRequestException('RUC inválido');
+      throw new BadRequestException(
+        'RUC inválido. Debe ser un RUC ecuatoriano válido de 13 dígitos',
+      );
     }
 
+    // 2. Validar RUC único
     const existing = await this.prisma.proveedor.findUnique({
       where: { ruc: data.ruc },
     });
 
     if (existing) {
-      throw new BadRequestException('Ya existe un proveedor con este RUC');
+      throw new BadRequestException(
+        `Ya existe un proveedor con el RUC ${data.ruc}: ${existing.razon_social}`,
+      );
     }
 
-    return this.prisma.proveedor.create({
+    // 3. Crear proveedor
+    const proveedor = await this.prisma.proveedor.create({
       data: {
         ...data,
         activo: true,
       },
     });
+
+    // 4. Registrar en auditoría
+    await this.registrarAuditoria(
+      adminId,
+      'CREAR',
+      'PROVEEDOR',
+      proveedor.codigo_proveedor,
+      null,
+      null,
+      `Proveedor creado: ${proveedor.razon_social} (RUC: ${proveedor.ruc})`,
+    );
+
+    return proveedor;
   }
 
   async updateSupplier(codigo_proveedor: number, data: UpdateSupplierDto, adminId: number) {
+    // 1. Verificar que existe el proveedor
     const supplier = await this.prisma.proveedor.findUnique({
       where: { codigo_proveedor },
     });
@@ -829,17 +937,99 @@ export class InventarioService {
       throw new NotFoundException('Proveedor no encontrado');
     }
 
-    return this.prisma.proveedor.update({
+    // 2. Si se está cambiando el RUC, validar formato y unicidad
+    if (data.ruc && data.ruc !== supplier.ruc) {
+      // Validar formato
+      if (!ValidateRucEcuador(data.ruc)) {
+        throw new BadRequestException(
+          'RUC inválido. Debe ser un RUC ecuatoriano válido de 13 dígitos',
+        );
+      }
+
+      // Validar que no exista otro proveedor con ese RUC
+      const existingWithRuc = await this.prisma.proveedor.findFirst({
+        where: {
+          ruc: data.ruc,
+          codigo_proveedor: { not: codigo_proveedor },
+        },
+      });
+
+      if (existingWithRuc) {
+        throw new BadRequestException(
+          `Ya existe otro proveedor con el RUC ${data.ruc}: ${existingWithRuc.razon_social}`,
+        );
+      }
+    }
+
+    // 3. Detectar cambios para auditoría
+    const cambios = this.detectarCambiosProveedor(supplier, data);
+
+    // 4. Actualizar proveedor
+    const proveedorActualizado = await this.prisma.proveedor.update({
       where: { codigo_proveedor },
       data,
     });
+
+    // 5. Registrar en auditoría si hubo cambios
+    if (cambios.length > 0) {
+      await this.registrarAuditoria(
+        adminId,
+        'EDITAR',
+        'PROVEEDOR',
+        codigo_proveedor,
+        null,
+        null,
+        `Proveedor actualizado: ${proveedorActualizado.razon_social}. Cambios: ${cambios.join('; ')}`,
+      );
+    }
+
+    return proveedorActualizado;
+  }
+
+  /**
+   * Detecta cambios entre el estado anterior y nuevo del proveedor
+   */
+  private detectarCambiosProveedor(anterior: any, nuevo: any): string[] {
+    const cambios: string[] = [];
+    const camposRelevantes = ['ruc', 'razon_social', 'nombre_comercial', 'telefono', 'email', 'direccion', 'activo'];
+
+    for (const campo of camposRelevantes) {
+      if (nuevo[campo] !== undefined && anterior[campo] !== nuevo[campo]) {
+        cambios.push(`${campo}: "${anterior[campo] ?? 'N/A'}" → "${nuevo[campo]}"`);
+      }
+    }
+
+    return cambios;
   }
 
   async deleteSupplier(codigo_proveedor: number, adminId: number) {
-    return this.prisma.proveedor.update({
+    // 1. Verificar que existe
+    const supplier = await this.prisma.proveedor.findUnique({
+      where: { codigo_proveedor },
+    });
+
+    if (!supplier) {
+      throw new NotFoundException('Proveedor no encontrado');
+    }
+
+    // 2. Desactivar (soft delete)
+    const proveedorDesactivado = await this.prisma.proveedor.update({
       where: { codigo_proveedor },
       data: { activo: false },
     });
+
+    // 3. Registrar en auditoría
+    await this.registrarAuditoria(
+      adminId,
+      'ELIMINAR',
+      'PROVEEDOR',
+      codigo_proveedor,
+      null,
+      null,
+      `Proveedor desactivado: ${supplier.razon_social} (RUC: ${supplier.ruc})`,
+    );
+
+    return proveedorDesactivado;
   }
 
   // ==================== CATEGORÍAS DE ITEMS ====================

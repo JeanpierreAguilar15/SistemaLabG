@@ -16,7 +16,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiOperation, ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiOperation, ApiTags, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { InventarioService } from './inventario.service';
@@ -46,6 +46,23 @@ export class InventarioController {
   // ==================== INVENTARIO ====================
 
   @Get('inventory/items')
+  @ApiOperation({
+    summary: 'Obtener todos los ítems de inventario con filtros avanzados',
+    description: 'Soporta paginación, búsqueda, filtros por categoría, stock, precio y ordenamiento',
+  })
+  @ApiQuery({ name: 'page', required: false, description: 'Número de página (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items por página (default: 50)' })
+  @ApiQuery({ name: 'search', required: false, description: 'Buscar por nombre, código interno o descripción' })
+  @ApiQuery({ name: 'codigo_categoria', required: false, description: 'Filtrar por código de categoría' })
+  @ApiQuery({ name: 'activo', required: false, description: 'Filtrar por estado activo (true/false)' })
+  @ApiQuery({ name: 'stock_bajo', required: false, description: 'Mostrar solo items con stock bajo (true)' })
+  @ApiQuery({ name: 'stock_min', required: false, description: 'Stock mínimo' })
+  @ApiQuery({ name: 'stock_max', required: false, description: 'Stock máximo' })
+  @ApiQuery({ name: 'costo_min', required: false, description: 'Costo unitario mínimo' })
+  @ApiQuery({ name: 'costo_max', required: false, description: 'Costo unitario máximo' })
+  @ApiQuery({ name: 'unidad_medida', required: false, description: 'Filtrar por unidad de medida' })
+  @ApiQuery({ name: 'sort_by', required: false, description: 'Campo para ordenar: nombre, codigo_interno, stock_actual, costo_unitario, fecha_creacion, categoria' })
+  @ApiQuery({ name: 'sort_order', required: false, description: 'Orden: asc o desc' })
   async getAllInventoryItems(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
