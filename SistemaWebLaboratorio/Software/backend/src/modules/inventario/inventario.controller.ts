@@ -97,6 +97,18 @@ export class InventarioController {
     return this.inventarioService.createInventoryItem(data, adminId);
   }
 
+  @Get('inventory/items/sugerir-codigo')
+  @ApiOperation({ summary: 'Generar sugerencia de código interno basado en nombre' })
+  async sugerirCodigoInterno(
+    @Query('nombre') nombre: string,
+    @Query('categoria') categoria?: string,
+  ) {
+    return this.inventarioService.sugerirCodigoInterno(
+      nombre,
+      categoria ? parseInt(categoria) : undefined,
+    );
+  }
+
   @Put('inventory/items/:id')
   async updateInventoryItem(
     @CurrentUser('codigo_usuario') adminId: number,

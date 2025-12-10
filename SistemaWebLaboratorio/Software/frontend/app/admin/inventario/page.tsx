@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -248,6 +248,9 @@ export default function InventarioPage() {
     precio_venta: '',
     activo: true,
   })
+  const [codigoSugerido, setCodigoSugerido] = useState<string | null>(null)
+  const [cargandoSugerencia, setCargandoSugerencia] = useState(false)
+  const sugerenciaTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Movements state
   const [movimientos, setMovimientos] = useState<Movimiento[]>([])
@@ -480,7 +483,43 @@ export default function InventarioPage() {
       precio_venta: '',
       activo: true,
     })
+    setCodigoSugerido(null)
+    if (sugerenciaTimeoutRef.current) {
+      clearTimeout(sugerenciaTimeoutRef.current)
+    }
   }
+
+  // Función para obtener sugerencia de código interno desde el backend
+  const fetchCodigoSugerido = useCallback(async (nombre: string, categoria?: string) => {
+    if (!nombre || nombre.trim().length < 2) {
+      setCodigoSugerido(null)
+      return
+    }
+
+    setCargandoSugerencia(true)
+    try {
+      const params = new URLSearchParams({ nombre: nombre.trim() })
+      if (categoria) {
+        params.append('categoria', categoria)
+      }
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items/sugerir-codigo?${params}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setCodigoSugerido(data.codigo_sugerido)
+      }
+    } catch (error) {
+      console.error('Error obteniendo sugerencia de código:', error)
+    } finally {
+      setCargandoSugerencia(false)
+    }
+  }, [accessToken])
 
   const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
@@ -488,6 +527,29 @@ export default function InventarioPage() {
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
     }))
+
+    // Si cambia el nombre o la categoría, obtener sugerencia de código (con debounce)
+    if (name === 'nombre' || name === 'codigo_categoria') {
+      if (sugerenciaTimeoutRef.current) {
+        clearTimeout(sugerenciaTimeoutRef.current)
+      }
+
+      sugerenciaTimeoutRef.current = setTimeout(() => {
+        const nombreValue = name === 'nombre' ? value : itemFormData.nombre
+        const categoriaValue = name === 'codigo_categoria' ? value : itemFormData.codigo_categoria
+        fetchCodigoSugerido(nombreValue, categoriaValue)
+      }, 500) // 500ms debounce
+    }
+  }
+
+  // Función para aplicar el código sugerido
+  const aplicarCodigoSugerido = () => {
+    if (codigoSugerido) {
+      setItemFormData(prev => ({
+        ...prev,
+        codigo_interno: codigoSugerido,
+      }))
+    }
   }
 
   const handleItemSubmit = async (e: React.FormEvent) => {
@@ -1728,21 +1790,6 @@ export default function InventarioPage() {
                 <form onSubmit={handleItemSubmit} className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label htmlFor="codigo_interno" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                        Código Interno *
-                      </label>
-                      <input
-                        type="text"
-                        id="codigo_interno"
-                        name="codigo_interno"
-                        value={itemFormData.codigo_interno}
-                        onChange={handleItemInputChange}
-                        required
-                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                      />
-                    </div>
-
-                    <div>
                       <label htmlFor="nombre" className="block text-sm font-medium text-lab-neutral-700 mb-1">
                         Nombre del Item *
                       </label>
@@ -1753,8 +1800,45 @@ export default function InventarioPage() {
                         value={itemFormData.nombre}
                         onChange={handleItemInputChange}
                         required
+                        placeholder="Ej: Reactivo Hemoglobina"
                         className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
                       />
+                    </div>
+
+                    <div>
+                      <label htmlFor="codigo_interno" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Código Interno *
+                      </label>
+                      <input
+                        type="text"
+                        id="codigo_interno"
+                        name="codigo_interno"
+                        value={itemFormData.codigo_interno}
+                        onChange={handleItemInputChange}
+                        required
+                        placeholder={codigoSugerido || 'Ej: RH-0001'}
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                      />
+                      {/* Sugerencia de código automático */}
+                      {!editingItem && (
+                        <div className="mt-1 min-h-[24px]">
+                          {cargandoSugerencia ? (
+                            <span className="text-xs text-lab-neutral-500">Generando sugerencia...</span>
+                          ) : codigoSugerido && codigoSugerido !== itemFormData.codigo_interno ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-lab-neutral-600">Sugerencia:</span>
+                              <span className="text-sm font-bold text-lab-primary-600">{codigoSugerido}</span>
+                              <button
+                                type="button"
+                                onClick={aplicarCodigoSugerido}
+                                className="text-xs text-lab-primary-600 hover:text-lab-primary-700 underline"
+                              >
+                                Usar
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
 
                     <div className="md:col-span-2">

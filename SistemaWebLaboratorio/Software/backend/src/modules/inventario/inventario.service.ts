@@ -302,6 +302,17 @@ export class InventarioService {
   }
 
   /**
+   * Método público para sugerir código interno desde el frontend
+   */
+  async sugerirCodigoInterno(nombre: string, codigoCategoria?: number) {
+    if (!nombre || nombre.trim().length < 2) {
+      return { codigo_sugerido: null };
+    }
+    const codigo = await this.generarCodigoInterno(nombre, codigoCategoria);
+    return { codigo_sugerido: codigo };
+  }
+
+  /**
    * Registra una acción en el log de auditoría
    */
   private async registrarAuditoria(
@@ -319,9 +330,10 @@ export class InventarioService {
           codigo_usuario: usuarioId,
           accion,
           entidad,
+          codigo_entidad: entidadId || null,
           descripcion: descripcion || `${accion} en ${entidad}`,
-          ip_address: null,
-          user_agent: null,
+          datos_anteriores: valorAnterior ? JSON.parse(JSON.stringify(valorAnterior)) : null,
+          datos_nuevos: valorNuevo ? JSON.parse(JSON.stringify(valorNuevo)) : null,
           fecha_accion: new Date(),
         },
       });
@@ -1751,19 +1763,81 @@ export class InventarioService {
 
   async getAllOrdenesCompra(page: number, limit: number, filters: any) {
     const skip = (page - 1) * limit;
-    return this.prisma.ordenCompra.findMany({
-      skip,
-      take: limit,
-      include: { proveedor: true, creador: true },
-      orderBy: { fecha_orden: 'desc' },
-    });
+
+    // Construir filtros
+    const where: any = {};
+    if (filters?.estado && filters.estado !== 'all') {
+      where.estado = filters.estado;
+    }
+
+    const [ordenes, total] = await Promise.all([
+      this.prisma.ordenCompra.findMany({
+        where,
+        skip,
+        take: limit,
+        include: { proveedor: true, creador: true, detalles: true },
+        orderBy: { fecha_orden: 'desc' },
+      }),
+      this.prisma.ordenCompra.count({ where }),
+    ]);
+
+    // Mapear campos para compatibilidad con frontend
+    const data = ordenes.map((orden) => ({
+      codigo_orden: orden.codigo_orden_compra, // Mapear al nombre esperado
+      numero_orden: orden.numero_orden,
+      codigo_proveedor: orden.codigo_proveedor,
+      fecha_orden: orden.fecha_orden,
+      fecha_entrega_esperada: orden.fecha_entrega_estimada,
+      estado: orden.estado,
+      subtotal: orden.subtotal,
+      impuestos: orden.iva,
+      total: orden.total,
+      observaciones: orden.observaciones,
+      proveedor: orden.proveedor,
+      detalles: orden.detalles,
+    }));
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async getOrdenCompraById(id: number) {
-    return this.prisma.ordenCompra.findUnique({
+    const orden = await this.prisma.ordenCompra.findUnique({
       where: { codigo_orden_compra: id },
       include: { proveedor: true, detalles: { include: { item: true } } },
     });
+
+    if (!orden) return null;
+
+    // Mapear campos para compatibilidad con frontend
+    return {
+      codigo_orden: orden.codigo_orden_compra,
+      numero_orden: orden.numero_orden,
+      codigo_proveedor: orden.codigo_proveedor,
+      fecha_orden: orden.fecha_orden,
+      fecha_entrega_esperada: orden.fecha_entrega_estimada,
+      estado: orden.estado,
+      subtotal: orden.subtotal,
+      impuestos: orden.iva,
+      total: orden.total,
+      observaciones: orden.observaciones,
+      proveedor: orden.proveedor,
+      detalles: orden.detalles?.map((d) => ({
+        codigo_detalle: d.codigo_detalle,
+        codigo_item: d.codigo_item,
+        cantidad: d.cantidad,
+        precio_unitario: d.precio_unitario,
+        subtotal: d.total_linea,
+        item: d.item,
+      })),
+    };
   }
 
   async updateOrdenCompra(id: number, data: any, adminId: number) {
