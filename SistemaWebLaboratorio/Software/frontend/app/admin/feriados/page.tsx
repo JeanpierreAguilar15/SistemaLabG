@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuthStore } from '@/lib/store/auth';
+import { useAuthStore } from '@/lib/store';
 import { feriadosService, Feriado } from '@/lib/services/feriados.service';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
