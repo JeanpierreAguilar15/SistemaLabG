@@ -172,11 +172,12 @@ export class PdfInventarioService {
       // Contenido de la fila
       const precioUnit = detalle.precio_unitario ? Number(detalle.precio_unitario) : 0;
       const totalLinea = detalle.total_linea ? Number(detalle.total_linea) : 0;
+      const cantidad = detalle.cantidad ? Number(detalle.cantidad) : 0;
       const rowData = [
         (index + 1).toString(),
-        detalle.item.codigo_interno,
-        detalle.item.nombre,
-        detalle.cantidad.toString(),
+        detalle.item?.codigo_interno || '-',
+        detalle.item?.nombre || '-',
+        cantidad.toString(),
         `$${precioUnit.toFixed(2)}`,
         `$${totalLinea.toFixed(2)}`,
       ];
