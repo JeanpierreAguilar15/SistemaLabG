@@ -999,4 +999,68 @@ export class InventarioController {
     );
     return this.pdfInventarioService.generateConsumoPdf(data, res);
   }
+
+  // ==================== ORDEN AUTOMÁTICA DESDE ALERTAS ====================
+
+  @Get('inventory/orden-automatica/items')
+  @ApiOperation({
+    summary: 'Obtener items sugeridos para orden automática',
+    description: 'Retorna los items con alertas de stock bajo para generar una orden de compra automática',
+  })
+  async getItemsParaOrdenAutomatica() {
+    return this.inventarioService.getItemsParaOrdenAutomatica();
+  }
+
+  @Post('inventory/orden-automatica/generar')
+  @ApiOperation({
+    summary: 'Generar orden de compra automática desde alertas',
+    description: 'Crea una orden de compra en borrador con todos los items que tienen stock bajo',
+  })
+  async generarOrdenAutomatica(
+    @Body() data: { codigo_proveedor: number },
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.inventarioService.generarOrdenCompraDesdeAlertas(data.codigo_proveedor, adminId);
+  }
+
+  // ==================== INSUMOS POR EXAMEN ====================
+
+  @Get('inventory/examenes/:codigoExamen/insumos')
+  @ApiOperation({
+    summary: 'Obtener insumos configurados para un examen',
+  })
+  async getInsumosExamen(@Param('codigoExamen', ParseIntPipe) codigoExamen: number) {
+    return this.inventarioService.getInsumosExamen(codigoExamen);
+  }
+
+  @Post('inventory/examenes/:codigoExamen/insumos')
+  @ApiOperation({
+    summary: 'Agregar insumo a un examen',
+  })
+  async agregarInsumoExamen(
+    @Param('codigoExamen', ParseIntPipe) codigoExamen: number,
+    @Body() data: { codigo_item: number; cantidad_requerida: number },
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.inventarioService.agregarInsumoExamen(codigoExamen, data.codigo_item, data.cantidad_requerida, adminId);
+  }
+
+  @Delete('inventory/examenes/:codigoExamen/insumos/:codigoItem')
+  @ApiOperation({
+    summary: 'Quitar insumo de un examen',
+  })
+  async quitarInsumoExamen(
+    @Param('codigoExamen', ParseIntPipe) codigoExamen: number,
+    @Param('codigoItem', ParseIntPipe) codigoItem: number,
+  ) {
+    return this.inventarioService.quitarInsumoExamen(codigoExamen, codigoItem);
+  }
+
+  @Get('inventory/examenes-con-insumos')
+  @ApiOperation({
+    summary: 'Listar todos los exámenes con sus insumos configurados',
+  })
+  async getExamenesConInsumos() {
+    return this.inventarioService.getExamenesConInsumos();
+  }
 }

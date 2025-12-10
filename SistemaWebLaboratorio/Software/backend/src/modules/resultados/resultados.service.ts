@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { PdfGeneratorService } from './pdf-generator.service';
+import { InventarioService } from '../inventario/inventario.service';
 import { CreateResultadoDto, UpdateResultadoDto, CreateMuestraDto } from './dto';
 import { randomUUID } from 'crypto';
 
@@ -21,6 +22,8 @@ export class ResultadosService {
     @Inject(forwardRef(() => EventsGateway))
     private readonly eventsGateway: EventsGateway,
     private readonly pdfGenerator: PdfGeneratorService,
+    @Inject(forwardRef(() => InventarioService))
+    private readonly inventarioService: InventarioService,
   ) {}
 
   // ==================== MUESTRAS ====================
@@ -311,6 +314,32 @@ export class ResultadosService {
     this.logger.log(
       `Resultado validado: ${codigo_resultado} | Validado por: ${validado_por}`,
     );
+
+    // === CONSUMO AUTOMÁTICO DE INSUMOS ===
+    try {
+      const consumoResult = await this.inventarioService.consumirInsumosExamen(
+        resultado.codigo_examen,
+        codigo_resultado,
+        validado_por,
+      );
+
+      if (consumoResult.consumos.length > 0) {
+        this.logger.log(
+          `Consumo automático completado: ${consumoResult.consumos.length} insumos para resultado ${codigo_resultado}`,
+        );
+      }
+
+      if (consumoResult.errores.length > 0) {
+        this.logger.warn(
+          `Errores en consumo automático para resultado ${codigo_resultado}: ${consumoResult.errores.join(', ')}`,
+        );
+      }
+    } catch (error) {
+      // No fallar la validación por errores de inventario, solo registrar
+      this.logger.error(
+        `Error en consumo automático para resultado ${codigo_resultado}: ${error.message}`,
+      );
+    }
 
     // Notificar al paciente vía WebSocket
     this.eventsGateway.notifyResultUpdate({

@@ -2773,4 +2773,538 @@ export class InventarioService {
       items: kardexItems,
     };
   }
+
+  // ==================== CONSUMO AUTOMÁTICO POR EXAMEN ====================
+
+  /**
+   * Consume automáticamente los insumos configurados para un examen
+   * Se llama cuando un resultado de laboratorio es validado/completado
+   */
+  async consumirInsumosExamen(
+    codigoExamen: number,
+    codigoResultado: number,
+    usuarioId: number,
+  ): Promise<{ exito: boolean; consumos: any[]; errores: string[] }> {
+    const consumos: any[] = [];
+    const errores: string[] = [];
+
+    try {
+      // 1. Obtener los insumos configurados para este examen
+      const insumos = await this.prisma.examenInsumo.findMany({
+        where: {
+          codigo_examen: codigoExamen,
+          activo: true,
+        },
+        include: {
+          item: true,
+          examen: {
+            select: { nombre: true, codigo_interno: true },
+          },
+        },
+      });
+
+      if (insumos.length === 0) {
+        this.logger.log(`Examen ${codigoExamen} no tiene insumos configurados`);
+        return { exito: true, consumos: [], errores: [] };
+      }
+
+      // 2. Procesar cada insumo
+      for (const insumo of insumos) {
+        const cantidadRequerida = Number(insumo.cantidad_requerida);
+        const item = insumo.item;
+
+        // Verificar stock disponible
+        if (item.stock_actual < cantidadRequerida) {
+          errores.push(
+            `Stock insuficiente de "${item.nombre}": disponible ${item.stock_actual}, requerido ${cantidadRequerida}`,
+          );
+          continue;
+        }
+
+        // Crear movimiento de SALIDA
+        const stockAnterior = Number(item.stock_actual);
+        const stockNuevo = stockAnterior - cantidadRequerida;
+
+        const movimiento = await this.prisma.movimiento.create({
+          data: {
+            codigo_item: item.codigo_item,
+            tipo_movimiento: 'SALIDA',
+            cantidad: cantidadRequerida,
+            stock_anterior: stockAnterior,
+            stock_nuevo: stockNuevo,
+            motivo: `Consumo automático - Examen: ${insumo.examen.nombre} (Resultado #${codigoResultado})`,
+            referencia: `RES-${codigoResultado}`,
+            usuario_id: usuarioId,
+          },
+        });
+
+        // Actualizar stock del item
+        await this.prisma.item.update({
+          where: { codigo_item: item.codigo_item },
+          data: { stock_actual: stockNuevo },
+        });
+
+        consumos.push({
+          item: item.nombre,
+          codigo_item: item.codigo_item,
+          cantidad: cantidadRequerida,
+          stock_anterior: stockAnterior,
+          stock_nuevo: stockNuevo,
+          movimiento_id: movimiento.codigo_movimiento,
+        });
+
+        // Verificar si necesita generar alerta de stock bajo
+        if (stockNuevo <= Number(item.stock_minimo)) {
+          await this.crearAlertaStockBajo(item, stockNuevo);
+        }
+
+        this.logger.log(
+          `Consumo automático: ${item.codigo_interno} - ${cantidadRequerida} unid. para examen ${codigoExamen}`,
+        );
+      }
+
+      // 3. Registrar en auditoría
+      await this.registrarAuditoria(
+        usuarioId,
+        'CONSUMO_AUTOMATICO',
+        'Resultado',
+        codigoResultado,
+        null,
+        { examen: codigoExamen, consumos },
+        `Consumo automático de ${consumos.length} insumos para resultado #${codigoResultado}`,
+      );
+
+      return {
+        exito: errores.length === 0,
+        consumos,
+        errores,
+      };
+    } catch (error) {
+      this.logger.error(`Error en consumo automático: ${error.message}`);
+      return {
+        exito: false,
+        consumos,
+        errores: [...errores, error.message],
+      };
+    }
+  }
+
+  /**
+   * Crea una alerta de stock bajo si no existe una activa
+   */
+  private async crearAlertaStockBajo(item: any, stockActual: number) {
+    // Verificar si ya hay una alerta activa para este item
+    const alertaExistente = await this.prisma.alertaInventario.findFirst({
+      where: {
+        codigo_item: item.codigo_item,
+        tipo_alerta: { in: ['STOCK_BAJO', 'STOCK_CRITICO'] },
+        resuelta: false,
+      },
+    });
+
+    if (alertaExistente) return; // Ya existe alerta activa
+
+    const tipoAlerta = stockActual === 0 ? 'STOCK_CRITICO' : 'STOCK_BAJO';
+    const prioridad = stockActual === 0 ? 'CRITICA' : 'ALTA';
+
+    await this.prisma.alertaInventario.create({
+      data: {
+        codigo_item: item.codigo_item,
+        tipo_alerta: tipoAlerta,
+        mensaje: `${tipoAlerta === 'STOCK_CRITICO' ? 'SIN STOCK' : 'Stock bajo'}: ${item.nombre} (${item.codigo_interno}) - Actual: ${stockActual}, Mínimo: ${item.stock_minimo}`,
+        prioridad,
+        fecha_alerta: new Date(),
+      },
+    });
+
+    this.logger.warn(`Alerta ${tipoAlerta} creada para ${item.codigo_interno}`);
+  }
+
+  // ==================== GENERAR ORDEN DE COMPRA AUTOMÁTICA ====================
+
+  /**
+   * Genera una orden de compra borrador con los items que tienen stock bajo
+   */
+  async generarOrdenCompraDesdeAlertas(
+    codigoProveedor: number,
+    usuarioId: number,
+  ): Promise<any> {
+    // 1. Obtener items con alertas activas de stock bajo
+    const alertas = await this.prisma.alertaInventario.findMany({
+      where: {
+        tipo_alerta: { in: ['STOCK_BAJO', 'STOCK_CRITICO'] },
+        resuelta: false,
+      },
+      include: {
+        item: true,
+      },
+    });
+
+    if (alertas.length === 0) {
+      throw new BadRequestException('No hay items con alertas de stock bajo activas');
+    }
+
+    // 2. Calcular cantidades a pedir (hasta stock máximo o mínimo + 50%)
+    const detalles = alertas.map((alerta) => {
+      const item = alerta.item;
+      const stockActual = Number(item.stock_actual);
+      const stockMinimo = Number(item.stock_minimo);
+      const stockMaximo = item.stock_maximo ? Number(item.stock_maximo) : stockMinimo * 2;
+
+      // Cantidad a pedir: diferencia entre máximo y actual
+      const cantidadPedir = Math.max(stockMaximo - stockActual, stockMinimo);
+      const precioUnitario = Number(item.costo_unitario) || 0;
+
+      return {
+        codigo_item: item.codigo_item,
+        cantidad: Math.ceil(cantidadPedir),
+        precio_unitario: precioUnitario,
+      };
+    });
+
+    // 3. Crear la orden de compra
+    const orden = await this.createOrdenCompra(
+      {
+        codigo_proveedor: codigoProveedor,
+        observaciones: `Orden generada automáticamente desde alertas de stock bajo - ${alertas.length} items`,
+        detalles,
+      },
+      usuarioId,
+    );
+
+    this.logger.log(
+      `Orden de compra ${orden.numero_orden} generada automáticamente con ${detalles.length} items`,
+    );
+
+    return orden;
+  }
+
+  /**
+   * Obtiene los items con stock bajo para mostrar al usuario antes de generar OC
+   */
+  async getItemsParaOrdenAutomatica(): Promise<any[]> {
+    const alertas = await this.prisma.alertaInventario.findMany({
+      where: {
+        tipo_alerta: { in: ['STOCK_BAJO', 'STOCK_CRITICO'] },
+        resuelta: false,
+      },
+      include: {
+        item: {
+          include: {
+            categoria: true,
+          },
+        },
+      },
+      orderBy: {
+        prioridad: 'desc',
+      },
+    });
+
+    return alertas.map((alerta) => {
+      const item = alerta.item;
+      const stockActual = Number(item.stock_actual);
+      const stockMinimo = Number(item.stock_minimo);
+      const stockMaximo = item.stock_maximo ? Number(item.stock_maximo) : stockMinimo * 2;
+      const cantidadSugerida = Math.ceil(Math.max(stockMaximo - stockActual, stockMinimo));
+
+      return {
+        codigo_item: item.codigo_item,
+        codigo_interno: item.codigo_interno,
+        nombre: item.nombre,
+        categoria: item.categoria?.nombre || 'Sin categoría',
+        unidad_medida: item.unidad_medida,
+        stock_actual: stockActual,
+        stock_minimo: stockMinimo,
+        stock_maximo: stockMaximo,
+        cantidad_sugerida: cantidadSugerida,
+        costo_unitario: Number(item.costo_unitario) || 0,
+        prioridad: alerta.prioridad,
+        tipo_alerta: alerta.tipo_alerta,
+      };
+    });
+  }
+
+  // ==================== GESTIÓN DE INSUMOS POR EXAMEN ====================
+
+  /**
+   * Obtiene los insumos configurados para un examen específico
+   */
+  async getInsumosExamen(codigoExamen: number) {
+    const insumos = await this.prisma.examenInsumo.findMany({
+      where: { codigo_examen: codigoExamen },
+      include: {
+        item: {
+          include: { categoria: true },
+        },
+      },
+      orderBy: { item: { nombre: 'asc' } },
+    });
+
+    return insumos.map((i) => ({
+      codigo_examen_insumo: i.codigo_examen_insumo,
+      codigo_examen: i.codigo_examen,
+      codigo_item: i.codigo_item,
+      cantidad_requerida: Number(i.cantidad_requerida),
+      activo: i.activo,
+      item: {
+        codigo_item: i.item.codigo_item,
+        codigo_interno: i.item.codigo_interno,
+        nombre: i.item.nombre,
+        unidad_medida: i.item.unidad_medida,
+        categoria: i.item.categoria?.nombre || 'Sin categoría',
+        stock_actual: Number(i.item.stock_actual),
+      },
+    }));
+  }
+
+  /**
+   * Agrega un insumo a un examen
+   */
+  async agregarInsumoExamen(
+    codigoExamen: number,
+    codigoItem: number,
+    cantidadRequerida: number,
+    adminId: number,
+  ) {
+    // Verificar que el examen existe
+    const examen = await this.prisma.examen.findUnique({
+      where: { codigo_examen: codigoExamen },
+    });
+    if (!examen) {
+      throw new NotFoundException('Examen no encontrado');
+    }
+
+    // Verificar que el item existe
+    const item = await this.prisma.item.findUnique({
+      where: { codigo_item: codigoItem },
+    });
+    if (!item) {
+      throw new NotFoundException('Item no encontrado');
+    }
+
+    // Verificar si ya existe la relación
+    const existente = await this.prisma.examenInsumo.findFirst({
+      where: { codigo_examen: codigoExamen, codigo_item: codigoItem },
+    });
+
+    if (existente) {
+      // Actualizar cantidad si ya existe
+      return this.prisma.examenInsumo.update({
+        where: { codigo_examen_insumo: existente.codigo_examen_insumo },
+        data: { cantidad_requerida: cantidadRequerida, activo: true },
+        include: { item: true },
+      });
+    }
+
+    // Crear nueva relación
+    const insumo = await this.prisma.examenInsumo.create({
+      data: {
+        codigo_examen: codigoExamen,
+        codigo_item: codigoItem,
+        cantidad_requerida: cantidadRequerida,
+        activo: true,
+      },
+      include: { item: true },
+    });
+
+    this.logger.log(
+      `Insumo ${item.codigo_interno} agregado al examen ${examen.codigo_interno} por usuario ${adminId}`,
+    );
+
+    return insumo;
+  }
+
+  /**
+   * Quita un insumo de un examen (soft delete)
+   */
+  async quitarInsumoExamen(codigoExamen: number, codigoItem: number) {
+    const insumo = await this.prisma.examenInsumo.findFirst({
+      where: { codigo_examen: codigoExamen, codigo_item: codigoItem },
+    });
+
+    if (!insumo) {
+      throw new NotFoundException('Relación examen-insumo no encontrada');
+    }
+
+    return this.prisma.examenInsumo.update({
+      where: { codigo_examen_insumo: insumo.codigo_examen_insumo },
+      data: { activo: false },
+    });
+  }
+
+  /**
+   * Obtiene todos los exámenes con sus insumos configurados
+   */
+  async getExamenesConInsumos() {
+    const examenes = await this.prisma.examen.findMany({
+      where: { activo: true },
+      include: {
+        insumos: {
+          where: { activo: true },
+          include: {
+            item: {
+              select: {
+                codigo_item: true,
+                codigo_interno: true,
+                nombre: true,
+                unidad_medida: true,
+              },
+            },
+          },
+        },
+        categoria: true,
+      },
+      orderBy: { nombre: 'asc' },
+    });
+
+    return examenes.map((e) => ({
+      codigo_examen: e.codigo_examen,
+      codigo_interno: e.codigo_interno,
+      nombre: e.nombre,
+      categoria: e.categoria?.nombre || 'Sin categoría',
+      total_insumos: e.insumos.length,
+      insumos: e.insumos.map((i) => ({
+        codigo_item: i.codigo_item,
+        codigo_interno: i.item.codigo_interno,
+        nombre: i.item.nombre,
+        cantidad_requerida: Number(i.cantidad_requerida),
+        unidad_medida: i.item.unidad_medida,
+      })),
+    }));
+  }
+
+  // ==================== VALIDACIONES DE INTEGRIDAD ====================
+
+  /**
+   * Verifica si un proveedor puede ser eliminado
+   * No se puede eliminar si tiene órdenes de compra asociadas
+   */
+  async puedeEliminarProveedor(codigoProveedor: number): Promise<{ puede: boolean; motivo?: string }> {
+    const ordenesActivas = await this.prisma.ordenCompra.count({
+      where: {
+        codigo_proveedor: codigoProveedor,
+        estado: { in: ['BORRADOR', 'EMITIDA'] },
+      },
+    });
+
+    if (ordenesActivas > 0) {
+      return {
+        puede: false,
+        motivo: `El proveedor tiene ${ordenesActivas} orden(es) de compra pendientes`,
+      };
+    }
+
+    return { puede: true };
+  }
+
+  /**
+   * Verifica si un item puede ser eliminado
+   * No se puede eliminar si:
+   * - Tiene stock > 0
+   * - Tiene movimientos recientes
+   * - Está configurado como insumo de algún examen
+   */
+  async puedeEliminarItem(codigoItem: number): Promise<{ puede: boolean; motivos: string[] }> {
+    const motivos: string[] = [];
+
+    const item = await this.prisma.item.findUnique({
+      where: { codigo_item: codigoItem },
+    });
+
+    if (!item) {
+      return { puede: false, motivos: ['Item no encontrado'] };
+    }
+
+    // Verificar stock
+    if (Number(item.stock_actual) > 0) {
+      motivos.push(`El item tiene ${item.stock_actual} unidades en stock`);
+    }
+
+    // Verificar órdenes de compra pendientes
+    const ordenesPendientes = await this.prisma.ordenCompraDetalle.count({
+      where: {
+        codigo_item: codigoItem,
+        orden: {
+          estado: { in: ['BORRADOR', 'EMITIDA'] },
+        },
+      },
+    });
+
+    if (ordenesPendientes > 0) {
+      motivos.push(`El item está en ${ordenesPendientes} orden(es) de compra pendientes`);
+    }
+
+    // Verificar si es insumo de algún examen
+    const insumosActivos = await this.prisma.examenInsumo.count({
+      where: {
+        codigo_item: codigoItem,
+        activo: true,
+      },
+    });
+
+    if (insumosActivos > 0) {
+      motivos.push(`El item está configurado como insumo de ${insumosActivos} examen(es)`);
+    }
+
+    return {
+      puede: motivos.length === 0,
+      motivos,
+    };
+  }
+
+  /**
+   * Desactiva un item en lugar de eliminarlo (soft delete)
+   */
+  async desactivarItem(codigoItem: number, adminId: number) {
+    const verificacion = await this.puedeEliminarItem(codigoItem);
+
+    // Siempre permitir desactivar, pero advertir
+    const item = await this.prisma.item.update({
+      where: { codigo_item: codigoItem },
+      data: { activo: false },
+    });
+
+    await this.registrarAuditoria(
+      adminId,
+      'DESACTIVAR_ITEM',
+      'Item',
+      codigoItem,
+      { activo: true },
+      { activo: false },
+      `Item ${item.codigo_interno} desactivado${verificacion.motivos.length > 0 ? '. Advertencias: ' + verificacion.motivos.join(', ') : ''}`,
+    );
+
+    return {
+      item,
+      advertencias: verificacion.motivos,
+    };
+  }
+
+  /**
+   * Desactiva un proveedor en lugar de eliminarlo (soft delete)
+   */
+  async desactivarProveedor(codigoProveedor: number, adminId: number) {
+    const verificacion = await this.puedeEliminarProveedor(codigoProveedor);
+
+    if (!verificacion.puede) {
+      throw new BadRequestException(verificacion.motivo);
+    }
+
+    const proveedor = await this.prisma.proveedor.update({
+      where: { codigo_proveedor: codigoProveedor },
+      data: { activo: false },
+    });
+
+    await this.registrarAuditoria(
+      adminId,
+      'DESACTIVAR_PROVEEDOR',
+      'Proveedor',
+      codigoProveedor,
+      { activo: true },
+      { activo: false },
+      `Proveedor ${proveedor.razon_social} desactivado`,
+    );
+
+    return proveedor;
+  }
 }
