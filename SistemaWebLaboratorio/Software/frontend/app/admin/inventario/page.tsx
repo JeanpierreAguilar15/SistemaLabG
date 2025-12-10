@@ -111,7 +111,117 @@ const PRIORIDAD_CONFIG = {
   BAJA: { label: 'Baja', color: 'bg-lab-neutral-400 text-white' },
 }
 
-type Tab = 'items' | 'movimientos' | 'alertas'
+type Tab = 'items' | 'movimientos' | 'alertas' | 'lotes' | 'kardex' | 'categorias'
+
+// Interface for Categories
+interface Categoria {
+  codigo_categoria: number
+  nombre: string
+  descripcion: string | null
+  activo: boolean
+  _count?: {
+    items: number
+  }
+}
+
+// Interface for Lots
+interface Lote {
+  codigo_lote: number
+  codigo_item: number
+  numero_lote: string
+  fecha_fabricacion: string | null
+  fecha_vencimiento: string | null
+  cantidad_inicial: number
+  cantidad_actual: number
+  costo_unitario: string | null
+  codigo_proveedor: number | null
+  activo: boolean
+  fecha_registro: string
+  item?: {
+    codigo_interno: string
+    nombre: string
+    unidad_medida: string
+  }
+  proveedor?: {
+    razon_social: string
+  } | null
+}
+
+// Interface for Kardex
+interface KardexEntry {
+  codigo_movimiento: number
+  fecha_movimiento: string
+  tipo_movimiento: string
+  cantidad: number
+  stock_anterior: number
+  stock_nuevo: number
+  motivo: string | null
+  lote?: {
+    numero_lote: string
+  } | null
+  usuario?: {
+    nombres: string
+    apellidos: string
+  } | null
+}
+
+interface KardexResponse {
+  item: {
+    codigo_item: number
+    codigo_interno: string
+    nombre: string
+    stock_actual: number
+    unidad_medida: string
+    categoria?: { nombre: string } | null
+  }
+  stock_actual: number
+  movimientos: KardexEntry[]
+  totales: {
+    entradas: number
+    salidas: number
+    ajustes_positivos: number
+    ajustes_negativos: number
+  }
+  resumen: {
+    total_movimientos: number
+    balance: number
+  }
+}
+
+// Interface for Global Kardex
+interface KardexGlobalItem {
+  codigo_item: number
+  codigo_interno: string
+  nombre: string
+  categoria: string
+  unidad_medida: string
+  stock_actual: number
+  stock_minimo: number
+  costo_unitario: string | null
+  valor_inventario: number
+  total_entradas: number
+  total_salidas: number
+  total_movimientos: number
+  ultimo_movimiento: {
+    fecha_movimiento: string
+    tipo_movimiento: string
+    cantidad: number
+  } | null
+  estado_stock: 'NORMAL' | 'BAJO' | 'CRITICO' | 'AGOTADO'
+}
+
+interface KardexGlobalResponse {
+  resumen: {
+    total_items: number
+    items_criticos: number
+    items_bajos: number
+    items_agotados: number
+    valor_total_inventario: number
+    total_entradas: number
+    total_salidas: number
+  }
+  items: KardexGlobalItem[]
+}
 
 export default function InventarioPage() {
   const { accessToken } = useAuthStore()
@@ -129,6 +239,7 @@ export default function InventarioPage() {
     codigo_interno: '',
     nombre: '',
     descripcion: '',
+    codigo_categoria: '',
     unidad_medida: '',
     stock_actual: '0',
     stock_minimo: '0',
@@ -160,6 +271,68 @@ export default function InventarioPage() {
   const [filterAlertTipo, setFilterAlertTipo] = useState('')
   const [filterAlertPrioridad, setFilterAlertPrioridad] = useState('')
 
+  // Lotes state
+  const [lotes, setLotes] = useState<Lote[]>([])
+  const [lotesLoading, setLotesLoading] = useState(false)
+  const [showLoteForm, setShowLoteForm] = useState(false)
+  const [editingLote, setEditingLote] = useState<Lote | null>(null)
+  const [filterLoteItem, setFilterLoteItem] = useState('')
+  const [filterLoteVencimiento, setFilterLoteVencimiento] = useState<'todos' | 'vigentes' | 'por_vencer' | 'vencidos'>('todos')
+  const [loteFormData, setLoteFormData] = useState({
+    codigo_item: '',
+    numero_lote: '',
+    fecha_fabricacion: '',
+    fecha_vencimiento: '',
+    cantidad_inicial: '',
+    costo_unitario: '',
+    codigo_proveedor: '',
+  })
+
+  // Kardex state
+  const [kardexData, setKardexData] = useState<KardexResponse | null>(null)
+  const [kardexLoading, setKardexLoading] = useState(false)
+  const [selectedItemKardex, setSelectedItemKardex] = useState('')
+  const [kardexFechaDesde, setKardexFechaDesde] = useState('')
+  const [kardexFechaHasta, setKardexFechaHasta] = useState('')
+
+  // Global Kardex state
+  const [kardexGlobal, setKardexGlobal] = useState<KardexGlobalResponse | null>(null)
+  const [kardexGlobalLoading, setKardexGlobalLoading] = useState(false)
+  const [kardexViewMode, setKardexViewMode] = useState<'global' | 'individual'>('global')
+
+  // Proveedores for lote form
+  const [proveedores, setProveedores] = useState<{ codigo_proveedor: number; razon_social: string }[]>([])
+
+  // Categorias state
+  const [categorias, setCategorias] = useState<Categoria[]>([])
+  const [categoriasLoading, setCategoriasLoading] = useState(false)
+  const [showCategoriaForm, setShowCategoriaForm] = useState(false)
+  const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null)
+  const [categoriaFormData, setCategoriaFormData] = useState({
+    nombre: '',
+    descripcion: '',
+  })
+
+  // Quick Kardex Modal state
+  const [showQuickKardex, setShowQuickKardex] = useState(false)
+  const [quickKardexItem, setQuickKardexItem] = useState<ItemInventario | null>(null)
+  const [quickKardexData, setQuickKardexData] = useState<KardexResponse | null>(null)
+  const [quickKardexLoading, setQuickKardexLoading] = useState(false)
+
+  // OCR Factura state
+  const [showOcrModal, setShowOcrModal] = useState(false)
+  const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrResult, setOcrResult] = useState<any>(null)
+  const [ocrPreviewUrl, setOcrPreviewUrl] = useState<string | null>(null)
+  const [ocrSelectedItems, setOcrSelectedItems] = useState<Array<{
+    descripcion: string
+    cantidad: number
+    numero_lote: string
+    fecha_vencimiento: string
+    codigo_item: string
+    selected: boolean
+  }>>([])
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -181,6 +354,14 @@ export default function InventarioPage() {
   useEffect(() => {
     if (activeTab === 'items' || activeTab === 'movimientos') {
       loadItems()
+      loadCategorias() // Load categories for the item form dropdown
+    }
+  }, [activeTab])
+
+  // Load categories when switching to categories tab
+  useEffect(() => {
+    if (activeTab === 'categorias') {
+      loadCategorias()
     }
   }, [activeTab])
 
@@ -196,6 +377,23 @@ export default function InventarioPage() {
     if (activeTab === 'alertas') {
       loadAlertas()
       loadEstadisticas()
+    }
+  }, [activeTab])
+
+  // Load lotes when switching to lotes tab
+  useEffect(() => {
+    if (activeTab === 'lotes') {
+      loadLotes()
+      loadItems()
+      loadProveedores()
+    }
+  }, [activeTab])
+
+  // Load items and kardex global when switching to kardex tab
+  useEffect(() => {
+    if (activeTab === 'kardex') {
+      loadItems()
+      loadKardexGlobal()
     }
   }, [activeTab])
 
@@ -230,6 +428,7 @@ export default function InventarioPage() {
         codigo_interno: item.codigo_interno,
         nombre: item.nombre,
         descripcion: item.descripcion || '',
+        codigo_categoria: item.codigo_categoria?.toString() || '',
         unidad_medida: item.unidad_medida,
         stock_actual: item.stock_actual.toString(),
         stock_minimo: item.stock_minimo.toString(),
@@ -244,6 +443,7 @@ export default function InventarioPage() {
         codigo_interno: '',
         nombre: '',
         descripcion: '',
+        codigo_categoria: '',
         unidad_medida: '',
         stock_actual: '0',
         stock_minimo: '0',
@@ -263,6 +463,7 @@ export default function InventarioPage() {
       codigo_interno: '',
       nombre: '',
       descripcion: '',
+      codigo_categoria: '',
       unidad_medida: '',
       stock_actual: '0',
       stock_minimo: '0',
@@ -327,6 +528,10 @@ export default function InventarioPage() {
         stock_actual: stockActual,
         stock_minimo: stockMinimo,
         activo: itemFormData.activo,
+      }
+
+      if (itemFormData.codigo_categoria) {
+        payload.codigo_categoria = parseInt(itemFormData.codigo_categoria)
       }
 
       if (stockMaximo !== undefined) {
@@ -589,6 +794,539 @@ export default function InventarioPage() {
     return true
   })
 
+  // ==================== CATEGORIAS FUNCTIONS ====================
+  const loadCategorias = async () => {
+    try {
+      setCategoriasLoading(true)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setCategorias(data)
+      } else {
+        console.error('Error al cargar categorías')
+      }
+    } catch (error) {
+      console.error('Error de conexión:', error)
+    } finally {
+      setCategoriasLoading(false)
+    }
+  }
+
+  const handleOpenCategoriaForm = (categoria?: Categoria) => {
+    if (categoria) {
+      setEditingCategoria(categoria)
+      setCategoriaFormData({
+        nombre: categoria.nombre,
+        descripcion: categoria.descripcion || '',
+      })
+    } else {
+      setEditingCategoria(null)
+      setCategoriaFormData({
+        nombre: '',
+        descripcion: '',
+      })
+    }
+    setShowCategoriaForm(true)
+  }
+
+  const handleCloseCategoriaForm = () => {
+    setShowCategoriaForm(false)
+    setEditingCategoria(null)
+    setCategoriaFormData({ nombre: '', descripcion: '' })
+  }
+
+  const handleCategoriaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!categoriaFormData.nombre.trim()) {
+      setMessage({ type: 'error', text: 'El nombre de la categoría es requerido' })
+      return
+    }
+
+    try {
+      const url = editingCategoria
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories/${editingCategoria.codigo_categoria}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories`
+
+      const response = await fetch(url, {
+        method: editingCategoria ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          nombre: categoriaFormData.nombre.trim(),
+          descripcion: categoriaFormData.descripcion.trim() || null,
+        }),
+      })
+
+      if (response.ok) {
+        setMessage({
+          type: 'success',
+          text: editingCategoria ? 'Categoría actualizada correctamente' : 'Categoría creada correctamente',
+        })
+        handleCloseCategoriaForm()
+        loadCategorias()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al guardar categoría' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleDeleteCategoria = async (codigo_categoria: number) => {
+    if (!confirm('¿Está seguro de eliminar esta categoría? Si tiene items asociados, será desactivada.')) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories/${codigo_categoria}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Categoría eliminada correctamente' })
+        loadCategorias()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al eliminar categoría' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  // ==================== QUICK KARDEX MODAL ====================
+  const openQuickKardex = async (item: ItemInventario) => {
+    setQuickKardexItem(item)
+    setShowQuickKardex(true)
+    setQuickKardexLoading(true)
+    setQuickKardexData(null)
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items/${item.codigo_item}/kardex`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setQuickKardexData(data)
+      } else {
+        setMessage({ type: 'error', text: 'Error al cargar kardex del item' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setQuickKardexLoading(false)
+    }
+  }
+
+  const closeQuickKardex = () => {
+    setShowQuickKardex(false)
+    setQuickKardexItem(null)
+    setQuickKardexData(null)
+  }
+
+  // ==================== LOTES FUNCTIONS ====================
+  const loadLotes = async () => {
+    try {
+      setLotesLoading(true)
+      const params = new URLSearchParams()
+      if (filterLoteItem) params.append('codigo_item', filterLoteItem)
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/lotes?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const result = await response.json()
+        // La API retorna { data: [...], pagination: {...} }
+        setLotes(result.data || [])
+      } else {
+        setMessage({ type: 'error', text: 'Error al cargar lotes' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setLotesLoading(false)
+    }
+  }
+
+  const loadProveedores = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setProveedores(data.filter((p: any) => p.activo))
+      }
+    } catch (error) {
+      console.error('Error loading suppliers:', error)
+    }
+  }
+
+  const handleOpenLoteForm = (lote?: Lote) => {
+    if (lote) {
+      setEditingLote(lote)
+      setLoteFormData({
+        codigo_item: lote.codigo_item.toString(),
+        numero_lote: lote.numero_lote,
+        fecha_fabricacion: lote.fecha_fabricacion?.split('T')[0] || '',
+        fecha_vencimiento: lote.fecha_vencimiento?.split('T')[0] || '',
+        cantidad_inicial: lote.cantidad_inicial.toString(),
+        costo_unitario: lote.costo_unitario || '',
+        codigo_proveedor: lote.codigo_proveedor?.toString() || '',
+      })
+    } else {
+      setEditingLote(null)
+      setLoteFormData({
+        codigo_item: '',
+        numero_lote: '',
+        fecha_fabricacion: '',
+        fecha_vencimiento: '',
+        cantidad_inicial: '',
+        costo_unitario: '',
+        codigo_proveedor: '',
+      })
+    }
+    setShowLoteForm(true)
+  }
+
+  const handleCloseLoteForm = () => {
+    setShowLoteForm(false)
+    setEditingLote(null)
+    setLoteFormData({
+      codigo_item: '',
+      numero_lote: '',
+      fecha_fabricacion: '',
+      fecha_vencimiento: '',
+      cantidad_inicial: '',
+      costo_unitario: '',
+      codigo_proveedor: '',
+    })
+  }
+
+  const handleLoteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!loteFormData.codigo_item || !loteFormData.numero_lote || !loteFormData.cantidad_inicial) {
+      setMessage({ type: 'error', text: 'Complete los campos requeridos' })
+      return
+    }
+
+    try {
+      const url = editingLote
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/lotes/${editingLote.codigo_lote}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/lotes`
+
+      const payload: any = {
+        codigo_item: parseInt(loteFormData.codigo_item),
+        numero_lote: loteFormData.numero_lote.trim(),
+        cantidad_inicial: parseInt(loteFormData.cantidad_inicial),
+      }
+
+      if (loteFormData.fecha_fabricacion) {
+        payload.fecha_fabricacion = new Date(loteFormData.fecha_fabricacion).toISOString()
+      }
+      if (loteFormData.fecha_vencimiento) {
+        payload.fecha_vencimiento = new Date(loteFormData.fecha_vencimiento).toISOString()
+      }
+      if (loteFormData.costo_unitario) {
+        payload.costo_unitario = parseFloat(loteFormData.costo_unitario)
+      }
+      if (loteFormData.codigo_proveedor) {
+        payload.codigo_proveedor = parseInt(loteFormData.codigo_proveedor)
+      }
+
+      const response = await fetch(url, {
+        method: editingLote ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (response.ok) {
+        setMessage({
+          type: 'success',
+          text: editingLote ? 'Lote actualizado correctamente' : 'Lote registrado correctamente',
+        })
+        handleCloseLoteForm()
+        loadLotes()
+        loadItems() // Refresh items since stock may have changed
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al guardar lote' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const getLoteStatus = (lote: Lote) => {
+    if (!lote.fecha_vencimiento) {
+      return { label: 'Sin vencimiento', color: 'bg-lab-neutral-100 text-lab-neutral-800' }
+    }
+
+    const today = new Date()
+    const vencimiento = new Date(lote.fecha_vencimiento)
+    const diffDays = Math.ceil((vencimiento.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+    if (diffDays < 0) {
+      return { label: 'Vencido', color: 'bg-lab-danger-100 text-lab-danger-800', days: diffDays }
+    }
+    if (diffDays <= 30) {
+      return { label: 'Por vencer', color: 'bg-lab-warning-100 text-lab-warning-800', days: diffDays }
+    }
+    return { label: 'Vigente', color: 'bg-lab-success-100 text-lab-success-800', days: diffDays }
+  }
+
+  const filteredLotes = lotes.filter((lote) => {
+    if (filterLoteItem && lote.codigo_item.toString() !== filterLoteItem) return false
+
+    if (filterLoteVencimiento !== 'todos' && lote.fecha_vencimiento) {
+      const status = getLoteStatus(lote)
+      if (filterLoteVencimiento === 'vencidos' && status.label !== 'Vencido') return false
+      if (filterLoteVencimiento === 'por_vencer' && status.label !== 'Por vencer') return false
+      if (filterLoteVencimiento === 'vigentes' && status.label !== 'Vigente') return false
+    }
+
+    return true
+  })
+
+  // ==================== KARDEX FUNCTIONS ====================
+  const loadKardex = async () => {
+    if (!selectedItemKardex) {
+      setMessage({ type: 'error', text: 'Seleccione un item para ver su kardex' })
+      return
+    }
+
+    try {
+      setKardexLoading(true)
+      const params = new URLSearchParams()
+      if (kardexFechaDesde) params.append('fecha_desde', kardexFechaDesde)
+      if (kardexFechaHasta) params.append('fecha_hasta', kardexFechaHasta)
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items/${selectedItemKardex}/kardex?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setKardexData(data)
+      } else {
+        setMessage({ type: 'error', text: 'Error al cargar kardex' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setKardexLoading(false)
+    }
+  }
+
+  const handleClearKardex = () => {
+    setSelectedItemKardex('')
+    setKardexFechaDesde('')
+    setKardexFechaHasta('')
+    setKardexData(null)
+  }
+
+  // Cargar Kardex Global
+  const loadKardexGlobal = async () => {
+    try {
+      setKardexGlobalLoading(true)
+      const params = new URLSearchParams()
+      if (kardexFechaDesde) params.append('fecha_desde', kardexFechaDesde)
+      if (kardexFechaHasta) params.append('fecha_hasta', kardexFechaHasta)
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/kardex/global?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setKardexGlobal(data)
+      } else {
+        setMessage({ type: 'error', text: 'Error al cargar kardex global' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setKardexGlobalLoading(false)
+    }
+  }
+
+  // Cambiar a vista de item individual desde el resumen global
+  const handleViewItemKardex = (codigoItem: number) => {
+    setSelectedItemKardex(codigoItem.toString())
+    setKardexViewMode('individual')
+    // Cargar kardex del item
+    setTimeout(() => loadKardex(), 100)
+  }
+
+  // Volver al resumen global
+  const handleBackToGlobal = () => {
+    setKardexViewMode('global')
+    setKardexData(null)
+    setSelectedItemKardex('')
+  }
+
+  // ==================== OCR FACTURA FUNCTIONS ====================
+  const openOcrModal = () => {
+    setShowOcrModal(true)
+    setOcrResult(null)
+    setOcrPreviewUrl(null)
+    setOcrSelectedItems([])
+  }
+
+  const closeOcrModal = () => {
+    setShowOcrModal(false)
+    setOcrResult(null)
+    setOcrPreviewUrl(null)
+    setOcrSelectedItems([])
+  }
+
+  const handleOcrFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Mostrar preview
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setOcrPreviewUrl(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    // Procesar con OCR
+    setOcrLoading(true)
+    setOcrResult(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/ocr/process-image`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: formData,
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setOcrResult(data)
+
+        // Preparar items para selección
+        if (data.success && data.items?.length > 0) {
+          setOcrSelectedItems(data.items.map((item: any) => ({
+            descripcion: item.descripcion || '',
+            cantidad: item.cantidad || 1,
+            numero_lote: item.numero_lote || `LOT-${Date.now()}`,
+            fecha_vencimiento: item.fecha_vencimiento || '',
+            codigo_item: '', // El usuario debe seleccionar
+            selected: true,
+          })))
+        }
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al procesar imagen' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setOcrLoading(false)
+    }
+  }
+
+  const handleOcrItemChange = (index: number, field: string, value: any) => {
+    setOcrSelectedItems(prev => {
+      const updated = [...prev]
+      updated[index] = { ...updated[index], [field]: value }
+      return updated
+    })
+  }
+
+  const handleCreateLotesFromOcr = async () => {
+    const itemsToCreate = ocrSelectedItems.filter(item => item.selected && item.codigo_item)
+
+    if (itemsToCreate.length === 0) {
+      setMessage({ type: 'error', text: 'Seleccione al menos un item y asigne un producto del inventario' })
+      return
+    }
+
+    setOcrLoading(true)
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/ocr/create-from-result`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          items: itemsToCreate.map(item => ({
+            codigo_item: parseInt(item.codigo_item),
+            numero_lote: item.numero_lote,
+            cantidad: item.cantidad,
+            fecha_vencimiento: item.fecha_vencimiento || undefined,
+          })),
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setMessage({
+          type: 'success',
+          text: `Se crearon ${result.exitosos} lotes exitosamente${result.fallidos > 0 ? ` (${result.fallidos} fallidos)` : ''}`,
+        })
+        closeOcrModal()
+        loadLotes()
+        loadItems()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al crear lotes' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setOcrLoading(false)
+    }
+  }
+
   // ==================== RENDER ====================
   if (!mounted) {
     return (
@@ -600,16 +1338,46 @@ export default function InventarioPage() {
 
   return (
     <div className="space-y-6">
-      {/* Messages */}
+      {/* Messages - Fixed position toast */}
       {message && (
-        <div
-          className={`p-4 rounded-lg ${
-            message.type === 'success'
-              ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
-              : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
-          }`}
-        >
-          {message.text}
+        <div className="fixed top-4 right-4 z-50 max-w-md animate-slide-in-right">
+          <div
+            className={`p-4 rounded-lg shadow-lg flex items-start gap-3 ${
+              message.type === 'success'
+                ? 'bg-white border-l-4 border-green-500'
+                : 'bg-white border-l-4 border-red-500'
+            }`}
+          >
+            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+              message.type === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+            }`}>
+              {message.type === 'success' ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`font-medium text-sm ${
+                message.type === 'success' ? 'text-green-800' : 'text-red-800'
+              }`}>
+                {message.type === 'success' ? 'Operación exitosa' : 'Error'}
+              </p>
+              <p className="text-sm text-gray-600 mt-1">{message.text}</p>
+            </div>
+            <button
+              onClick={() => setMessage(null)}
+              className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
 
@@ -643,6 +1411,30 @@ export default function InventarioPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             Actualizar
+          </Button>
+        )}
+        {activeTab === 'lotes' && (
+          <div className="flex space-x-2">
+            <Button onClick={openOcrModal} variant="outline" className="border-lab-primary-600 text-lab-primary-600 hover:bg-lab-primary-50">
+              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Escanear Factura (OCR)
+            </Button>
+            <Button onClick={() => handleOpenLoteForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
+              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Nuevo Lote
+            </Button>
+          </div>
+        )}
+        {activeTab === 'categorias' && (
+          <Button onClick={() => handleOpenCategoriaForm()} className="bg-lab-primary-600 hover:bg-lab-primary-700">
+            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nueva Categoría
           </Button>
         )}
       </div>
@@ -679,6 +1471,36 @@ export default function InventarioPage() {
             }`}
           >
             Alertas de Stock
+          </button>
+          <button
+            onClick={() => setActiveTab('lotes')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'lotes'
+                ? 'border-lab-primary-600 text-lab-primary-600'
+                : 'border-transparent text-lab-neutral-500 hover:text-lab-neutral-700 hover:border-lab-neutral-300'
+            }`}
+          >
+            Gestión de Lotes
+          </button>
+          <button
+            onClick={() => setActiveTab('kardex')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'kardex'
+                ? 'border-lab-primary-600 text-lab-primary-600'
+                : 'border-transparent text-lab-neutral-500 hover:text-lab-neutral-700 hover:border-lab-neutral-300'
+            }`}
+          >
+            Kardex
+          </button>
+          <button
+            onClick={() => setActiveTab('categorias')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'categorias'
+                ? 'border-lab-primary-600 text-lab-primary-600'
+                : 'border-transparent text-lab-neutral-500 hover:text-lab-neutral-700 hover:border-lab-neutral-300'
+            }`}
+          >
+            Categorías
           </button>
         </nav>
       </div>
@@ -757,6 +1579,7 @@ export default function InventarioPage() {
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Nombre</th>
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Stock Actual</th>
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Mín/Máx</th>
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Categoría</th>
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Unidad</th>
                         <th className="text-left p-4 font-semibold text-lab-neutral-900">Estado</th>
                         <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
@@ -778,13 +1601,27 @@ export default function InventarioPage() {
                             <td className="p-4 text-sm text-lab-neutral-600">
                               {item.stock_minimo} / {item.stock_maximo || '-'}
                             </td>
+                            <td className="p-4 text-sm text-lab-neutral-600">
+                              {item.categoria?.nombre || <span className="text-lab-neutral-400">Sin categoría</span>}
+                            </td>
                             <td className="p-4 text-sm text-lab-neutral-600">{item.unidad_medida}</td>
                             <td className="p-4">
                               <span className={`text-xs px-2 py-1 rounded ${stockStatus.color}`}>
                                 {stockStatus.label}
                               </span>
                             </td>
-                            <td className="p-4 text-right space-x-2">
+                            <td className="p-4 text-right space-x-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openQuickKardex(item)}
+                                className="text-lab-primary-600 hover:text-lab-primary-700"
+                                title="Ver Kardex"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -871,6 +1708,26 @@ export default function InventarioPage() {
                         rows={2}
                         className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
                       />
+                    </div>
+
+                    <div>
+                      <label htmlFor="codigo_categoria" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Categoría
+                      </label>
+                      <select
+                        id="codigo_categoria"
+                        name="codigo_categoria"
+                        value={itemFormData.codigo_categoria}
+                        onChange={handleItemInputChange}
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                      >
+                        <option value="">Sin categoría</option>
+                        {categorias.filter(c => c.activo).map((cat) => (
+                          <option key={cat.codigo_categoria} value={cat.codigo_categoria}>
+                            {cat.nombre}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
@@ -1492,6 +2349,1207 @@ export default function InventarioPage() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* ==================== LOTES TAB ==================== */}
+      {activeTab === 'lotes' && (
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-3 rounded-full bg-lab-primary-100">
+                    <svg className="w-6 h-6 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <div className="text-sm text-lab-neutral-600">Total Lotes</div>
+                    <div className="text-2xl font-bold text-lab-neutral-900">{lotes.length}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-3 rounded-full bg-lab-success-100">
+                    <svg className="w-6 h-6 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <div className="text-sm text-lab-neutral-600">Vigentes</div>
+                    <div className="text-2xl font-bold text-lab-success-600">
+                      {lotes.filter(l => getLoteStatus(l).label === 'Vigente').length}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-3 rounded-full bg-lab-warning-100">
+                    <svg className="w-6 h-6 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <div className="text-sm text-lab-neutral-600">Por Vencer</div>
+                    <div className="text-2xl font-bold text-lab-warning-600">
+                      {lotes.filter(l => getLoteStatus(l).label === 'Por vencer').length}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center">
+                  <div className="p-3 rounded-full bg-lab-danger-100">
+                    <svg className="w-6 h-6 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <div className="text-sm text-lab-neutral-600">Vencidos</div>
+                    <div className="text-2xl font-bold text-lab-danger-600">
+                      {lotes.filter(l => getLoteStatus(l).label === 'Vencido').length}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Filters */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Filtros</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                    Item
+                  </label>
+                  <select
+                    value={filterLoteItem}
+                    onChange={(e) => setFilterLoteItem(e.target.value)}
+                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                  >
+                    <option value="">Todos los items</option>
+                    {items.map((item) => (
+                      <option key={item.codigo_item} value={item.codigo_item}>
+                        {item.codigo_interno} - {item.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                    Estado de Vencimiento
+                  </label>
+                  <select
+                    value={filterLoteVencimiento}
+                    onChange={(e) => setFilterLoteVencimiento(e.target.value as any)}
+                    className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                  >
+                    <option value="todos">Todos</option>
+                    <option value="vigentes">Vigentes</option>
+                    <option value="por_vencer">Por Vencer (30 días)</option>
+                    <option value="vencidos">Vencidos</option>
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <Button onClick={loadLotes} className="bg-lab-primary-600 hover:bg-lab-primary-700">
+                    Actualizar
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Lotes Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Lotes Registrados ({filteredLotes.length})</CardTitle>
+              <CardDescription>Control de lotes con fecha de vencimiento y trazabilidad</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {lotesLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-lab-neutral-200">
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Lote</th>
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Item</th>
+                        <th className="text-center p-4 font-semibold text-lab-neutral-900">Cantidad</th>
+                        <th className="text-center p-4 font-semibold text-lab-neutral-900">Vencimiento</th>
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Estado</th>
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Proveedor</th>
+                        <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredLotes.map((lote) => {
+                        const status = getLoteStatus(lote)
+                        return (
+                          <tr key={lote.codigo_lote} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
+                            <td className="p-4">
+                              <div className="font-mono font-semibold text-lab-neutral-900">{lote.numero_lote}</div>
+                              <div className="text-xs text-lab-neutral-600">
+                                Reg: {formatDate(lote.fecha_registro)}
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="font-medium text-lab-neutral-900">{lote.item?.nombre || '-'}</div>
+                              <div className="text-xs text-lab-neutral-600">{lote.item?.codigo_interno}</div>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="font-semibold text-lab-neutral-900">
+                                {lote.cantidad_actual} / {lote.cantidad_inicial}
+                              </div>
+                              <div className="text-xs text-lab-neutral-600">{lote.item?.unidad_medida}</div>
+                            </td>
+                            <td className="p-4 text-center">
+                              {lote.fecha_vencimiento ? (
+                                <div>
+                                  <div className="text-sm text-lab-neutral-900">{formatDate(lote.fecha_vencimiento)}</div>
+                                  {'days' in status && (
+                                    <div className={`text-xs ${status.days && status.days < 0 ? 'text-lab-danger-600' : 'text-lab-neutral-600'}`}>
+                                      {status.days && status.days < 0
+                                        ? `Hace ${Math.abs(status.days)} días`
+                                        : `En ${status.days} días`}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-lab-neutral-500">-</span>
+                              )}
+                            </td>
+                            <td className="p-4">
+                              <span className={`text-xs px-2 py-1 rounded ${status.color}`}>
+                                {status.label}
+                              </span>
+                            </td>
+                            <td className="p-4 text-sm text-lab-neutral-600">
+                              {lote.proveedor?.razon_social || '-'}
+                            </td>
+                            <td className="p-4 text-right">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleOpenLoteForm(lote)}
+                              >
+                                Editar
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+
+                  {filteredLotes.length === 0 && (
+                    <div className="text-center py-12 text-lab-neutral-500">
+                      No se encontraron lotes con los filtros seleccionados
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Lote Form Modal */}
+          {showLoteForm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+              <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-8">
+                <div className="p-6 border-b border-lab-neutral-200">
+                  <h2 className="text-2xl font-bold text-lab-neutral-900">
+                    {editingLote ? 'Editar Lote' : 'Registrar Nuevo Lote'}
+                  </h2>
+                  <p className="text-sm text-lab-neutral-600 mt-1">
+                    Registre un nuevo lote de productos del proveedor
+                  </p>
+                </div>
+
+                <form onSubmit={handleLoteSubmit} className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Item *
+                      </label>
+                      <select
+                        value={loteFormData.codigo_item}
+                        onChange={(e) => setLoteFormData({ ...loteFormData, codigo_item: e.target.value })}
+                        required
+                        disabled={!!editingLote}
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 disabled:bg-lab-neutral-100"
+                      >
+                        <option value="">Seleccionar item...</option>
+                        {items.map((item) => (
+                          <option key={item.codigo_item} value={item.codigo_item}>
+                            {item.codigo_interno} - {item.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Número de Lote *
+                      </label>
+                      <input
+                        type="text"
+                        value={loteFormData.numero_lote}
+                        onChange={(e) => setLoteFormData({ ...loteFormData, numero_lote: e.target.value })}
+                        required
+                        placeholder="Ej: LOT-2024-001"
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Cantidad Inicial *
+                      </label>
+                      <input
+                        type="number"
+                        value={loteFormData.cantidad_inicial}
+                        onChange={(e) => setLoteFormData({ ...loteFormData, cantidad_inicial: e.target.value })}
+                        required
+                        min="1"
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Costo Unitario (USD)
+                      </label>
+                      <input
+                        type="number"
+                        value={loteFormData.costo_unitario}
+                        onChange={(e) => setLoteFormData({ ...loteFormData, costo_unitario: e.target.value })}
+                        step="0.01"
+                        min="0"
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Fecha de Fabricación
+                      </label>
+                      <input
+                        type="date"
+                        value={loteFormData.fecha_fabricacion}
+                        onChange={(e) => setLoteFormData({ ...loteFormData, fecha_fabricacion: e.target.value })}
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Fecha de Vencimiento
+                      </label>
+                      <input
+                        type="date"
+                        value={loteFormData.fecha_vencimiento}
+                        onChange={(e) => setLoteFormData({ ...loteFormData, fecha_vencimiento: e.target.value })}
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Proveedor
+                      </label>
+                      <select
+                        value={loteFormData.codigo_proveedor}
+                        onChange={(e) => setLoteFormData({ ...loteFormData, codigo_proveedor: e.target.value })}
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      >
+                        <option value="">Seleccionar proveedor...</option>
+                        {proveedores.map((prov) => (
+                          <option key={prov.codigo_proveedor} value={prov.codigo_proveedor}>
+                            {prov.razon_social}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-lab-neutral-200">
+                    <Button type="button" onClick={handleCloseLoteForm} variant="outline">
+                      Cancelar
+                    </Button>
+                    <Button type="submit" className="bg-lab-primary-600 hover:bg-lab-primary-700">
+                      {editingLote ? 'Actualizar' : 'Registrar'} Lote
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ==================== KARDEX TAB ==================== */}
+      {activeTab === 'kardex' && (
+        <>
+          {/* View Toggle */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex space-x-2">
+              <Button
+                variant={kardexViewMode === 'global' ? 'default' : 'outline'}
+                onClick={() => { setKardexViewMode('global'); loadKardexGlobal(); }}
+                className={kardexViewMode === 'global' ? 'bg-lab-primary-600' : ''}
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                Resumen Global
+              </Button>
+              <Button
+                variant={kardexViewMode === 'individual' ? 'default' : 'outline'}
+                onClick={() => setKardexViewMode('individual')}
+                className={kardexViewMode === 'individual' ? 'bg-lab-primary-600' : ''}
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Por Item
+              </Button>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div>
+                <input
+                  type="date"
+                  value={kardexFechaDesde}
+                  onChange={(e) => setKardexFechaDesde(e.target.value)}
+                  className="rounded-md border border-lab-neutral-300 px-3 py-1.5 text-sm"
+                  placeholder="Desde"
+                />
+              </div>
+              <div>
+                <input
+                  type="date"
+                  value={kardexFechaHasta}
+                  onChange={(e) => setKardexFechaHasta(e.target.value)}
+                  className="rounded-md border border-lab-neutral-300 px-3 py-1.5 text-sm"
+                  placeholder="Hasta"
+                />
+              </div>
+              <Button onClick={kardexViewMode === 'global' ? loadKardexGlobal : loadKardex} size="sm">
+                Actualizar
+              </Button>
+            </div>
+          </div>
+
+          {/* GLOBAL VIEW */}
+          {kardexViewMode === 'global' && (
+            <>
+              {kardexGlobalLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
+                </div>
+              ) : kardexGlobal ? (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
+                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-blue-700">{kardexGlobal.resumen.total_items}</div>
+                        <div className="text-xs text-blue-600">Items Activos</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-green-50 to-green-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-green-700">+{kardexGlobal.resumen.total_entradas}</div>
+                        <div className="text-xs text-green-600">Total Entradas</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-red-50 to-red-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-red-700">-{kardexGlobal.resumen.total_salidas}</div>
+                        <div className="text-xs text-red-600">Total Salidas</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-yellow-700">{kardexGlobal.resumen.items_bajos}</div>
+                        <div className="text-xs text-yellow-600">Stock Bajo</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-orange-700">{kardexGlobal.resumen.items_criticos}</div>
+                        <div className="text-xs text-orange-600">Críticos</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-red-100 to-red-200">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-2xl font-bold text-red-800">{kardexGlobal.resumen.items_agotados}</div>
+                        <div className="text-xs text-red-700">Agotados</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="text-lg font-bold text-purple-700">
+                          Bs. {kardexGlobal.resumen.valor_total_inventario.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-xs text-purple-600">Valor Total</div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Global Kardex Table */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Kardex Global de Inventario</CardTitle>
+                      <CardDescription>Resumen de todos los items con sus movimientos y estado de stock</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-lab-neutral-200 bg-lab-neutral-50">
+                              <th className="text-left p-3 font-semibold text-lab-neutral-900">Código</th>
+                              <th className="text-left p-3 font-semibold text-lab-neutral-900">Item</th>
+                              <th className="text-left p-3 font-semibold text-lab-neutral-900">Categoría</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Stock</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Entradas</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Salidas</th>
+                              <th className="text-right p-3 font-semibold text-lab-neutral-900">Valor</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Estado</th>
+                              <th className="text-left p-3 font-semibold text-lab-neutral-900">Último Mov.</th>
+                              <th className="text-center p-3 font-semibold text-lab-neutral-900">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {kardexGlobal.items.map((item) => (
+                              <tr key={item.codigo_item} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
+                                <td className="p-3 font-mono text-sm">{item.codigo_interno}</td>
+                                <td className="p-3 font-medium">{item.nombre}</td>
+                                <td className="p-3 text-sm text-lab-neutral-600">{item.categoria}</td>
+                                <td className="p-3 text-center">
+                                  <span className="font-semibold">{item.stock_actual}</span>
+                                  <span className="text-xs text-lab-neutral-500 ml-1">{item.unidad_medida}</span>
+                                </td>
+                                <td className="p-3 text-center text-green-600 font-medium">+{item.total_entradas}</td>
+                                <td className="p-3 text-center text-red-600 font-medium">-{item.total_salidas}</td>
+                                <td className="p-3 text-right font-mono text-sm">
+                                  Bs. {item.valor_inventario.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                    item.estado_stock === 'NORMAL' ? 'bg-green-100 text-green-700' :
+                                    item.estado_stock === 'BAJO' ? 'bg-yellow-100 text-yellow-700' :
+                                    item.estado_stock === 'CRITICO' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-red-100 text-red-700'
+                                  }`}>
+                                    {item.estado_stock}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-sm text-lab-neutral-600">
+                                  {item.ultimo_movimiento ? (
+                                    <span title={item.ultimo_movimiento.tipo_movimiento}>
+                                      {new Date(item.ultimo_movimiento.fecha_movimiento).toLocaleDateString('es-BO')}
+                                    </span>
+                                  ) : '-'}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleViewItemKardex(item.codigo_item)}
+                                    className="text-xs"
+                                  >
+                                    Ver Detalle
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="py-12">
+                    <div className="text-center text-lab-neutral-500">
+                      <p>Cargando datos del kardex...</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          {/* INDIVIDUAL VIEW */}
+          {kardexViewMode === 'individual' && (
+            <>
+              {/* Back Button and Item Selector */}
+              <Card className="mb-4">
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-4">
+                    <Button variant="outline" onClick={handleBackToGlobal} size="sm">
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      Volver al Resumen
+                    </Button>
+                    <div className="flex-1">
+                      <select
+                        value={selectedItemKardex}
+                        onChange={(e) => setSelectedItemKardex(e.target.value)}
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      >
+                        <option value="">Seleccionar item...</option>
+                        {items.map((item) => (
+                          <option key={item.codigo_item} value={item.codigo_item}>
+                            {item.codigo_interno} - {item.nombre} (Stock: {item.stock_actual})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Button onClick={loadKardex} className="bg-lab-primary-600 hover:bg-lab-primary-700">
+                      Consultar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+          {/* Kardex Results */}
+          {kardexLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
+            </div>
+          ) : kardexData ? (
+            <>
+              {/* Item Info & Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Información del Item</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-lab-neutral-600">Código:</span>
+                        <span className="font-mono font-semibold">{kardexData.item.codigo_interno}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-lab-neutral-600">Nombre:</span>
+                        <span className="font-semibold">{kardexData.item.nombre}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-lab-neutral-600">Stock Actual:</span>
+                        <span className="font-semibold text-lg text-lab-primary-600">
+                          {kardexData.item.stock_actual} {kardexData.item.unidad_medida}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Resumen de Movimientos</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-4 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold text-lab-success-600">{kardexData.totales?.entradas || 0}</div>
+                        <div className="text-sm text-lab-neutral-600">Entradas</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-lab-danger-600">{kardexData.totales?.salidas || 0}</div>
+                        <div className="text-sm text-lab-neutral-600">Salidas</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-lab-warning-600">
+                          {(kardexData.totales?.ajustes_positivos || 0) + (kardexData.totales?.ajustes_negativos || 0)}
+                        </div>
+                        <div className="text-sm text-lab-neutral-600">Ajustes</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-lab-primary-600">{kardexData.resumen?.total_movimientos || 0}</div>
+                        <div className="text-sm text-lab-neutral-600">Total</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Kardex Table */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Historial de Movimientos ({kardexData.movimientos.length})</CardTitle>
+                  <CardDescription>Registro cronológico de todas las operaciones</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-lab-neutral-200">
+                          <th className="text-left p-4 font-semibold text-lab-neutral-900">Fecha</th>
+                          <th className="text-left p-4 font-semibold text-lab-neutral-900">Tipo</th>
+                          <th className="text-center p-4 font-semibold text-lab-neutral-900">Cantidad</th>
+                          <th className="text-center p-4 font-semibold text-lab-neutral-900">Stock Ant.</th>
+                          <th className="text-center p-4 font-semibold text-lab-neutral-900">Stock Nuevo</th>
+                          <th className="text-left p-4 font-semibold text-lab-neutral-900">Lote</th>
+                          <th className="text-left p-4 font-semibold text-lab-neutral-900">Motivo</th>
+                          <th className="text-left p-4 font-semibold text-lab-neutral-900">Usuario</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {kardexData.movimientos.map((mov) => {
+                          const tipoStyle = getTipoMovimientoStyle(mov.tipo_movimiento)
+                          return (
+                            <tr key={mov.codigo_movimiento} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
+                              <td className="p-4 text-sm text-lab-neutral-600">
+                                {formatDateTime(mov.fecha_movimiento)}
+                              </td>
+                              <td className="p-4">
+                                <span className={`text-xs px-2 py-1 rounded ${tipoStyle.color} font-medium`}>
+                                  {tipoStyle.icon} {tipoStyle.label}
+                                </span>
+                              </td>
+                              <td className="p-4 text-center font-semibold">
+                                <span className={
+                                  mov.tipo_movimiento === 'ENTRADA' || mov.tipo_movimiento === 'AJUSTE_POSITIVO'
+                                    ? 'text-lab-success-600'
+                                    : 'text-lab-danger-600'
+                                }>
+                                  {mov.tipo_movimiento === 'ENTRADA' || mov.tipo_movimiento === 'AJUSTE_POSITIVO' ? '+' : '-'}
+                                  {mov.cantidad}
+                                </span>
+                              </td>
+                              <td className="p-4 text-center text-lab-neutral-600">{mov.stock_anterior}</td>
+                              <td className="p-4 text-center font-semibold text-lab-neutral-900">{mov.stock_nuevo}</td>
+                              <td className="p-4 text-sm text-lab-neutral-600 font-mono">
+                                {mov.lote?.numero_lote || '-'}
+                              </td>
+                              <td className="p-4 text-sm text-lab-neutral-700 max-w-xs truncate">
+                                {mov.motivo || '-'}
+                              </td>
+                              <td className="p-4 text-sm text-lab-neutral-600">
+                                {mov.usuario ? `${mov.usuario.nombres} ${mov.usuario.apellidos}` : 'Sistema'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+
+                    {kardexData.movimientos.length === 0 && (
+                      <div className="text-center py-12 text-lab-neutral-500">
+                        No hay movimientos registrados para este item
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card>
+              <CardContent className="py-12">
+                <div className="text-center text-lab-neutral-500">
+                  <svg className="mx-auto h-12 w-12 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                  </svg>
+                  <p className="mt-2">Seleccione un item y haga clic en "Consultar" para ver el historial</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* ==================== CATEGORIAS TAB ==================== */}
+      {activeTab === 'categorias' && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Categorías de Items ({categorias.length})</CardTitle>
+              <CardDescription>Organiza los items del inventario por categoría</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {categoriasLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-lab-neutral-200">
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">ID</th>
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Nombre</th>
+                        <th className="text-left p-4 font-semibold text-lab-neutral-900">Descripción</th>
+                        <th className="text-center p-4 font-semibold text-lab-neutral-900">Items</th>
+                        <th className="text-center p-4 font-semibold text-lab-neutral-900">Estado</th>
+                        <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {categorias.map((cat) => (
+                        <tr key={cat.codigo_categoria} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
+                          <td className="p-4 text-sm font-mono text-lab-neutral-600">{cat.codigo_categoria}</td>
+                          <td className="p-4 font-medium text-lab-neutral-900">{cat.nombre}</td>
+                          <td className="p-4 text-sm text-lab-neutral-600 max-w-xs truncate">
+                            {cat.descripcion || <span className="text-lab-neutral-400">-</span>}
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className="text-sm font-semibold text-lab-primary-600">
+                              {cat._count?.items || 0}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              cat.activo
+                                ? 'bg-lab-success-100 text-lab-success-800'
+                                : 'bg-lab-neutral-100 text-lab-neutral-600'
+                            }`}>
+                              {cat.activo ? 'Activo' : 'Inactivo'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenCategoriaForm(cat)}
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDeleteCategoria(cat.codigo_categoria)}
+                              className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                            >
+                              Eliminar
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {categorias.length === 0 && (
+                    <div className="text-center py-12 text-lab-neutral-500">
+                      No hay categorías registradas. Cree la primera categoría para organizar su inventario.
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Categoria Form Modal */}
+          {showCategoriaForm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+                <div className="p-6 border-b border-lab-neutral-200">
+                  <h2 className="text-2xl font-bold text-lab-neutral-900">
+                    {editingCategoria ? 'Editar Categoría' : 'Nueva Categoría'}
+                  </h2>
+                </div>
+
+                <form onSubmit={handleCategoriaSubmit} className="p-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Nombre *
+                      </label>
+                      <input
+                        type="text"
+                        value={categoriaFormData.nombre}
+                        onChange={(e) => setCategoriaFormData({ ...categoriaFormData, nombre: e.target.value })}
+                        required
+                        placeholder="Ej: Reactivos, Materiales, Equipos..."
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                        Descripción
+                      </label>
+                      <textarea
+                        value={categoriaFormData.descripcion}
+                        onChange={(e) => setCategoriaFormData({ ...categoriaFormData, descripcion: e.target.value })}
+                        rows={3}
+                        placeholder="Descripción opcional de la categoría..."
+                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-lab-neutral-200">
+                    <Button type="button" onClick={handleCloseCategoriaForm} variant="outline">
+                      Cancelar
+                    </Button>
+                    <Button type="submit" className="bg-lab-primary-600 hover:bg-lab-primary-700">
+                      {editingCategoria ? 'Actualizar' : 'Crear'} Categoría
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ==================== QUICK KARDEX MODAL ==================== */}
+      {showQuickKardex && quickKardexItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full my-8 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-lab-neutral-900">Kardex del Item</h2>
+                <p className="text-sm text-lab-neutral-600 mt-1">
+                  <span className="font-mono">{quickKardexItem.codigo_interno}</span> - {quickKardexItem.nombre}
+                </p>
+              </div>
+              <Button variant="outline" onClick={closeQuickKardex}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {quickKardexLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
+                </div>
+              ) : quickKardexData ? (
+                <div className="space-y-4">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-lab-neutral-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-lab-primary-600">{quickKardexData.stock_actual}</div>
+                      <div className="text-sm text-lab-neutral-600">Stock Actual</div>
+                    </div>
+                    <div className="bg-lab-success-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-lab-success-600">{quickKardexData.totales?.entradas || 0}</div>
+                      <div className="text-sm text-lab-neutral-600">Entradas</div>
+                    </div>
+                    <div className="bg-lab-danger-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-lab-danger-600">{quickKardexData.totales?.salidas || 0}</div>
+                      <div className="text-sm text-lab-neutral-600">Salidas</div>
+                    </div>
+                    <div className="bg-lab-warning-50 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-lab-warning-600">
+                        {(quickKardexData.totales?.ajustes_positivos || 0) + (quickKardexData.totales?.ajustes_negativos || 0)}
+                      </div>
+                      <div className="text-sm text-lab-neutral-600">Ajustes</div>
+                    </div>
+                  </div>
+
+                  {/* Movements Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-lab-neutral-200">
+                          <th className="text-left p-3 font-semibold text-lab-neutral-900">Fecha</th>
+                          <th className="text-left p-3 font-semibold text-lab-neutral-900">Tipo</th>
+                          <th className="text-center p-3 font-semibold text-lab-neutral-900">Cant.</th>
+                          <th className="text-center p-3 font-semibold text-lab-neutral-900">Stock</th>
+                          <th className="text-left p-3 font-semibold text-lab-neutral-900">Motivo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {quickKardexData.movimientos.slice(0, 15).map((mov) => {
+                          const tipoStyle = getTipoMovimientoStyle(mov.tipo_movimiento)
+                          return (
+                            <tr key={mov.codigo_movimiento} className="border-b border-lab-neutral-100">
+                              <td className="p-3 text-lab-neutral-600">{formatDateTime(mov.fecha_movimiento)}</td>
+                              <td className="p-3">
+                                <span className={`text-xs px-2 py-1 rounded ${tipoStyle.color}`}>
+                                  {tipoStyle.label}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center font-semibold">
+                                <span className={
+                                  mov.tipo_movimiento === 'ENTRADA' || mov.tipo_movimiento === 'AJUSTE_POSITIVO'
+                                    ? 'text-lab-success-600'
+                                    : 'text-lab-danger-600'
+                                }>
+                                  {mov.tipo_movimiento === 'ENTRADA' || mov.tipo_movimiento === 'AJUSTE_POSITIVO' ? '+' : '-'}
+                                  {mov.cantidad}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className="text-lab-neutral-500">{mov.stock_anterior}</span>
+                                <span className="mx-1">→</span>
+                                <span className="font-semibold">{mov.stock_nuevo}</span>
+                              </td>
+                              <td className="p-3 text-lab-neutral-600 truncate max-w-xs">{mov.motivo || '-'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+
+                    {quickKardexData.movimientos.length === 0 && (
+                      <div className="text-center py-8 text-lab-neutral-500">
+                        No hay movimientos registrados para este item
+                      </div>
+                    )}
+
+                    {quickKardexData.movimientos.length > 15 && (
+                      <div className="text-center py-4 text-sm text-lab-neutral-500">
+                        Mostrando los últimos 15 movimientos.
+                        <button
+                          onClick={() => { closeQuickKardex(); setActiveTab('kardex'); setSelectedItemKardex(quickKardexItem.codigo_item.toString()); }}
+                          className="ml-2 text-lab-primary-600 hover:underline"
+                        >
+                          Ver historial completo →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-lab-neutral-500">
+                  Error al cargar el kardex
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== OCR FACTURA MODAL ==================== */}
+      {showOcrModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full my-8 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-lab-neutral-900">Escanear Factura de Proveedor</h2>
+                <p className="text-sm text-lab-neutral-600 mt-1">
+                  Suba una imagen de factura para extraer automáticamente los productos y crear lotes
+                </p>
+              </div>
+              <Button variant="outline" onClick={closeOcrModal}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* File Upload Area */}
+              {!ocrResult && (
+                <div className="mb-6">
+                  <label className="block">
+                    <div className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                      ocrLoading ? 'border-lab-primary-300 bg-lab-primary-50' : 'border-lab-neutral-300 hover:border-lab-primary-500 hover:bg-lab-neutral-50'
+                    }`}>
+                      {ocrLoading ? (
+                        <div className="flex flex-col items-center">
+                          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600 mb-4"></div>
+                          <p className="text-lab-primary-600 font-medium">Procesando imagen con IA...</p>
+                          <p className="text-sm text-lab-neutral-500 mt-1">Esto puede tomar unos segundos</p>
+                        </div>
+                      ) : (
+                        <>
+                          <svg className="mx-auto h-16 w-16 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="mt-4 text-lg font-medium text-lab-neutral-700">
+                            Haga clic para subir una imagen de factura
+                          </p>
+                          <p className="mt-2 text-sm text-lab-neutral-500">
+                            Formatos: JPG, PNG, PDF (máx. 10MB)
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+                      onChange={handleOcrFileSelect}
+                      disabled={ocrLoading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* Preview and Results */}
+              {ocrResult && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Image Preview */}
+                  <div>
+                    <h3 className="font-semibold text-lab-neutral-900 mb-3">Imagen de Factura</h3>
+                    {ocrPreviewUrl && (
+                      <div className="border rounded-lg overflow-hidden bg-lab-neutral-50">
+                        <img src={ocrPreviewUrl} alt="Factura" className="w-full h-auto max-h-96 object-contain" />
+                      </div>
+                    )}
+
+                    {/* Proveedor Info */}
+                    {ocrResult.proveedor && (
+                      <div className="mt-4 p-4 bg-lab-neutral-50 rounded-lg">
+                        <h4 className="font-medium text-lab-neutral-900 mb-2">Datos del Proveedor (detectados)</h4>
+                        <div className="text-sm text-lab-neutral-600 space-y-1">
+                          {ocrResult.proveedor.razon_social && <p><strong>Proveedor:</strong> {ocrResult.proveedor.razon_social}</p>}
+                          {ocrResult.proveedor.ruc && <p><strong>RUC:</strong> {ocrResult.proveedor.ruc}</p>}
+                          {ocrResult.factura?.numero && <p><strong>Factura N°:</strong> {ocrResult.factura.numero}</p>}
+                          {ocrResult.factura?.fecha && <p><strong>Fecha:</strong> {ocrResult.factura.fecha}</p>}
+                          {ocrResult.factura?.total && <p><strong>Total:</strong> ${ocrResult.factura.total.toFixed(2)}</p>}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Button to upload another */}
+                    <div className="mt-4">
+                      <label className="cursor-pointer">
+                        <span className="text-sm text-lab-primary-600 hover:underline">
+                          Subir otra imagen
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+                          onChange={handleOcrFileSelect}
+                          disabled={ocrLoading}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Extracted Items */}
+                  <div>
+                    <h3 className="font-semibold text-lab-neutral-900 mb-3">
+                      Items Detectados ({ocrSelectedItems.length})
+                    </h3>
+
+                    {ocrSelectedItems.length === 0 ? (
+                      <div className="text-center py-8 text-lab-neutral-500 border rounded-lg">
+                        No se detectaron items en la factura
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {ocrSelectedItems.map((item, index) => (
+                          <div key={index} className={`border rounded-lg p-4 ${item.selected ? 'border-lab-primary-300 bg-lab-primary-50' : 'border-lab-neutral-200'}`}>
+                            <div className="flex items-start gap-3">
+                              <input
+                                type="checkbox"
+                                checked={item.selected}
+                                onChange={(e) => handleOcrItemChange(index, 'selected', e.target.checked)}
+                                className="mt-1"
+                              />
+                              <div className="flex-1 space-y-2">
+                                <p className="font-medium text-lab-neutral-900">{item.descripcion}</p>
+
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                  <div>
+                                    <label className="text-lab-neutral-600">Cantidad:</label>
+                                    <input
+                                      type="number"
+                                      value={item.cantidad}
+                                      onChange={(e) => handleOcrItemChange(index, 'cantidad', parseInt(e.target.value) || 0)}
+                                      className="w-full border rounded px-2 py-1 mt-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-lab-neutral-600">N° Lote:</label>
+                                    <input
+                                      type="text"
+                                      value={item.numero_lote}
+                                      onChange={(e) => handleOcrItemChange(index, 'numero_lote', e.target.value)}
+                                      className="w-full border rounded px-2 py-1 mt-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-lab-neutral-600">Vencimiento:</label>
+                                    <input
+                                      type="date"
+                                      value={item.fecha_vencimiento}
+                                      onChange={(e) => handleOcrItemChange(index, 'fecha_vencimiento', e.target.value)}
+                                      className="w-full border rounded px-2 py-1 mt-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-lab-neutral-600">Asignar a Item: *</label>
+                                    <select
+                                      value={item.codigo_item}
+                                      onChange={(e) => handleOcrItemChange(index, 'codigo_item', e.target.value)}
+                                      className="w-full border rounded px-2 py-1 mt-1"
+                                    >
+                                      <option value="">Seleccionar...</option>
+                                      {items.map((inv) => (
+                                        <option key={inv.codigo_item} value={inv.codigo_item}>
+                                          {inv.codigo_interno} - {inv.nombre}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            {ocrResult && ocrSelectedItems.length > 0 && (
+              <div className="p-6 border-t border-lab-neutral-200 flex justify-between items-center">
+                <div className="text-sm text-lab-neutral-600">
+                  {ocrSelectedItems.filter(i => i.selected && i.codigo_item).length} items listos para crear
+                </div>
+                <div className="flex space-x-3">
+                  <Button variant="outline" onClick={closeOcrModal}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleCreateLotesFromOcr}
+                    disabled={ocrLoading || ocrSelectedItems.filter(i => i.selected && i.codigo_item).length === 0}
+                    className="bg-lab-primary-600 hover:bg-lab-primary-700"
+                  >
+                    {ocrLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                        Procesando...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Crear Lotes en Inventario
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

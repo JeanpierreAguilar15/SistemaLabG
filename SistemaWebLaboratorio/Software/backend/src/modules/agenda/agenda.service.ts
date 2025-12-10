@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { InventarioService } from '../inventario/inventario.service';
 import {
   CreateSlotDto,
   CreateCitaDto,
@@ -23,6 +24,7 @@ export class AgendaService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => EventsGateway))
     private readonly eventsGateway: EventsGateway,
+    private readonly inventarioService: InventarioService,
   ) { }
 
   // ==================== SLOTS ====================
@@ -777,7 +779,7 @@ export class AgendaService {
       },
     });
 
-    // Si se completó la cita y tiene cotización, generar muestra y resultados pendientes
+    // Si se completó la cita y tiene cotización, generar muestra, resultados pendientes y descontar inventario
     if (data.estado === 'COMPLETADA' && cita.estado !== 'COMPLETADA' && (updatedCita as any).codigo_cotizacion) {
       const cotizacion = await this.prisma.cotizacion.findUnique({
         where: { codigo_cotizacion: (updatedCita as any).codigo_cotizacion },
@@ -798,6 +800,7 @@ export class AgendaService {
         });
 
         // Crear Resultados Pendientes
+        const codigosExamenes: number[] = [];
         for (const detalle of cotizacion.detalles) {
           await this.prisma.resultado.create({
             data: {
@@ -808,9 +811,34 @@ export class AgendaService {
               fecha_resultado: new Date(),
             }
           });
+          codigosExamenes.push(detalle.codigo_examen);
         }
 
         this.logger.log(`Generados resultados pendientes para cita ${codigo_cita}`);
+
+        // KARDEX: Descontar insumos del inventario para todos los exámenes
+        if (codigosExamenes.length > 0) {
+          try {
+            const resultadoInventario = await this.inventarioService.descontarInsumosMultiplesExamenes(
+              codigosExamenes,
+              codigo_cita,
+              userId,
+            );
+
+            if (resultadoInventario.success) {
+              this.logger.log(
+                `Kardex: Descontados ${resultadoInventario.totalMovimientos} insumos para cita ${codigo_cita}`,
+              );
+            } else {
+              this.logger.warn(
+                `Kardex: Algunos insumos no pudieron descontarse para cita ${codigo_cita}`,
+              );
+            }
+          } catch (error) {
+            // Log error pero no falla la operación completa (los exámenes pueden no tener insumos configurados)
+            this.logger.warn(`Kardex: Error al descontar insumos - ${error.message}`);
+          }
+        }
       }
     }
 
@@ -906,6 +934,116 @@ export class AgendaService {
         estado: item.estado,
         cantidad: item._count.codigo_cita
       }))
+    };
+  }
+
+  /**
+   * Obtener estadísticas del dashboard del paciente
+   * Datos dinámicos para el portal del paciente
+   */
+  async getPatientDashboardStats(codigoPaciente: number) {
+    const ahora = new Date();
+    const en30Dias = new Date();
+    en30Dias.setDate(en30Dias.getDate() + 30);
+
+    // Ejecutar todas las queries en paralelo
+    const [
+      citasProximas,
+      resultadosListos,
+      resultadosEnProceso,
+      cotizacionesPendientes,
+      proximasCitas,
+      resultadosRecientes,
+    ] = await Promise.all([
+      // Citas próximas (30 días)
+      this.prisma.cita.count({
+        where: {
+          codigo_paciente: codigoPaciente,
+          estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+          slot: {
+            fecha: { gte: ahora, lte: en30Dias },
+          },
+        },
+      }),
+
+      // Resultados listos para descargar
+      this.prisma.resultado.count({
+        where: {
+          muestra: { codigo_paciente: codigoPaciente },
+          estado: 'COMPLETADO',
+        },
+      }),
+
+      // Resultados en proceso
+      this.prisma.resultado.count({
+        where: {
+          muestra: { codigo_paciente: codigoPaciente },
+          estado: { in: ['PENDIENTE', 'EN_PROCESO'] },
+        },
+      }),
+
+      // Cotizaciones pendientes de pago
+      this.prisma.cotizacion.count({
+        where: {
+          codigo_paciente: codigoPaciente,
+          estado: 'APROBADA', // Aprobada pero no pagada
+        },
+      }),
+
+      // Detalle de próximas citas (máximo 3)
+      this.prisma.cita.findMany({
+        where: {
+          codigo_paciente: codigoPaciente,
+          estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+          slot: { fecha: { gte: ahora } },
+        },
+        include: {
+          slot: {
+            include: {
+              servicio: true,
+              sede: true,
+            },
+          },
+        },
+        orderBy: { slot: { fecha: 'asc' } },
+        take: 3,
+      }),
+
+      // Resultados recientes (máximo 3)
+      this.prisma.resultado.findMany({
+        where: {
+          muestra: { codigo_paciente: codigoPaciente },
+        },
+        include: {
+          examen: true,
+          muestra: true,
+        },
+        orderBy: { fecha_resultado: 'desc' },
+        take: 3,
+      }),
+    ]);
+
+    return {
+      stats: {
+        citasProximas,
+        resultadosListos,
+        resultadosEnProceso,
+        cotizacionesPendientes,
+      },
+      proximasCitas: proximasCitas.map((cita) => ({
+        codigo_cita: cita.codigo_cita,
+        fecha: cita.slot.fecha,
+        hora: cita.slot.hora_inicio,
+        servicio: cita.slot.servicio.nombre,
+        sede: cita.slot.sede.nombre,
+        estado: cita.estado,
+      })),
+      resultadosRecientes: resultadosRecientes.map((resultado) => ({
+        codigo_resultado: resultado.codigo_resultado,
+        examen: resultado.examen.nombre,
+        fecha: resultado.fecha_resultado,
+        estado: resultado.estado,
+      })),
     };
   }
 }

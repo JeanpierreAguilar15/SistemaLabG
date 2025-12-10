@@ -299,6 +299,24 @@ export class AdminController {
 
   // ==================== PRECIOS ====================
 
+  @Get('prices')
+  async getAllPrices(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query() filters?: any,
+  ) {
+    return this.adminService.getAllPrices(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+      filters,
+    );
+  }
+
+  @Get('prices/:id')
+  async getPriceById(@Param('id', ParseIntPipe) id: number) {
+    return this.adminService.getPriceById(id);
+  }
+
   @Post('prices')
   @HttpCode(HttpStatus.CREATED)
   async createPrice(
@@ -315,6 +333,15 @@ export class AdminController {
     @Body() data: UpdatePriceDto,
   ) {
     return this.adminService.updatePrice(id, data, adminId);
+  }
+
+  @Delete('prices/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deletePrice(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.adminService.deletePrice(id, adminId);
   }
 
   // ==================== CATEGORIAS ====================
@@ -653,5 +680,52 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
     return this.inventarioService.cancelarOrdenCompra(id, adminId);
+  }
+
+  // ==================== CONFIGURACIÓN DEL SISTEMA ====================
+
+  @Get('config')
+  @ApiOperation({ summary: 'Obtener todas las configuraciones del sistema' })
+  async getSystemConfig(@Query('grupo') grupo?: string) {
+    return this.adminService.getSystemConfig(grupo);
+  }
+
+  @Get('config/security')
+  @ApiOperation({ summary: 'Obtener configuración de seguridad de login' })
+  async getSecurityConfig() {
+    return this.adminService.getSecurityConfig();
+  }
+
+  @Put('config/:clave')
+  @ApiOperation({ summary: 'Actualizar una configuración del sistema' })
+  async updateSystemConfig(
+    @Param('clave') clave: string,
+    @Body('valor') valor: string,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.updateSystemConfig(clave, valor, adminId);
+  }
+
+  @Post('config/security/init')
+  @ApiOperation({ summary: 'Inicializar configuraciones de seguridad por defecto' })
+  async initSecurityConfigs() {
+    return this.adminService.ensureSecurityConfigs();
+  }
+
+  // ==================== GESTIÓN DE CUENTAS BLOQUEADAS ====================
+
+  @Get('users/blocked')
+  @ApiOperation({ summary: 'Obtener usuarios con cuentas bloqueadas' })
+  async getBlockedUsers() {
+    return this.adminService.getBlockedUsers();
+  }
+
+  @Post('users/:id/unlock')
+  @ApiOperation({ summary: 'Desbloquear cuenta de usuario' })
+  async unlockUserAccount(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.adminService.unlockUserAccount(id, adminId);
   }
 }

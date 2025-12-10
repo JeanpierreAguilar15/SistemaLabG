@@ -155,6 +155,15 @@ export class AgendaController {
     return this.agendaService.getMyCitas(codigo_paciente);
   }
 
+  @Get('dashboard/patient')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener estadísticas del dashboard del paciente' })
+  @ApiResponse({ status: 200, description: 'Estadísticas del dashboard del paciente' })
+  async getPatientDashboard(@CurrentUser('codigo_usuario') codigoPaciente: number) {
+    return this.agendaService.getPatientDashboardStats(codigoPaciente);
+  }
+
   @Get('citas/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

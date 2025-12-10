@@ -11,6 +11,11 @@ export class CreateMessageDto {
     @IsString()
     @IsOptional()
     sessionId?: string;
+
+    @ApiProperty({ description: 'ID del usuario autenticado (opcional, para gestión de citas)' })
+    @IsNumber()
+    @IsOptional()
+    userId?: number;
 }
 
 export class UpdateChatbotConfigDto {

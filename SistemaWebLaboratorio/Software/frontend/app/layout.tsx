@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import DialogflowMessenger from '@/components/DialogflowMessenger'
+import PublicChatWidget from '@/components/PublicChatWidget'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,7 +19,7 @@ export default function RootLayout({
     <html lang="es">
       <body className={inter.className}>
         {children}
-        <DialogflowMessenger />
+        <PublicChatWidget />
       </body>
     </html>
   )

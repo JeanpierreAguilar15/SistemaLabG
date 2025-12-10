@@ -910,6 +910,358 @@ async function main() {
   resultados.push(resultado3);
   console.log(`✅ Created ${resultados.length} resultados`);
 
+  // 17. Create lotes de inventario
+  console.log('Creating lotes de inventario...');
+  const itemsCreados = await prisma.item.findMany();
+  const proveedoresCreados = await prisma.proveedor.findMany();
+
+  const lotes = [];
+  for (const item of itemsCreados) {
+    // Crear 2 lotes por item
+    const lote1 = await prisma.lote.create({
+      data: {
+        codigo_item: item.codigo_item,
+        numero_lote: `LOT-${item.codigo_interno}-001`,
+        fecha_fabricacion: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), // Hace 60 días
+        fecha_vencimiento: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // En 1 año
+        cantidad_inicial: Math.floor(item.stock_actual * 0.6),
+        cantidad_actual: Math.floor(item.stock_actual * 0.6),
+        proveedor: proveedoresCreados[0]?.razon_social || 'Proveedor General',
+      },
+    });
+    lotes.push(lote1);
+
+    const lote2 = await prisma.lote.create({
+      data: {
+        codigo_item: item.codigo_item,
+        numero_lote: `LOT-${item.codigo_interno}-002`,
+        fecha_fabricacion: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Hace 30 días
+        fecha_vencimiento: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000), // En 6 meses
+        cantidad_inicial: Math.ceil(item.stock_actual * 0.4),
+        cantidad_actual: Math.ceil(item.stock_actual * 0.4),
+        proveedor: proveedoresCreados[1]?.razon_social || 'Proveedor Secundario',
+      },
+    });
+    lotes.push(lote2);
+  }
+  console.log(`✅ Created ${lotes.length} lotes`);
+
+  // 18. Create movimientos de inventario
+  console.log('Creating movimientos de inventario...');
+  const movimientos = [];
+  for (const lote of lotes) {
+    // Movimiento de entrada inicial
+    const movEntrada = await prisma.movimiento.create({
+      data: {
+        codigo_item: lote.codigo_item,
+        codigo_lote: lote.codigo_lote,
+        tipo_movimiento: 'ENTRADA',
+        cantidad: lote.cantidad_inicial,
+        motivo: `Ingreso de lote ${lote.numero_lote}`,
+        stock_anterior: 0,
+        stock_nuevo: lote.cantidad_inicial,
+        realizado_por: personalLab.codigo_usuario,
+      },
+    });
+    movimientos.push(movEntrada);
+  }
+  console.log(`✅ Created ${movimientos.length} movimientos`);
+
+  // 19. Create ExamenInsumo (relación examen-item)
+  console.log('Creating ExamenInsumo (insumos por examen)...');
+  const examenInsumos = [];
+
+  // Hemograma necesita tubos EDTA y kit hemograma
+  const tuboEDTA = itemsCreados.find(i => i.codigo_interno === 'INSU-001');
+  const kitHemograma = itemsCreados.find(i => i.codigo_interno === 'REAC-002');
+  const agujasVacutainer = itemsCreados.find(i => i.codigo_interno === 'INSU-002');
+  const reactivoGlucosa = itemsCreados.find(i => i.codigo_interno === 'REAC-001');
+  const recipientesOrina = itemsCreados.find(i => i.codigo_interno === 'INSU-003');
+
+  const examenHemograma = examenesCreados.find(e => e.codigo_interno === 'HCTO-001');
+  const examenGlucosa = examenesCreados.find(e => e.codigo_interno === 'BIOQ-001');
+  const examenOrina = examenesCreados.find(e => e.codigo_interno === 'URIN-001');
+
+  if (examenHemograma && tuboEDTA) {
+    const ei1 = await prisma.examenInsumo.create({
+      data: {
+        codigo_examen: examenHemograma.codigo_examen,
+        codigo_item: tuboEDTA.codigo_item,
+        cantidad_requerida: 1,
+        activo: true,
+      },
+    });
+    examenInsumos.push(ei1);
+  }
+
+  if (examenHemograma && kitHemograma) {
+    const ei2 = await prisma.examenInsumo.create({
+      data: {
+        codigo_examen: examenHemograma.codigo_examen,
+        codigo_item: kitHemograma.codigo_item,
+        cantidad_requerida: 0.01, // 1% del kit por examen
+        activo: true,
+      },
+    });
+    examenInsumos.push(ei2);
+  }
+
+  if (examenGlucosa && reactivoGlucosa) {
+    const ei3 = await prisma.examenInsumo.create({
+      data: {
+        codigo_examen: examenGlucosa.codigo_examen,
+        codigo_item: reactivoGlucosa.codigo_item,
+        cantidad_requerida: 0.02, // 2% del frasco por examen
+        activo: true,
+      },
+    });
+    examenInsumos.push(ei3);
+  }
+
+  if (examenOrina && recipientesOrina) {
+    const ei4 = await prisma.examenInsumo.create({
+      data: {
+        codigo_examen: examenOrina.codigo_examen,
+        codigo_item: recipientesOrina.codigo_item,
+        cantidad_requerida: 0.02, // 1 recipiente = 2% de la caja
+        activo: true,
+      },
+    });
+    examenInsumos.push(ei4);
+  }
+
+  // Todos los exámenes de sangre necesitan agujas
+  for (const examen of examenesCreados.filter(e => e.tipo_muestra === 'Sangre')) {
+    if (agujasVacutainer) {
+      const existeRelacion = await prisma.examenInsumo.findFirst({
+        where: {
+          codigo_examen: examen.codigo_examen,
+          codigo_item: agujasVacutainer.codigo_item,
+        },
+      });
+      if (!existeRelacion) {
+        const ei = await prisma.examenInsumo.create({
+          data: {
+            codigo_examen: examen.codigo_examen,
+            codigo_item: agujasVacutainer.codigo_item,
+            cantidad_requerida: 0.01, // 1% de la caja por examen
+            activo: true,
+          },
+        });
+        examenInsumos.push(ei);
+      }
+    }
+  }
+  console.log(`✅ Created ${examenInsumos.length} relaciones examen-insumo`);
+
+  // 20. Create Orden de Compra
+  console.log('Creating órdenes de compra...');
+  const ordenCompra = await prisma.ordenCompra.create({
+    data: {
+      codigo_proveedor: proveedoresCreados[0].codigo_proveedor,
+      numero_orden: `OC-${Date.now()}-001`,
+      fecha_entrega_estimada: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // En 7 días
+      subtotal: 200.0,
+      iva: 24.0,
+      total: 224.0,
+      estado: 'BORRADOR',
+      observaciones: 'Orden de compra de prueba',
+      creado_por: personalLab.codigo_usuario,
+      detalles: {
+        create: [
+          {
+            codigo_item: itemsCreados[0].codigo_item,
+            cantidad: 10,
+            precio_unitario: itemsCreados[0].costo_unitario || 20.0,
+            total_linea: 200.0,
+          },
+        ],
+      },
+    },
+  });
+  console.log(`✅ Created orden de compra: ${ordenCompra.numero_orden}`);
+
+  // 21. Create Pagos
+  console.log('Creating pagos...');
+  const pago = await prisma.pago.create({
+    data: {
+      codigo_cotizacion: cotizacion2.codigo_cotizacion,
+      codigo_paciente: testPaciente.codigo_usuario,
+      numero_pago: `PAG-${Date.now()}-001`,
+      monto_total: 18.0,
+      metodo_pago: 'EFECTIVO',
+      estado: 'COMPLETADO',
+      observaciones: 'Pago en efectivo',
+      detalles: {
+        create: [
+          {
+            codigo_examen: examenesCreados[2].codigo_examen,
+            cantidad: 1,
+            precio_unitario: 20.0,
+            total_linea: 18.0,
+          },
+        ],
+      },
+    },
+  });
+  console.log(`✅ Created pago: ${pago.numero_pago}`);
+
+  // 22. Create Factura
+  console.log('Creating factura...');
+  const factura = await prisma.factura.create({
+    data: {
+      codigo_pago: pago.codigo_pago,
+      numero_factura: `FAC-001-001-${Date.now()}`,
+      subtotal: 16.07,
+      iva: 1.93,
+      total: 18.0,
+      estado: 'EMITIDA',
+    },
+  });
+  console.log(`✅ Created factura: ${factura.numero_factura}`);
+
+  // 23. Create Configuración del Sistema
+  console.log('Creating configuración del sistema...');
+  const configs = [
+    { clave: 'NOMBRE_LABORATORIO', valor: 'Laboratorio Franz', grupo: 'GENERAL', descripcion: 'Nombre del laboratorio' },
+    { clave: 'DIRECCION', valor: 'Av. Principal #123, Quito, Ecuador', grupo: 'GENERAL', descripcion: 'Dirección del laboratorio' },
+    { clave: 'TELEFONO', valor: '0234567890', grupo: 'GENERAL', descripcion: 'Teléfono principal' },
+    { clave: 'EMAIL', valor: 'info@laboratorifranz.com', grupo: 'GENERAL', descripcion: 'Email de contacto' },
+    { clave: 'RUC', valor: '1791234567001', grupo: 'FACTURACION', descripcion: 'RUC del laboratorio' },
+    { clave: 'IVA_PORCENTAJE', valor: '12', grupo: 'FACTURACION', descripcion: 'Porcentaje de IVA', tipo_dato: 'NUMBER' },
+    { clave: 'DIAS_VIGENCIA_COTIZACION', valor: '30', grupo: 'COTIZACIONES', descripcion: 'Días de vigencia de cotizaciones', tipo_dato: 'NUMBER' },
+    { clave: 'HORA_APERTURA', valor: '08:00', grupo: 'HORARIOS', descripcion: 'Hora de apertura' },
+    { clave: 'HORA_CIERRE', valor: '18:00', grupo: 'HORARIOS', descripcion: 'Hora de cierre' },
+    { clave: 'MONEDA', valor: 'USD', grupo: 'GENERAL', descripcion: 'Moneda del sistema' },
+  ];
+
+  for (const config of configs) {
+    await prisma.configuracionSistema.upsert({
+      where: { clave: config.clave },
+      update: {},
+      create: {
+        ...config,
+        tipo_dato: config.tipo_dato || 'STRING',
+        es_publico: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${configs.length} configuraciones`);
+
+  // 24. Create Feriados 2024-2025
+  console.log('Creating feriados...');
+  const feriados = [
+    { fecha: new Date('2024-01-01'), descripcion: 'Año Nuevo' },
+    { fecha: new Date('2024-02-12'), descripcion: 'Carnaval' },
+    { fecha: new Date('2024-02-13'), descripcion: 'Carnaval' },
+    { fecha: new Date('2024-03-29'), descripcion: 'Viernes Santo' },
+    { fecha: new Date('2024-05-01'), descripcion: 'Día del Trabajo' },
+    { fecha: new Date('2024-05-24'), descripcion: 'Batalla de Pichincha' },
+    { fecha: new Date('2024-08-10'), descripcion: 'Primer Grito de Independencia' },
+    { fecha: new Date('2024-10-09'), descripcion: 'Independencia de Guayaquil' },
+    { fecha: new Date('2024-11-02'), descripcion: 'Día de los Difuntos' },
+    { fecha: new Date('2024-11-03'), descripcion: 'Independencia de Cuenca' },
+    { fecha: new Date('2024-12-25'), descripcion: 'Navidad' },
+    { fecha: new Date('2025-01-01'), descripcion: 'Año Nuevo' },
+    { fecha: new Date('2025-03-03'), descripcion: 'Carnaval' },
+    { fecha: new Date('2025-03-04'), descripcion: 'Carnaval' },
+    { fecha: new Date('2025-04-18'), descripcion: 'Viernes Santo' },
+    { fecha: new Date('2025-05-01'), descripcion: 'Día del Trabajo' },
+    { fecha: new Date('2025-05-24'), descripcion: 'Batalla de Pichincha' },
+    { fecha: new Date('2025-08-10'), descripcion: 'Primer Grito de Independencia' },
+    { fecha: new Date('2025-10-09'), descripcion: 'Independencia de Guayaquil' },
+    { fecha: new Date('2025-11-02'), descripcion: 'Día de los Difuntos' },
+    { fecha: new Date('2025-11-03'), descripcion: 'Independencia de Cuenca' },
+    { fecha: new Date('2025-12-25'), descripcion: 'Navidad' },
+  ];
+
+  for (const feriado of feriados) {
+    await prisma.feriado.upsert({
+      where: { fecha: feriado.fecha },
+      update: {},
+      create: {
+        fecha: feriado.fecha,
+        descripcion: feriado.descripcion,
+        activo: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${feriados.length} feriados`);
+
+  // 25. Create Configuración Chatbot
+  console.log('Creating configuración chatbot...');
+  await prisma.configuracionChatbot.upsert({
+    where: { codigo_configuracion: 1 },
+    update: {},
+    create: {
+      activo: true,
+      umbral_confianza: 0.7,
+      mensaje_bienvenida: '¡Hola! Soy el asistente virtual del Laboratorio Franz. ¿En qué puedo ayudarte hoy?',
+      mensaje_fallo: 'Lo siento, no entendí tu consulta. ¿Podrías reformularla o escribir "ayuda" para ver las opciones disponibles?',
+      permitir_acceso_resultados: false,
+    },
+  });
+  console.log(`✅ Created configuración chatbot`);
+
+  // 26. Create más exámenes para catálogo completo
+  console.log('Creating más exámenes...');
+  const inmunologia = categorias.find((c) => c.nombre === 'Inmunología');
+
+  const examenesAdicionales = [
+    { codigo_interno: 'BIOQ-004', nombre: 'Urea', codigo_categoria: bioquimica.codigo_categoria, descripcion: 'Evaluación de función renal', requiere_ayuno: false, tiempo_entrega_horas: 24, tipo_muestra: 'Sangre', valor_referencia_min: 15, valor_referencia_max: 45, unidad_medida: 'mg/dL', precio: 6.0 },
+    { codigo_interno: 'BIOQ-005', nombre: 'Ácido Úrico', codigo_categoria: bioquimica.codigo_categoria, descripcion: 'Medición de ácido úrico', requiere_ayuno: true, horas_ayuno: 8, tiempo_entrega_horas: 24, tipo_muestra: 'Sangre', valor_referencia_min: 2.5, valor_referencia_max: 7.0, unidad_medida: 'mg/dL', precio: 7.0 },
+    { codigo_interno: 'BIOQ-006', nombre: 'Transaminasas (TGO/TGP)', codigo_categoria: bioquimica.codigo_categoria, descripcion: 'Enzimas hepáticas', requiere_ayuno: true, horas_ayuno: 8, tiempo_entrega_horas: 24, tipo_muestra: 'Sangre', precio: 12.0 },
+    { codigo_interno: 'BIOQ-007', nombre: 'Bilirrubinas', codigo_categoria: bioquimica.codigo_categoria, descripcion: 'Total, directa e indirecta', requiere_ayuno: true, horas_ayuno: 8, tiempo_entrega_horas: 24, tipo_muestra: 'Sangre', precio: 10.0 },
+    { codigo_interno: 'HCTO-002', nombre: 'Grupo Sanguíneo y Factor Rh', codigo_categoria: hematologia.codigo_categoria, descripcion: 'Tipificación sanguínea', requiere_ayuno: false, tiempo_entrega_horas: 4, tipo_muestra: 'Sangre', precio: 8.0 },
+    { codigo_interno: 'HCTO-003', nombre: 'VSG (Velocidad de Sedimentación)', codigo_categoria: hematologia.codigo_categoria, descripcion: 'Marcador de inflamación', requiere_ayuno: false, tiempo_entrega_horas: 4, tipo_muestra: 'Sangre', valor_referencia_max: 20, unidad_medida: 'mm/h', precio: 5.0 },
+    { codigo_interno: 'HCTO-004', nombre: 'Tiempo de Protrombina (PT)', codigo_categoria: hematologia.codigo_categoria, descripcion: 'Evaluación de coagulación', requiere_ayuno: false, tiempo_entrega_horas: 4, tipo_muestra: 'Sangre', precio: 10.0 },
+    { codigo_interno: 'INMU-001', nombre: 'PCR (Proteína C Reactiva)', codigo_categoria: inmunologia.codigo_categoria, descripcion: 'Marcador de inflamación', requiere_ayuno: false, tiempo_entrega_horas: 24, tipo_muestra: 'Sangre', valor_referencia_max: 6, unidad_medida: 'mg/L', precio: 12.0 },
+    { codigo_interno: 'INMU-002', nombre: 'TSH (Hormona Estimulante Tiroides)', codigo_categoria: inmunologia.codigo_categoria, descripcion: 'Función tiroidea', requiere_ayuno: false, tiempo_entrega_horas: 24, tipo_muestra: 'Sangre', valor_referencia_min: 0.4, valor_referencia_max: 4.0, unidad_medida: 'mUI/L', precio: 15.0 },
+    { codigo_interno: 'INMU-003', nombre: 'T3 y T4 Libres', codigo_categoria: inmunologia.codigo_categoria, descripcion: 'Hormonas tiroideas', requiere_ayuno: false, tiempo_entrega_horas: 24, tipo_muestra: 'Sangre', precio: 25.0 },
+    { codigo_interno: 'INMU-004', nombre: 'HbA1c (Hemoglobina Glicosilada)', codigo_categoria: inmunologia.codigo_categoria, descripcion: 'Control de diabetes', requiere_ayuno: false, tiempo_entrega_horas: 24, tipo_muestra: 'Sangre', valor_referencia_max: 5.7, unidad_medida: '%', precio: 18.0 },
+    { codigo_interno: 'URIN-002', nombre: 'Urocultivo', codigo_categoria: urianalisis.codigo_categoria, descripcion: 'Cultivo de orina para bacterias', requiere_ayuno: false, instrucciones_preparacion: 'Recolectar primera orina de la mañana en recipiente estéril', tiempo_entrega_horas: 72, tipo_muestra: 'Orina', precio: 15.0 },
+  ];
+
+  for (const examen of examenesAdicionales) {
+    const { precio, ...examenData } = examen;
+    const examenCreado = await prisma.examen.upsert({
+      where: { codigo_interno: examen.codigo_interno },
+      update: {},
+      create: examenData,
+    });
+
+    await prisma.precio.create({
+      data: {
+        codigo_examen: examenCreado.codigo_examen,
+        precio,
+        activo: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${examenesAdicionales.length} exámenes adicionales`);
+
+  // 27. Más items de inventario
+  console.log('Creating más items de inventario...');
+  const itemsAdicionales = [
+    { codigo_interno: 'REAC-003', nombre: 'Reactivo Perfil Lipídico', descripcion: 'Kit de reactivos para colesterol total, HDL, LDL, TG', unidad_medida: 'Kit', stock_actual: 5, stock_minimo: 2, stock_maximo: 10, costo_unitario: 180.0, codigo_categoria: categoriaReactivos.codigo_categoria },
+    { codigo_interno: 'REAC-004', nombre: 'Reactivo Creatinina', descripcion: 'Reactivo para determinación de creatinina', unidad_medida: 'Frasco', stock_actual: 10, stock_minimo: 3, stock_maximo: 20, costo_unitario: 35.0, codigo_categoria: categoriaReactivos.codigo_categoria },
+    { codigo_interno: 'REAC-005', nombre: 'Tiras Reactivas Orina (100 unidades)', descripcion: 'Tiras para urianálisis', unidad_medida: 'Caja', stock_actual: 12, stock_minimo: 5, stock_maximo: 25, costo_unitario: 25.0, codigo_categoria: categoriaReactivos.codigo_categoria },
+    { codigo_interno: 'INSU-004', nombre: 'Guantes de Látex M (100 unidades)', descripcion: 'Guantes desechables talla M', unidad_medida: 'Caja', stock_actual: 50, stock_minimo: 20, stock_maximo: 100, costo_unitario: 8.0, codigo_categoria: categoriaInsumos.codigo_categoria },
+    { codigo_interno: 'INSU-005', nombre: 'Algodón (500g)', descripcion: 'Algodón hidrófilo', unidad_medida: 'Paquete', stock_actual: 30, stock_minimo: 10, stock_maximo: 50, costo_unitario: 3.5, codigo_categoria: categoriaInsumos.codigo_categoria },
+    { codigo_interno: 'INSU-006', nombre: 'Alcohol Antiséptico (1L)', descripcion: 'Alcohol al 70%', unidad_medida: 'Litro', stock_actual: 20, stock_minimo: 8, stock_maximo: 40, costo_unitario: 4.0, codigo_categoria: categoriaInsumos.codigo_categoria },
+    { codigo_interno: 'INSU-007', nombre: 'Tubos Vacutainer Tapa Roja (100 unidades)', descripcion: 'Tubos sin anticoagulante para química sanguínea', unidad_medida: 'Caja', stock_actual: 20, stock_minimo: 8, stock_maximo: 40, costo_unitario: 12.0, codigo_categoria: categoriaInsumos.codigo_categoria },
+    { codigo_interno: 'INSU-008', nombre: 'Curitas Redondas (100 unidades)', descripcion: 'Curitas para post extracción', unidad_medida: 'Caja', stock_actual: 25, stock_minimo: 10, stock_maximo: 50, costo_unitario: 2.5, codigo_categoria: categoriaInsumos.codigo_categoria },
+  ];
+
+  for (const itemData of itemsAdicionales) {
+    await prisma.item.upsert({
+      where: { codigo_interno: itemData.codigo_interno },
+      update: {},
+      create: { ...itemData, activo: true },
+    });
+  }
+  console.log(`✅ Created ${itemsAdicionales.length} items adicionales`);
+
   console.log('✅ Seed completed successfully!');
 }
 

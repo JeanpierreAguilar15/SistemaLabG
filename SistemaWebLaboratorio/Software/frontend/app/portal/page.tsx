@@ -7,18 +7,71 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { getGreeting, formatDate } from '@/lib/utils'
 
+interface DashboardStats {
+  citasProximas: number
+  resultadosListos: number
+  resultadosEnProceso: number
+  cotizacionesPendientes: number
+}
+
+interface ProximaCita {
+  codigo_cita: number
+  fecha: string
+  hora: string
+  servicio: string
+  sede: string
+  estado: string
+}
+
+interface ResultadoReciente {
+  codigo_resultado: number
+  examen: string
+  fecha: string
+  estado: string
+}
+
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user)
+  const { accessToken } = useAuthStore()
   const [greeting, setGreeting] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<DashboardStats>({
+    citasProximas: 0,
+    resultadosListos: 0,
+    resultadosEnProceso: 0,
+    cotizacionesPendientes: 0,
+  })
+  const [proximasCitas, setProximasCitas] = useState<ProximaCita[]>([])
+  const [resultadosRecientes, setResultadosRecientes] = useState<ResultadoReciente[]>([])
 
   useEffect(() => {
     setGreeting(getGreeting())
+    loadDashboardData()
   }, [])
+
+  const loadDashboardData = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/dashboard/patient`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setStats(data.stats)
+        setProximasCitas(data.proximasCitas || [])
+        setResultadosRecientes(data.resultadosRecientes || [])
+      }
+    } catch (error) {
+      console.error('Error loading dashboard:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const statsCards = [
     {
       title: 'Citas Próximas',
-      value: '2',
+      value: stats.citasProximas.toString(),
       description: 'Próximas 30 días',
       icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
       color: 'blue',
@@ -26,7 +79,7 @@ export default function DashboardPage() {
     },
     {
       title: 'Resultados Listos',
-      value: '3',
+      value: stats.resultadosListos.toString(),
       description: 'Disponibles para descargar',
       icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
       color: 'green',
@@ -34,7 +87,7 @@ export default function DashboardPage() {
     },
     {
       title: 'En Proceso',
-      value: '1',
+      value: stats.resultadosEnProceso.toString(),
       description: 'Resultados pendientes',
       icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
       color: 'orange',
@@ -42,7 +95,7 @@ export default function DashboardPage() {
     },
     {
       title: 'Cotizaciones',
-      value: '1',
+      value: stats.cotizacionesPendientes.toString(),
       description: 'Pendiente de pago',
       icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z',
       color: 'purple',
@@ -80,6 +133,22 @@ export default function DashboardPage() {
       color: 'bg-lab-neutral-600',
     },
   ]
+
+  const formatCitaDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return {
+      dia: date.getDate().toString().padStart(2, '0'),
+      mes: date.toLocaleString('es-ES', { month: 'short' }).toUpperCase(),
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -165,33 +234,36 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-start space-x-4 p-4 rounded-lg bg-lab-primary-50 border border-lab-primary-100">
-                <div className="bg-lab-primary-600 text-white rounded-lg p-2 flex flex-col items-center justify-center min-w-[60px]">
-                  <span className="text-2xl font-bold">15</span>
-                  <span className="text-xs">ENE</span>
+              {proximasCitas.length === 0 ? (
+                <div className="text-center py-8 text-lab-neutral-500">
+                  <svg className="mx-auto h-12 w-12 text-lab-neutral-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <p>No tienes citas próximas</p>
                 </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-lab-neutral-900">Toma de Muestras</h4>
-                  <p className="text-sm text-lab-neutral-600 mt-1">09:00 AM - Sede Principal</p>
-                  <div className="flex items-center mt-2">
-                    <span className="lab-badge-info">Confirmada</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-4 p-4 rounded-lg bg-lab-neutral-50 border border-lab-neutral-200">
-                <div className="bg-lab-neutral-400 text-white rounded-lg p-2 flex flex-col items-center justify-center min-w-[60px]">
-                  <span className="text-2xl font-bold">22</span>
-                  <span className="text-xs">ENE</span>
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-lab-neutral-900">Entrega de Resultados</h4>
-                  <p className="text-sm text-lab-neutral-600 mt-1">10:30 AM - Sede Principal</p>
-                  <div className="flex items-center mt-2">
-                    <span className="lab-badge-warning">Pendiente</span>
-                  </div>
-                </div>
-              </div>
+              ) : (
+                proximasCitas.map((cita, index) => {
+                  const { dia, mes } = formatCitaDate(cita.fecha)
+                  const isConfirmed = cita.estado === 'CONFIRMADA'
+                  return (
+                    <div key={cita.codigo_cita} className={`flex items-start space-x-4 p-4 rounded-lg ${isConfirmed ? 'bg-lab-primary-50 border border-lab-primary-100' : 'bg-lab-neutral-50 border border-lab-neutral-200'}`}>
+                      <div className={`${isConfirmed ? 'bg-lab-primary-600' : 'bg-lab-neutral-400'} text-white rounded-lg p-2 flex flex-col items-center justify-center min-w-[60px]`}>
+                        <span className="text-2xl font-bold">{dia}</span>
+                        <span className="text-xs">{mes}</span>
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-lab-neutral-900">{cita.servicio}</h4>
+                        <p className="text-sm text-lab-neutral-600 mt-1">{cita.hora} - {cita.sede}</p>
+                        <div className="flex items-center mt-2">
+                          <span className={isConfirmed ? 'lab-badge-info' : 'lab-badge-warning'}>
+                            {cita.estado === 'CONFIRMADA' ? 'Confirmada' : 'Pendiente'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
 
               <Link href="/portal/citas">
                 <Button variant="outline" className="w-full">
@@ -219,54 +291,46 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-lab-success-50 border border-lab-success-200">
-                <div className="flex items-center space-x-3">
-                  <div className="bg-lab-success-600 text-white rounded-lg p-2">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-lab-neutral-900">Hemograma Completo</h4>
-                    <p className="text-sm text-lab-neutral-600">{formatDate(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))}</p>
-                  </div>
+              {resultadosRecientes.length === 0 ? (
+                <div className="text-center py-8 text-lab-neutral-500">
+                  <svg className="mx-auto h-12 w-12 text-lab-neutral-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p>No tienes resultados aún</p>
                 </div>
-                <Button size="sm" variant="outline">
-                  Descargar
-                </Button>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-lab-success-50 border border-lab-success-200">
-                <div className="flex items-center space-x-3">
-                  <div className="bg-lab-success-600 text-white rounded-lg p-2">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-lab-neutral-900">Glucosa en Ayunas</h4>
-                    <p className="text-sm text-lab-neutral-600">{formatDate(new Date(Date.now() - 5 * 24 * 60 * 60 * 1000))}</p>
-                  </div>
-                </div>
-                <Button size="sm" variant="outline">
-                  Descargar
-                </Button>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-lab-warning-50 border border-lab-warning-200">
-                <div className="flex items-center space-x-3">
-                  <div className="bg-lab-warning-600 text-white rounded-lg p-2">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-lab-neutral-900">Perfil Lipídico</h4>
-                    <p className="text-sm text-lab-neutral-600">En proceso</p>
-                  </div>
-                </div>
-                <span className="lab-badge-warning">Procesando</span>
-              </div>
+              ) : (
+                resultadosRecientes.map((resultado) => {
+                  const isCompleted = resultado.estado === 'COMPLETADO'
+                  return (
+                    <div key={resultado.codigo_resultado} className={`flex items-center justify-between p-4 rounded-lg ${isCompleted ? 'bg-lab-success-50 border border-lab-success-200' : 'bg-lab-warning-50 border border-lab-warning-200'}`}>
+                      <div className="flex items-center space-x-3">
+                        <div className={`${isCompleted ? 'bg-lab-success-600' : 'bg-lab-warning-600'} text-white rounded-lg p-2`}>
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            {isCompleted ? (
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            ) : (
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            )}
+                          </svg>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-lab-neutral-900">{resultado.examen}</h4>
+                          <p className="text-sm text-lab-neutral-600">
+                            {isCompleted ? formatDate(new Date(resultado.fecha)) : 'En proceso'}
+                          </p>
+                        </div>
+                      </div>
+                      {isCompleted ? (
+                        <Button size="sm" variant="outline">
+                          Descargar
+                        </Button>
+                      ) : (
+                        <span className="lab-badge-warning">Procesando</span>
+                      )}
+                    </div>
+                  )
+                })
+              )}
 
               <Link href="/portal/resultados">
                 <Button variant="outline" className="w-full">
@@ -296,7 +360,7 @@ export default function DashboardPage() {
                 Consulta las instrucciones específicas al agendar tu cita.
               </p>
               <Button variant="link" className="p-0 h-auto text-lab-primary-700 hover:text-lab-primary-800">
-                Ver guía de preparación →
+                Ver guía de preparación
               </Button>
             </div>
           </div>

@@ -19,6 +19,21 @@ interface LabConfig {
   capacidadDefecto: number
 }
 
+interface SecurityConfig {
+  maxIntentos: number
+  minutosBloqueo: number
+}
+
+interface BlockedUser {
+  codigo_usuario: number
+  cedula: string
+  email: string
+  nombres: string
+  apellidos: string
+  intentos_fallidos: number
+  fecha_bloqueo: string
+}
+
 interface SystemStats {
   totalUsuarios: number
   totalCitas: number
@@ -53,10 +68,102 @@ export default function ConfigurationPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [systemConfigs, setSystemConfigs] = useState<SystemConfig[]>([])
 
+  // Security config state
+  const [securityConfig, setSecurityConfig] = useState<SecurityConfig>({ maxIntentos: 5, minutosBloqueo: 5 })
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
+  const [maxIntentosInput, setMaxIntentosInput] = useState('5')
+  const [minutosBloqueoInput, setMinutosBloqueoInput] = useState('5')
+  const [savingSecurity, setSavingSecurity] = useState(false)
+
   useEffect(() => {
     loadConfigurations()
     loadSystemStats()
+    loadSecurityConfig()
   }, [])
+
+  const loadSecurityConfig = async () => {
+    try {
+      const [securityRes, blockedRes] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/config/security`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/users/blocked`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }),
+      ])
+
+      if (securityRes.ok) {
+        const data = await securityRes.json()
+        setSecurityConfig({ maxIntentos: data.maxIntentos, minutosBloqueo: data.minutosBloqueo })
+        setMaxIntentosInput(data.maxIntentos.toString())
+        setMinutosBloqueoInput(data.minutosBloqueo.toString())
+      }
+
+      if (blockedRes.ok) {
+        const data = await blockedRes.json()
+        setBlockedUsers(data)
+      }
+    } catch (error) {
+      console.error('Error loading security config:', error)
+    }
+  }
+
+  const initSecurityConfigs = async () => {
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/config/security/init`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      await loadSecurityConfig()
+      setMessage({ type: 'success', text: 'Configuración de seguridad inicializada' })
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al inicializar configuración' })
+    }
+  }
+
+  const saveSecurityConfig = async (clave: string, valor: string) => {
+    setSavingSecurity(true)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/config/${clave}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ valor }),
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Configuración de seguridad actualizada' })
+        await loadSecurityConfig()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al guardar' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al guardar configuración' })
+    } finally {
+      setSavingSecurity(false)
+    }
+  }
+
+  const unlockUser = async (codigoUsuario: number) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/users/${codigoUsuario}/unlock`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cuenta desbloqueada exitosamente' })
+        await loadSecurityConfig()
+      } else {
+        setMessage({ type: 'error', text: 'Error al desbloquear cuenta' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al desbloquear cuenta' })
+    }
+  }
 
   const loadConfigurations = async () => {
     try {
@@ -319,6 +426,95 @@ export default function ConfigurationPage() {
                 <div className="w-11 h-6 bg-lab-neutral-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-lab-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-lab-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lab-primary-600"></div>
               </label>
             </div>
+          </div>
+        </div>
+
+        {/* Security Settings */}
+        <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
+          <div className="flex items-center space-x-4 mb-4">
+            <div className="w-12 h-12 bg-lab-warning-100 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-lab-neutral-900">Seguridad de Login</h2>
+              <p className="text-sm text-lab-neutral-600">Bloqueo temporal de cuentas</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="maxIntentos">Máximo intentos fallidos</Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  id="maxIntentos"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={maxIntentosInput}
+                  onChange={(e) => setMaxIntentosInput(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={() => saveSecurityConfig('LOGIN_MAX_INTENTOS', maxIntentosInput)}
+                  disabled={savingSecurity}
+                  size="sm"
+                >
+                  Guardar
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="minutosBloqueo">Minutos de bloqueo</Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  id="minutosBloqueo"
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={minutosBloqueoInput}
+                  onChange={(e) => setMinutosBloqueoInput(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={() => saveSecurityConfig('LOGIN_MINUTOS_BLOQUEO', minutosBloqueoInput)}
+                  disabled={savingSecurity}
+                  size="sm"
+                >
+                  Guardar
+                </Button>
+              </div>
+            </div>
+            <div className="bg-lab-info-50 border border-lab-info-200 rounded-lg p-3 mt-2">
+              <p className="text-xs text-lab-info-800">
+                Después de <strong>{securityConfig.maxIntentos}</strong> intentos fallidos,
+                la cuenta se bloqueará por <strong>{securityConfig.minutosBloqueo}</strong> minutos.
+              </p>
+            </div>
+            {blockedUsers.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-medium text-lab-neutral-700 mb-2">
+                  Cuentas bloqueadas ({blockedUsers.length})
+                </p>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {blockedUsers.map((user) => (
+                    <div key={user.codigo_usuario} className="flex items-center justify-between p-2 bg-lab-error-50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-lab-neutral-900">{user.nombres} {user.apellidos}</p>
+                        <p className="text-xs text-lab-neutral-600">{user.email}</p>
+                      </div>
+                      <Button
+                        onClick={() => unlockUser(user.codigo_usuario)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Desbloquear
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
