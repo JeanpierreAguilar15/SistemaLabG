@@ -234,7 +234,7 @@ export default function CitasPage() {
         body: JSON.stringify({
           codigo_slot: parseInt(selectedSlot),
           observaciones,
-          codigo_cotizacion: cotizacionIdParam ? parseInt(cotizacionIdParam) : undefined,
+          codigo_cotizacion: cotizacionParam ? parseInt(cotizacionParam) : undefined,
         }),
       })
 
