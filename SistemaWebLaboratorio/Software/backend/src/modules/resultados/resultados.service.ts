@@ -240,6 +240,7 @@ export class ResultadosService {
 
   /**
    * Validar resultado y generar PDF (Admin/Técnico)
+   * IMPORTANTE: Requiere que el pago esté confirmado (PAGADA)
    */
   async validarResultado(codigo_resultado: number, validado_por: number) {
     const resultado = await this.prisma.resultado.findUnique({
@@ -248,6 +249,11 @@ export class ResultadosService {
         muestra: {
           include: {
             paciente: true,
+            cita: {
+              include: {
+                cotizacion: true,
+              },
+            },
           },
         },
         examen: true,
@@ -256,6 +262,26 @@ export class ResultadosService {
 
     if (!resultado) {
       throw new NotFoundException('Resultado no encontrado');
+    }
+
+    // VALIDACIÓN DE PAGO CONFIRMADO
+    // Los resultados solo se pueden validar si el pago está confirmado
+    if (resultado.muestra.cita?.cotizacion) {
+      const cotizacion = resultado.muestra.cita.cotizacion;
+
+      if (cotizacion.estado !== 'PAGADA') {
+        throw new BadRequestException(
+          `No se puede validar el resultado sin pago confirmado. ` +
+          `Estado de cotización: ${cotizacion.estado}. ` +
+          (cotizacion.estado === 'PENDIENTE_PAGO_VENTANILLA'
+            ? 'El paciente debe pagar en ventanilla antes de entregar resultados.'
+            : 'El paciente debe completar el pago primero.'),
+        );
+      }
+
+      this.logger.log(
+        `Pago verificado para resultado ${codigo_resultado} | Cotización: ${cotizacion.numero_cotizacion} | Estado: PAGADA`,
+      );
     }
 
     // Generar código de verificación único

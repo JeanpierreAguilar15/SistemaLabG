@@ -141,6 +141,42 @@ export class CotizacionesController {
     return new StreamableFile(file);
   }
 
+  // ==================== SELECCIÓN DE MÉTODO DE PAGO (Paciente) ====================
+
+  @Post(':id/seleccionar-pago')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Seleccionar método de pago para cotización (Paciente)',
+    description: 'Permite al paciente elegir si pagará ONLINE (Stripe) o en VENTANILLA (presencial)',
+  })
+  @ApiResponse({ status: 200, description: 'Método de pago seleccionado' })
+  @ApiResponse({ status: 400, description: 'Estado de cotización no válido para selección' })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  async seleccionarMetodoPago(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('metodo_pago') metodo_pago: 'ONLINE' | 'VENTANILLA',
+    @CurrentUser('codigo_usuario') codigo_paciente: number,
+  ) {
+    if (!['ONLINE', 'VENTANILLA'].includes(metodo_pago)) {
+      throw new Error('Método de pago debe ser ONLINE o VENTANILLA');
+    }
+    return this.cotizacionesService.seleccionarMetodoPago(id, metodo_pago, codigo_paciente);
+  }
+
+  @Get(':id/puede-agendar')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Verificar si se puede agendar cita con esta cotización',
+  })
+  @ApiResponse({ status: 200, description: 'Resultado de verificación' })
+  async puedeAgendarCita(
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.cotizacionesService.puedeAgendarCita(id);
+  }
+
   // ==================== COTIZACIONES (Admin) ====================
 
   @Get('admin/all')
@@ -198,5 +234,39 @@ export class CotizacionesController {
     if (fecha_hasta) filters.fecha_hasta = fecha_hasta;
 
     return this.cotizacionesService.getEstadisticas(filters);
+  }
+
+  // ==================== PAGOS EN VENTANILLA (Admin) ====================
+
+  @Get('admin/pendientes-ventanilla')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'LABORATORISTA')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Obtener cotizaciones pendientes de pago en ventanilla (Admin/Lab)',
+    description: 'Lista de cotizaciones donde el paciente eligió pagar presencialmente',
+  })
+  @ApiResponse({ status: 200, description: 'Lista de cotizaciones pendientes de pago' })
+  async getCotizacionesPendientesVentanilla() {
+    return this.cotizacionesService.getCotizacionesPendientesVentanilla();
+  }
+
+  @Post('admin/:id/confirmar-pago-ventanilla')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'LABORATORISTA')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Confirmar pago en ventanilla (Admin/Lab)',
+    description: 'Confirma que el paciente pagó en el laboratorio y actualiza estado a PAGADA',
+  })
+  @ApiResponse({ status: 200, description: 'Pago confirmado, cotización actualizada' })
+  @ApiResponse({ status: 400, description: 'Estado de cotización no válido' })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  async confirmarPagoVentanilla(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('observaciones') observaciones: string,
+    @CurrentUser('codigo_usuario') admin_id: number,
+  ) {
+    return this.cotizacionesService.confirmarPagoVentanilla(id, admin_id, observaciones);
   }
 }

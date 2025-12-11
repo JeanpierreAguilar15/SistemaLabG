@@ -490,6 +490,7 @@ export class AgendaService {
 
   /**
    * Crear una nueva cita (Paciente)
+   * IMPORTANTE: Requiere cotización con método de pago seleccionado
    */
   async createCita(data: CreateCitaDto, codigo_paciente: number) {
     // Verificar slot
@@ -523,29 +524,55 @@ export class AgendaService {
       throw new BadRequestException('Ya tienes una cita agendada en este horario');
     }
 
-    // Verificar cotización si se proporciona
-    if (data.codigo_cotizacion) {
-      const cotizacion = await this.prisma.cotizacion.findUnique({
-        where: { codigo_cotizacion: data.codigo_cotizacion },
-      });
-
-      if (!cotizacion) {
-        throw new NotFoundException(`Cotización ${data.codigo_cotizacion} no encontrada`);
-      }
-
-      if (cotizacion.codigo_paciente !== codigo_paciente) {
-        throw new BadRequestException('La cotización no pertenece al paciente');
-      }
-
-      // Verificar si ya tiene cita
-      const citaExistente = await this.prisma.cita.findUnique({
-        where: { codigo_cotizacion: data.codigo_cotizacion }
-      });
-
-      if (citaExistente) {
-        throw new BadRequestException('Esta cotización ya tiene una cita asociada');
-      }
+    // VALIDACIÓN DE COTIZACIÓN Y PAGO (OBLIGATORIO)
+    if (!data.codigo_cotizacion) {
+      throw new BadRequestException(
+        'Se requiere una cotización para agendar una cita. Por favor, cree una cotización primero y seleccione un método de pago.',
+      );
     }
+
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { codigo_cotizacion: data.codigo_cotizacion },
+    });
+
+    if (!cotizacion) {
+      throw new NotFoundException(`Cotización ${data.codigo_cotizacion} no encontrada`);
+    }
+
+    if (cotizacion.codigo_paciente !== codigo_paciente) {
+      throw new BadRequestException('La cotización no pertenece al paciente');
+    }
+
+    // Verificar si ya tiene cita
+    const citaExistente = await this.prisma.cita.findUnique({
+      where: { codigo_cotizacion: data.codigo_cotizacion }
+    });
+
+    if (citaExistente) {
+      throw new BadRequestException('Esta cotización ya tiene una cita asociada');
+    }
+
+    // Verificar que la cotización no esté expirada
+    if (new Date() > cotizacion.fecha_expiracion) {
+      throw new BadRequestException('La cotización ha expirado. Por favor, cree una nueva cotización.');
+    }
+
+    // VALIDACIÓN DE ESTADO DE PAGO
+    // Solo se puede agendar si:
+    // - PAGADA: Pago online completado o pago ventanilla confirmado
+    // - PENDIENTE_PAGO_VENTANILLA: Paciente eligió pagar presencialmente (compromiso de pago)
+    const estadosPermitidos = ['PAGADA', 'PENDIENTE_PAGO_VENTANILLA'];
+
+    if (!estadosPermitidos.includes(cotizacion.estado)) {
+      throw new BadRequestException(
+        `No se puede agendar cita con cotización en estado "${cotizacion.estado}". ` +
+        'Debe seleccionar un método de pago (online o ventanilla) antes de agendar.',
+      );
+    }
+
+    this.logger.log(
+      `Cita autorizada | Cotización: ${cotizacion.numero_cotizacion} | Estado: ${cotizacion.estado} | Método pago: ${cotizacion.metodo_pago_seleccionado || 'N/A'}`,
+    );
 
     // Crear cita en transacción para asegurar consistencia de cupos
     const cita = await this.prisma.$transaction(async (prisma) => {
@@ -768,6 +795,35 @@ export class AgendaService {
           },
         });
       });
+    }
+
+    // VALIDACIÓN DE PAGO AL COMPLETAR CITA
+    // Si se va a marcar como COMPLETADA, verificar que el pago esté confirmado
+    if (data.estado === 'COMPLETADA' && cita.estado !== 'COMPLETADA') {
+      // Obtener la cita completa con su cotización
+      const citaConCotizacion = await this.prisma.cita.findUnique({
+        where: { codigo_cita },
+        include: { cotizacion: true },
+      });
+
+      if (citaConCotizacion?.cotizacion) {
+        const estadoCotizacion = citaConCotizacion.cotizacion.estado;
+
+        // Solo permitir completar si el pago está CONFIRMADO (PAGADA)
+        if (estadoCotizacion !== 'PAGADA') {
+          throw new BadRequestException(
+            `No se puede completar la cita sin pago confirmado. ` +
+            `Estado de cotización: ${estadoCotizacion}. ` +
+            (estadoCotizacion === 'PENDIENTE_PAGO_VENTANILLA'
+              ? 'Debe confirmar el pago en ventanilla antes de tomar muestras.'
+              : 'El paciente debe completar el pago primero.'),
+          );
+        }
+
+        this.logger.log(
+          `Pago verificado para completar cita ${codigo_cita} | Cotización: ${citaConCotizacion.cotizacion.numero_cotizacion}`,
+        );
+      }
     }
 
     // Actualización simple

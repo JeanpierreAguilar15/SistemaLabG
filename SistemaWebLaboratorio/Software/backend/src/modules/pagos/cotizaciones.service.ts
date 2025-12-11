@@ -487,6 +487,320 @@ export class CotizacionesService {
   }
 
   /**
+   * Seleccionar método de pago para cotización (Paciente)
+   * @param codigo_cotizacion ID de la cotización
+   * @param metodo_pago ONLINE | VENTANILLA
+   * @param codigo_paciente ID del paciente (para verificar propiedad)
+   */
+  async seleccionarMetodoPago(
+    codigo_cotizacion: number,
+    metodo_pago: 'ONLINE' | 'VENTANILLA',
+    codigo_paciente: number,
+  ) {
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { codigo_cotizacion },
+    });
+
+    if (!cotizacion) {
+      throw new NotFoundException('Cotización no encontrada');
+    }
+
+    // Verificar propiedad
+    if (cotizacion.codigo_paciente !== codigo_paciente) {
+      throw new NotFoundException('Cotización no encontrada');
+    }
+
+    // Verificar estado válido para selección de pago
+    if (!['PENDIENTE', 'ACEPTADA'].includes(cotizacion.estado)) {
+      throw new BadRequestException(
+        `No se puede seleccionar método de pago para una cotización en estado ${cotizacion.estado}`,
+      );
+    }
+
+    // Verificar que no esté expirada
+    if (new Date() > cotizacion.fecha_expiracion) {
+      // Actualizar a expirada si no lo está
+      await this.prisma.cotizacion.update({
+        where: { codigo_cotizacion },
+        data: { estado: 'EXPIRADA' },
+      });
+      throw new BadRequestException('La cotización ha expirado');
+    }
+
+    // Determinar nuevo estado según método de pago
+    const nuevoEstado = metodo_pago === 'VENTANILLA'
+      ? 'PENDIENTE_PAGO_VENTANILLA'
+      : 'PAGO_EN_PROCESO';
+
+    const cotizacionActualizada = await this.prisma.cotizacion.update({
+      where: { codigo_cotizacion },
+      data: {
+        metodo_pago_seleccionado: metodo_pago,
+        fecha_seleccion_pago: new Date(),
+        estado: nuevoEstado,
+      },
+      include: {
+        detalles: {
+          include: {
+            examen: {
+              select: {
+                codigo_examen: true,
+                nombre: true,
+                codigo_interno: true,
+              },
+            },
+          },
+        },
+        paciente: {
+          select: {
+            codigo_usuario: true,
+            nombres: true,
+            apellidos: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    this.logger.log(
+      `Cotización ${cotizacion.numero_cotizacion} | Método de pago seleccionado: ${metodo_pago} | Nuevo estado: ${nuevoEstado}`,
+    );
+
+    return cotizacionActualizada;
+  }
+
+  /**
+   * Confirmar pago en ventanilla (Admin/Laboratorista)
+   * @param codigo_cotizacion ID de la cotización
+   * @param admin_id ID del admin que confirma
+   * @param observaciones Observaciones opcionales
+   */
+  async confirmarPagoVentanilla(
+    codigo_cotizacion: number,
+    admin_id: number,
+    observaciones?: string,
+  ) {
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { codigo_cotizacion },
+      include: {
+        paciente: {
+          select: {
+            nombres: true,
+            apellidos: true,
+            email: true,
+          },
+        },
+        detalles: {
+          include: {
+            examen: true,
+          },
+        },
+      },
+    });
+
+    if (!cotizacion) {
+      throw new NotFoundException('Cotización no encontrada');
+    }
+
+    // Verificar que esté en estado correcto
+    if (cotizacion.estado !== 'PENDIENTE_PAGO_VENTANILLA') {
+      throw new BadRequestException(
+        `Solo se puede confirmar pago de cotizaciones en estado PENDIENTE_PAGO_VENTANILLA. Estado actual: ${cotizacion.estado}`,
+      );
+    }
+
+    // Actualizar cotización y crear pago en transacción
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // Generar número de pago
+      const numeroPago = await this.generarNumeroPago(tx);
+
+      // Crear registro de pago
+      const pago = await tx.pago.create({
+        data: {
+          codigo_cotizacion,
+          codigo_paciente: cotizacion.codigo_paciente,
+          numero_pago: numeroPago,
+          monto_total: cotizacion.total,
+          metodo_pago: 'EFECTIVO', // Por defecto en ventanilla es efectivo
+          estado: 'COMPLETADO',
+          observaciones: observaciones || 'Pago confirmado en ventanilla',
+        },
+      });
+
+      // Actualizar cotización
+      const cotizacionActualizada = await tx.cotizacion.update({
+        where: { codigo_cotizacion },
+        data: {
+          estado: 'PAGADA',
+          pago_confirmado_por: admin_id,
+          fecha_confirmacion_pago: new Date(),
+          observaciones: observaciones
+            ? `${cotizacion.observaciones || ''} | Pago ventanilla: ${observaciones}`.trim()
+            : cotizacion.observaciones,
+        },
+        include: {
+          paciente: {
+            select: {
+              codigo_usuario: true,
+              nombres: true,
+              apellidos: true,
+              email: true,
+            },
+          },
+          detalles: {
+            include: {
+              examen: true,
+            },
+          },
+          cita: true,
+        },
+      });
+
+      return { cotizacion: cotizacionActualizada, pago };
+    });
+
+    this.logger.log(
+      `Pago ventanilla confirmado | Cotización: ${cotizacion.numero_cotizacion} | Admin: ${admin_id} | Monto: $${cotizacion.total}`,
+    );
+
+    return resultado;
+  }
+
+  /**
+   * Obtener cotizaciones pendientes de pago en ventanilla (Admin)
+   */
+  async getCotizacionesPendientesVentanilla() {
+    return this.prisma.cotizacion.findMany({
+      where: {
+        estado: 'PENDIENTE_PAGO_VENTANILLA',
+      },
+      include: {
+        paciente: {
+          select: {
+            codigo_usuario: true,
+            nombres: true,
+            apellidos: true,
+            cedula: true,
+            email: true,
+            telefono: true,
+          },
+        },
+        detalles: {
+          include: {
+            examen: {
+              select: {
+                codigo_examen: true,
+                nombre: true,
+                codigo_interno: true,
+              },
+            },
+          },
+        },
+        cita: {
+          include: {
+            slot: {
+              include: {
+                sede: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        fecha_seleccion_pago: 'asc', // Más antiguos primero
+      },
+    });
+  }
+
+  /**
+   * Verificar si una cotización permite agendar cita
+   * @returns true si puede agendar, false si no
+   */
+  async puedeAgendarCita(codigo_cotizacion: number): Promise<{
+    puede: boolean;
+    motivo?: string;
+    cotizacion?: any;
+  }> {
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { codigo_cotizacion },
+      include: { cita: true },
+    });
+
+    if (!cotizacion) {
+      return { puede: false, motivo: 'Cotización no encontrada' };
+    }
+
+    // Ya tiene cita
+    if (cotizacion.cita) {
+      return { puede: false, motivo: 'La cotización ya tiene una cita agendada' };
+    }
+
+    // Verificar expiración
+    if (new Date() > cotizacion.fecha_expiracion) {
+      return { puede: false, motivo: 'La cotización ha expirado' };
+    }
+
+    // Estados que permiten agendar cita
+    const estadosPermitidos = ['PAGADA', 'PENDIENTE_PAGO_VENTANILLA'];
+
+    if (!estadosPermitidos.includes(cotizacion.estado)) {
+      return {
+        puede: false,
+        motivo: `No se puede agendar cita con cotización en estado ${cotizacion.estado}. Debe seleccionar un método de pago primero.`,
+      };
+    }
+
+    return { puede: true, cotizacion };
+  }
+
+  /**
+   * Verificar si se pueden procesar resultados de una cotización
+   * Solo si el pago está confirmado (PAGADA)
+   */
+  async puedeProcesarResultados(codigo_cotizacion: number): Promise<{
+    puede: boolean;
+    motivo?: string;
+  }> {
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { codigo_cotizacion },
+    });
+
+    if (!cotizacion) {
+      return { puede: false, motivo: 'Cotización no encontrada' };
+    }
+
+    if (cotizacion.estado !== 'PAGADA') {
+      return {
+        puede: false,
+        motivo: `No se pueden procesar resultados sin pago confirmado. Estado actual: ${cotizacion.estado}`,
+      };
+    }
+
+    return { puede: true };
+  }
+
+  /**
+   * Generar número de pago único (usado internamente)
+   */
+  private async generarNumeroPago(tx?: any): Promise<string> {
+    const prisma = tx || this.prisma;
+    const fecha = new Date();
+    const year = fecha.getFullYear();
+    const month = String(fecha.getMonth() + 1).padStart(2, '0');
+
+    const count = await prisma.pago.count({
+      where: {
+        numero_pago: {
+          startsWith: `PAG-${year}${month}`,
+        },
+      },
+    });
+
+    const secuencial = String(count + 1).padStart(4, '0');
+    return `PAG-${year}${month}-${secuencial}`;
+  }
+
+  /**
    * Generar número de cotización único
    */
   private async generarNumeroCotizacion(): Promise<string> {

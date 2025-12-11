@@ -349,16 +349,22 @@ model PaqueteExamen {
 // =====================================================
 
 model Cotizacion {
-  codigo_cotizacion     Int       @id @default(autoincrement())
-  codigo_paciente       Int
-  numero_cotizacion     String    @unique @db.VarChar(50)
-  fecha_cotizacion      DateTime  @default(now())
-  fecha_expiracion      DateTime
-  subtotal              Decimal   @db.Decimal(10, 2)
-  descuento             Decimal   @default(0) @db.Decimal(10, 2)
-  total                 Decimal   @db.Decimal(10, 2)
-  estado                String    @default("PENDIENTE") @db.VarChar(50)
-  observaciones         String?   @db.Text
+  codigo_cotizacion         Int       @id @default(autoincrement())
+  codigo_paciente           Int
+  numero_cotizacion         String    @unique @db.VarChar(50)
+  fecha_cotizacion          DateTime  @default(now())
+  fecha_expiracion          DateTime
+  subtotal                  Decimal   @db.Decimal(10, 2)
+  descuento                 Decimal   @default(0) @db.Decimal(10, 2)
+  total                     Decimal   @db.Decimal(10, 2)
+  estado                    String    @default("PENDIENTE") @db.VarChar(50)
+  // PENDIENTE, PENDIENTE_PAGO_VENTANILLA, PAGO_EN_PROCESO, PAGADA, RECHAZADA, EXPIRADA
+  metodo_pago_seleccionado  String?   @db.VarChar(20)
+  // ONLINE (Stripe), VENTANILLA (presencial)
+  fecha_seleccion_pago      DateTime?
+  pago_confirmado_por       Int?
+  fecha_confirmacion_pago   DateTime?
+  observaciones             String?   @db.Text
 
   paciente              Usuario   @relation(fields: [codigo_paciente], references: [codigo_usuario])
   detalles              CotizacionDetalle[]
