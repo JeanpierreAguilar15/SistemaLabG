@@ -586,12 +586,17 @@ export class ResultadosService {
       },
     });
 
-    // Actualizar estado si era LISTO
-    if (resultado.estado === 'LISTO') {
+    // Actualizar estado a ENTREGADO automáticamente al descargar
+    // Solo si no está ya entregado (LISTO o VALIDADO → ENTREGADO)
+    if (resultado.estado !== 'ENTREGADO') {
       await this.prisma.resultado.update({
         where: { codigo_resultado },
         data: { estado: 'ENTREGADO' },
       });
+
+      this.logger.log(
+        `Estado actualizado a ENTREGADO automáticamente | Resultado: ${codigo_resultado}`,
+      );
     }
 
     this.logger.log(
