@@ -22,7 +22,7 @@ interface UserProfile {
 }
 
 interface Consentimiento {
-  tipo: 'USO_DATOS' | 'NOTIFICACIONES' | 'COMPARTIR_INFO'
+  tipo: 'USO_DATOS' | 'NOTIFICACIONES' | 'NOTIFICACIONES_WHATSAPP' | 'COMPARTIR_INFO'
   label: string
   descripcion: string
   aceptado: boolean
@@ -59,8 +59,14 @@ export default function PerfilPage() {
     },
     {
       tipo: 'NOTIFICACIONES',
-      label: 'Recibir Notificaciones',
-      descripcion: 'Acepto recibir notificaciones por email/SMS sobre mis citas y resultados',
+      label: 'Recibir Notificaciones por Email',
+      descripcion: 'Acepto recibir notificaciones por email sobre mis citas y resultados',
+      aceptado: false,
+    },
+    {
+      tipo: 'NOTIFICACIONES_WHATSAPP',
+      label: 'Recibir Notificaciones por WhatsApp',
+      descripcion: 'Acepto recibir notificaciones por WhatsApp cuando mis resultados estén listos',
       aceptado: false,
     },
     {

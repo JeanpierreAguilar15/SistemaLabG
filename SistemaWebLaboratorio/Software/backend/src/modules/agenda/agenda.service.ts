@@ -797,34 +797,10 @@ export class AgendaService {
       });
     }
 
-    // VALIDACIÓN DE PAGO AL COMPLETAR CITA
-    // Si se va a marcar como COMPLETADA, verificar que el pago esté confirmado
-    if (data.estado === 'COMPLETADA' && cita.estado !== 'COMPLETADA') {
-      // Obtener la cita completa con su cotización
-      const citaConCotizacion = await this.prisma.cita.findUnique({
-        where: { codigo_cita },
-        include: { cotizacion: true },
-      });
-
-      if (citaConCotizacion?.cotizacion) {
-        const estadoCotizacion = citaConCotizacion.cotizacion.estado;
-
-        // Solo permitir completar si el pago está CONFIRMADO (PAGADA)
-        if (estadoCotizacion !== 'PAGADA') {
-          throw new BadRequestException(
-            `No se puede completar la cita sin pago confirmado. ` +
-            `Estado de cotización: ${estadoCotizacion}. ` +
-            (estadoCotizacion === 'PENDIENTE_PAGO_VENTANILLA'
-              ? 'Debe confirmar el pago en ventanilla antes de tomar muestras.'
-              : 'El paciente debe completar el pago primero.'),
-          );
-        }
-
-        this.logger.log(
-          `Pago verificado para completar cita ${codigo_cita} | Cotización: ${citaConCotizacion.cotizacion.numero_cotizacion}`,
-        );
-      }
-    }
+    // FLUJO FLEXIBLE: No se requiere pago confirmado para tomar muestras
+    // La validación de pago se hace solo al validar/entregar resultados
+    // Esto permite: Paciente llega -> Paga en ventanilla -> Se toma muestra -> Espera -> Recibe resultados
+    // El pago puede confirmarse en cualquier momento antes de validar resultados
 
     // Actualización simple
     const updatedCita = await this.prisma.cita.update({

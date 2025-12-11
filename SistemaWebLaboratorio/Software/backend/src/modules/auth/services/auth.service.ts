@@ -100,6 +100,18 @@ export class AuthService {
           aceptado: true,
           version_politica: '1.0',
         },
+        {
+          codigo_usuario: usuario.codigo_usuario,
+          tipo_consentimiento: 'NOTIFICACIONES_WHATSAPP',
+          aceptado: false, // Por defecto deshabilitado, el usuario debe optar
+          version_politica: '1.0',
+        },
+        {
+          codigo_usuario: usuario.codigo_usuario,
+          tipo_consentimiento: 'COMPARTIR_INFO',
+          aceptado: false,
+          version_politica: '1.0',
+        },
       ],
     });
 
@@ -508,6 +520,140 @@ export class AuthService {
       refresh_token: refreshToken,
       expires_in: 900, // 15 minutes in seconds
     };
+  }
+
+  // ==================== PERFIL ====================
+
+  /**
+   * Obtener perfil completo del usuario
+   */
+  async getProfile(codigo_usuario: number) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { codigo_usuario },
+      select: {
+        codigo_usuario: true,
+        cedula: true,
+        nombres: true,
+        apellidos: true,
+        email: true,
+        telefono: true,
+        direccion: true,
+        fecha_nacimiento: true,
+        genero: true,
+        contacto_emergencia_nombre: true,
+        contacto_emergencia_telefono: true,
+      },
+    });
+
+    if (!usuario) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    return usuario;
+  }
+
+  /**
+   * Actualizar perfil del usuario
+   */
+  async updateProfile(codigo_usuario: number, data: {
+    nombres?: string;
+    apellidos?: string;
+    email?: string;
+    telefono?: string;
+    direccion?: string;
+    fecha_nacimiento?: string;
+    genero?: 'M' | 'F' | 'O';
+    contacto_emergencia_nombre?: string;
+    contacto_emergencia_telefono?: string;
+  }) {
+    // Verificar email único si se está actualizando
+    if (data.email) {
+      const existingUser = await this.prisma.usuario.findFirst({
+        where: {
+          email: data.email,
+          codigo_usuario: { not: codigo_usuario },
+        },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('El correo electrónico ya está en uso');
+      }
+    }
+
+    const usuario = await this.prisma.usuario.update({
+      where: { codigo_usuario },
+      data: {
+        nombres: data.nombres,
+        apellidos: data.apellidos,
+        email: data.email,
+        telefono: data.telefono,
+        direccion: data.direccion,
+        fecha_nacimiento: data.fecha_nacimiento ? new Date(data.fecha_nacimiento) : undefined,
+        genero: data.genero,
+        contacto_emergencia_nombre: data.contacto_emergencia_nombre,
+        contacto_emergencia_telefono: data.contacto_emergencia_telefono,
+      },
+      select: {
+        codigo_usuario: true,
+        cedula: true,
+        nombres: true,
+        apellidos: true,
+        email: true,
+        telefono: true,
+        direccion: true,
+        fecha_nacimiento: true,
+        genero: true,
+        contacto_emergencia_nombre: true,
+        contacto_emergencia_telefono: true,
+      },
+    });
+
+    return usuario;
+  }
+
+  // ==================== CONSENTIMIENTOS ====================
+
+  /**
+   * Obtener consentimientos del usuario
+   */
+  async getConsentimientos(codigo_usuario: number) {
+    const consentimientos = await this.prisma.consentimiento.findMany({
+      where: { codigo_usuario },
+      orderBy: { fecha_consentimiento: 'desc' },
+    });
+
+    // Devolver solo el consentimiento más reciente de cada tipo
+    const consentimientosMap = new Map();
+    for (const consent of consentimientos) {
+      if (!consentimientosMap.has(consent.tipo_consentimiento)) {
+        consentimientosMap.set(consent.tipo_consentimiento, consent);
+      }
+    }
+
+    return Array.from(consentimientosMap.values());
+  }
+
+  /**
+   * Actualizar consentimientos del usuario
+   * Crea nuevos registros con la fecha actual (mantiene historial)
+   */
+  async updateConsentimientos(codigo_usuario: number, consentimientos: Array<{
+    tipo: string;
+    aceptado: boolean;
+  }>) {
+    // Crear nuevos registros para cada consentimiento (mantiene historial)
+    for (const consent of consentimientos) {
+      await this.prisma.consentimiento.create({
+        data: {
+          codigo_usuario,
+          tipo_consentimiento: consent.tipo,
+          aceptado: consent.aceptado,
+          version_politica: '1.0',
+        },
+      });
+    }
+
+    return { message: 'Consentimientos actualizados correctamente' };
   }
 
   /**

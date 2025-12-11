@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req, UseGuards, Get, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Req, UseGuards, Get, Put, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AuthService } from '../services/auth.service';
@@ -68,9 +68,66 @@ export class AuthController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Obtener información del usuario autenticado' })
   @ApiResponse({ status: 200, description: 'Información del usuario' })
-  async getProfile(@CurrentUser() user: any) {
+  async getMe(@CurrentUser() user: any) {
     return {
       user,
     };
+  }
+
+  // ==================== PERFIL ====================
+
+  @Get('perfil')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener perfil completo del usuario' })
+  @ApiResponse({ status: 200, description: 'Perfil del usuario' })
+  async getProfile(@CurrentUser('codigo_usuario') codigo_usuario: number) {
+    return this.authService.getProfile(codigo_usuario);
+  }
+
+  @Put('perfil')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar perfil del usuario' })
+  @ApiResponse({ status: 200, description: 'Perfil actualizado' })
+  @ApiResponse({ status: 409, description: 'Email ya en uso' })
+  async updateProfile(
+    @CurrentUser('codigo_usuario') codigo_usuario: number,
+    @Body() data: {
+      nombres?: string;
+      apellidos?: string;
+      email?: string;
+      telefono?: string;
+      direccion?: string;
+      fecha_nacimiento?: string;
+      genero?: 'M' | 'F' | 'O';
+      contacto_emergencia_nombre?: string;
+      contacto_emergencia_telefono?: string;
+    },
+  ) {
+    return this.authService.updateProfile(codigo_usuario, data);
+  }
+
+  // ==================== CONSENTIMIENTOS ====================
+
+  @Get('consentimientos')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener consentimientos del usuario' })
+  @ApiResponse({ status: 200, description: 'Lista de consentimientos' })
+  async getConsentimientos(@CurrentUser('codigo_usuario') codigo_usuario: number) {
+    return this.authService.getConsentimientos(codigo_usuario);
+  }
+
+  @Post('consentimientos')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar consentimientos del usuario' })
+  @ApiResponse({ status: 200, description: 'Consentimientos actualizados' })
+  async updateConsentimientos(
+    @CurrentUser('codigo_usuario') codigo_usuario: number,
+    @Body() consentimientos: Array<{ tipo: string; aceptado: boolean }>,
+  ) {
+    return this.authService.updateConsentimientos(codigo_usuario, consentimientos);
   }
 }

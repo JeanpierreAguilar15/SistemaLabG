@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { InventarioService } from '../inventario/inventario.service';
+import { WhatsAppService } from '../comunicaciones/whatsapp.service';
 import { CreateResultadoDto, UpdateResultadoDto, CreateMuestraDto } from './dto';
 import { randomUUID } from 'crypto';
 
@@ -24,6 +25,7 @@ export class ResultadosService {
     private readonly pdfGenerator: PdfGeneratorService,
     @Inject(forwardRef(() => InventarioService))
     private readonly inventarioService: InventarioService,
+    private readonly whatsappService: WhatsAppService,
   ) {}
 
   // ==================== MUESTRAS ====================
@@ -387,6 +389,22 @@ export class ResultadosService {
         examen: resultado.examen.nombre,
       },
     });
+
+    // === NOTIFICACIÓN WHATSAPP AL PACIENTE ===
+    try {
+      await this.enviarNotificacionWhatsApp(
+        resultado.muestra.codigo_paciente,
+        resultado.muestra.paciente.telefono,
+        resultado.muestra.paciente.nombres,
+        resultado.examen.nombre,
+        codigo_verificacion,
+      );
+    } catch (error) {
+      // No fallar la validación por errores de WhatsApp
+      this.logger.warn(
+        `Error enviando WhatsApp para resultado ${codigo_resultado}: ${error.message}`,
+      );
+    }
 
     return resultadoValidado;
   }
@@ -793,5 +811,96 @@ export class ResultadosService {
   private generarCodigoVerificacion(): string {
     const uuid = randomUUID();
     return `VER-${uuid.substring(0, 8).toUpperCase()}`;
+  }
+
+  /**
+   * Enviar notificación WhatsApp al paciente cuando su resultado está listo
+   * Verifica el consentimiento del usuario antes de enviar
+   */
+  private async enviarNotificacionWhatsApp(
+    codigo_paciente: number,
+    telefono: string | null,
+    nombre_paciente: string,
+    nombre_examen: string,
+    codigo_verificacion: string,
+  ): Promise<void> {
+    // Verificar que el servicio de WhatsApp esté configurado
+    if (!this.whatsappService.isConfigured()) {
+      this.logger.debug('WhatsApp no configurado, omitiendo notificación');
+      return;
+    }
+
+    // Verificar que el paciente tenga teléfono registrado
+    if (!telefono) {
+      this.logger.debug(
+        `Paciente ${codigo_paciente} no tiene teléfono registrado, omitiendo notificación WhatsApp`,
+      );
+      return;
+    }
+
+    // Verificar consentimiento del usuario para notificaciones WhatsApp
+    const consentimiento = await this.prisma.consentimiento.findFirst({
+      where: {
+        codigo_usuario: codigo_paciente,
+        tipo_consentimiento: 'NOTIFICACIONES_WHATSAPP',
+      },
+      orderBy: {
+        fecha_consentimiento: 'desc',
+      },
+    });
+
+    // Si no hay consentimiento o está rechazado, no enviar
+    if (!consentimiento || !consentimiento.aceptado) {
+      this.logger.debug(
+        `Paciente ${codigo_paciente} no tiene consentimiento para WhatsApp, omitiendo notificación`,
+      );
+      return;
+    }
+
+    // Formatear mensaje
+    const mensaje = this.formatearMensajeResultadoListo(
+      nombre_paciente,
+      nombre_examen,
+      codigo_verificacion,
+    );
+
+    // Enviar mensaje
+    const result = await this.whatsappService.sendMessage({
+      to: telefono,
+      message: mensaje,
+      tipo: 'GENERAL',
+    });
+
+    if (result.success) {
+      this.logger.log(
+        `Notificación WhatsApp enviada a paciente ${codigo_paciente} para resultado de ${nombre_examen}`,
+      );
+    } else {
+      this.logger.warn(
+        `Error enviando WhatsApp a paciente ${codigo_paciente}: ${result.error}`,
+      );
+    }
+  }
+
+  /**
+   * Formatear mensaje de resultado listo para WhatsApp
+   */
+  private formatearMensajeResultadoListo(
+    nombre_paciente: string,
+    nombre_examen: string,
+    codigo_verificacion: string,
+  ): string {
+    let mensaje = `🏥 *LABORATORIO CLÍNICO FRANZ*\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    mensaje += `¡Hola ${nombre_paciente}! 👋\n\n`;
+    mensaje += `✅ Tu resultado de *${nombre_examen}* ya está disponible.\n\n`;
+    mensaje += `📋 Código de verificación:\n`;
+    mensaje += `*${codigo_verificacion}*\n\n`;
+    mensaje += `📱 Puedes descargarlo desde:\n`;
+    mensaje += `Portal del Paciente > Mis Resultados\n\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    mensaje += `_Este mensaje es automático. Por favor no responder._`;
+
+    return mensaje;
   }
 }
