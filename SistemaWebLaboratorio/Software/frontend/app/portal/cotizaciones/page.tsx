@@ -311,8 +311,40 @@ export default function CotizacionesPage() {
   }
 
   const handleDescargarPDF = async (cotizacion: Cotizacion) => {
-    // Implementar descarga de PDF si es necesario
-    console.log('Descargar PDF', cotizacion)
+    try {
+      setMessage({ type: 'success', text: 'Generando PDF...' })
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/${cotizacion.codigo_cotizacion}/pdf`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Error al generar PDF')
+      }
+
+      // Obtener el blob del PDF
+      const blob = await response.blob()
+
+      // Crear URL temporal y descargar
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `cotizacion-${cotizacion.numero_cotizacion}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      setMessage({ type: 'success', text: 'PDF descargado correctamente' })
+    } catch (error) {
+      console.error('Error downloading PDF:', error)
+      setMessage({ type: 'error', text: 'Error al descargar el PDF' })
+    }
   }
 
   const getEstadoBadge = (estado: string) => {
