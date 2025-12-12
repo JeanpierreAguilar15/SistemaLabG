@@ -322,7 +322,7 @@ export default function CitasPage() {
 
   const handleConfirmarCita = async (codigo_cita: number) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/citas/${codigo_cita}/confirmar`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agenda/citas/${codigo_cita}/confirmar`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -437,7 +437,7 @@ export default function CitasPage() {
                       </span>
                     </div>
                     <div className="flex space-x-2 mt-3">
-                      {!cita.confirmada && cita.estado === 'AGENDADA' && (
+                      {!cita.confirmada && cita.estado === 'PENDIENTE' && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -446,7 +446,7 @@ export default function CitasPage() {
                           Confirmar
                         </Button>
                       )}
-                      {cita.estado === 'AGENDADA' && (
+                      {cita.estado === 'PENDIENTE' && (
                         <>
                           <Button
                             size="sm"

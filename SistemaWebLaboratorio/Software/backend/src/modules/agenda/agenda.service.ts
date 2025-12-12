@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { InventarioService } from '../inventario/inventario.service';
+import { ComunicacionesService } from '../comunicaciones/comunicaciones.service';
 import {
   CreateSlotDto,
   CreateCitaDto,
@@ -25,6 +26,7 @@ export class AgendaService {
     @Inject(forwardRef(() => EventsGateway))
     private readonly eventsGateway: EventsGateway,
     private readonly inventarioService: InventarioService,
+    private readonly comunicacionesService: ComunicacionesService,
   ) { }
 
   // ==================== SLOTS ====================
@@ -945,6 +947,109 @@ export class AgendaService {
 
     this.logger.log(`Cita ${codigo_cita} confirmada por Admin ${adminId}`);
     return updatedCita;
+  }
+
+  /**
+   * Confirmar asistencia a cita (Paciente)
+   * El paciente confirma que asistirá a su cita
+   */
+  async confirmarCitaPaciente(codigo_cita: number, codigo_paciente: number) {
+    const cita = await this.prisma.cita.findFirst({
+      where: {
+        codigo_cita,
+        codigo_paciente, // Solo puede confirmar sus propias citas
+      },
+      include: {
+        slot: {
+          include: {
+            servicio: true,
+            sede: true,
+          },
+        },
+      },
+    });
+
+    if (!cita) {
+      throw new NotFoundException(`Cita no encontrada`);
+    }
+
+    // Solo se puede confirmar citas en estado PENDIENTE
+    if (cita.estado !== 'PENDIENTE') {
+      throw new BadRequestException(
+        `No se puede confirmar una cita en estado ${cita.estado}. Solo citas pendientes pueden ser confirmadas.`,
+      );
+    }
+
+    // Verificar que la cita sea futura
+    const ahora = new Date();
+    if (cita.slot.fecha < ahora) {
+      throw new BadRequestException('No se puede confirmar una cita pasada');
+    }
+
+    const updatedCita = await this.prisma.cita.update({
+      where: { codigo_cita },
+      data: { estado: 'CONFIRMADA' },
+      include: {
+        slot: {
+          include: {
+            servicio: true,
+            sede: true,
+          },
+        },
+        paciente: {
+          select: {
+            nombres: true,
+            apellidos: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    this.logger.log(`Cita ${codigo_cita} confirmada por Paciente ${codigo_paciente}`);
+
+    // Notificar via WebSocket
+    this.eventsGateway.notifyAppointmentUpdate({
+      appointmentId: codigo_cita,
+      patientId: codigo_paciente,
+      action: 'confirmed',
+      appointment: updatedCita,
+    });
+
+    // Enviar email de confirmación
+    try {
+      const fechaFormateada = updatedCita.slot.fecha.toLocaleDateString('es-EC', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      const horaFormateada = updatedCita.slot.hora_inicio.toLocaleTimeString('es-EC', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+
+      await this.comunicacionesService.sendAppointmentConfirmationEmail(
+        {
+          email: updatedCita.paciente.email,
+          nombres: updatedCita.paciente.nombres,
+        },
+        {
+          fecha: fechaFormateada,
+          hora: horaFormateada,
+          servicio: updatedCita.slot.servicio.nombre,
+          sede: updatedCita.slot.sede.nombre,
+        },
+      );
+    } catch (emailError) {
+      this.logger.warn(`No se pudo enviar email de confirmación: ${emailError.message}`);
+    }
+
+    return {
+      message: 'Cita confirmada exitosamente',
+      cita: updatedCita,
+    };
   }
 
   /**

@@ -611,6 +611,103 @@ export class AuthService {
     return usuario;
   }
 
+  // ==================== CAMBIAR CONTRASEÑA ====================
+
+  /**
+   * Cambiar contraseña del usuario autenticado
+   * Requiere la contraseña actual para verificación
+   */
+  async changePassword(
+    codigo_usuario: number,
+    currentPassword: string,
+    newPassword: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    // Obtener usuario con su password hash
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { codigo_usuario },
+    });
+
+    if (!usuario) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    // Verificar contraseña actual
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, usuario.password_hash);
+
+    if (!isCurrentPasswordValid) {
+      // Registrar intento fallido
+      await this.logActivity(
+        codigo_usuario,
+        'CAMBIO_PASSWORD_FALLIDO',
+        'Usuario',
+        codigo_usuario,
+        'Intento fallido de cambio de contraseña - contraseña actual incorrecta',
+        ipAddress,
+        userAgent,
+      );
+      throw new BadRequestException('La contraseña actual es incorrecta');
+    }
+
+    // Validar que la nueva contraseña sea diferente
+    const isSamePassword = await bcrypt.compare(newPassword, usuario.password_hash);
+    if (isSamePassword) {
+      throw new BadRequestException('La nueva contraseña debe ser diferente a la actual');
+    }
+
+    // Validar fortaleza de la nueva contraseña
+    if (newPassword.length < 8) {
+      throw new BadRequestException('La nueva contraseña debe tener al menos 8 caracteres');
+    }
+
+    // Hash de la nueva contraseña
+    const salt = await bcrypt.genSalt(10);
+    const newPasswordHash = await bcrypt.hash(newPassword, salt);
+
+    // Actualizar contraseña
+    await this.prisma.usuario.update({
+      where: { codigo_usuario },
+      data: {
+        password_hash: newPasswordHash,
+        salt,
+        requiere_cambio_password: false,
+      },
+    });
+
+    // Revocar todas las sesiones excepto la actual (seguridad)
+    await this.prisma.sesion.updateMany({
+      where: {
+        codigo_usuario,
+        activo: true,
+      },
+      data: {
+        activo: false,
+        revocado: true,
+        fecha_revocacion: new Date(),
+      },
+    });
+
+    // Registrar cambio exitoso
+    await this.logActivity(
+      codigo_usuario,
+      'CAMBIO_PASSWORD',
+      'Usuario',
+      codigo_usuario,
+      'Contraseña cambiada exitosamente',
+      ipAddress,
+      userAgent,
+    );
+
+    // Generar nuevos tokens para la sesión actual
+    const tokens = await this.generateTokens(codigo_usuario, ipAddress, userAgent);
+
+    return {
+      message: 'Contraseña actualizada correctamente',
+      ...tokens,
+    };
+  }
+
   // ==================== CONSENTIMIENTOS ====================
 
   /**

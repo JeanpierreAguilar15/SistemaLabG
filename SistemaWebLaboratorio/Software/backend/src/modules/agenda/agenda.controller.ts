@@ -217,6 +217,20 @@ export class AgendaController {
     );
   }
 
+  @Put('citas/:id/confirmar')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirmar asistencia a cita (Paciente)' })
+  @ApiResponse({ status: 200, description: 'Cita confirmada exitosamente' })
+  @ApiResponse({ status: 400, description: 'No se puede confirmar cita en este estado' })
+  @ApiResponse({ status: 404, description: 'Cita no encontrada' })
+  async confirmarMiCita(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') codigo_paciente: number,
+  ) {
+    return this.agendaService.confirmarCitaPaciente(id, codigo_paciente);
+  }
+
   // ==================== CITAS (Admin) ====================
 
   @Get('admin/citas')

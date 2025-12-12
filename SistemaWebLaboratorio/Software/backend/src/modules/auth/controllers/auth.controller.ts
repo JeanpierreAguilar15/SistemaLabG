@@ -108,6 +108,32 @@ export class AuthController {
     return this.authService.updateProfile(codigo_usuario, data);
   }
 
+  // ==================== CAMBIAR CONTRASEÑA ====================
+
+  @Post('cambiar-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cambiar contraseña del usuario autenticado' })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada correctamente' })
+  @ApiResponse({ status: 400, description: 'Contraseña actual incorrecta o nueva contraseña inválida' })
+  async changePassword(
+    @CurrentUser('codigo_usuario') codigo_usuario: number,
+    @Body() data: { currentPassword: string; newPassword: string },
+    @Req() request: Request,
+  ) {
+    const ipAddress = request.ip || request.socket.remoteAddress;
+    const userAgent = request.headers['user-agent'];
+
+    return this.authService.changePassword(
+      codigo_usuario,
+      data.currentPassword,
+      data.newPassword,
+      ipAddress,
+      userAgent,
+    );
+  }
+
   // ==================== CONSENTIMIENTOS ====================
 
   @Get('consentimientos')
