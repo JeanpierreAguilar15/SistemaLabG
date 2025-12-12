@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   Res,
   StreamableFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import {
@@ -22,8 +23,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { CotizacionesService } from './cotizaciones.service';
 import { CotizacionPdfService } from './cotizacion-pdf.service';
+import { PayPhoneService } from './payphone.service';
 import {
   CreateCotizacionDto,
   UpdateCotizacionDto,
@@ -38,6 +41,7 @@ export class CotizacionesController {
   constructor(
     private readonly cotizacionesService: CotizacionesService,
     private readonly pdfService: CotizacionPdfService,
+    private readonly payPhoneService: PayPhoneService,
   ) {}
 
   // ==================== EXÁMENES PARA COTIZACIÓN ====================
@@ -268,5 +272,82 @@ export class CotizacionesController {
     @CurrentUser('codigo_usuario') admin_id: number,
   ) {
     return this.cotizacionesService.confirmarPagoVentanilla(id, admin_id, observaciones);
+  }
+
+  // ==================== PAYPHONE - PAGOS ONLINE ====================
+
+  @Get('payphone/status')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Verificar si PayPhone está configurado',
+    description: 'Retorna true si la pasarela de pago está habilitada',
+  })
+  @ApiResponse({ status: 200, description: 'Estado de configuración de PayPhone' })
+  async getPayPhoneStatus() {
+    return {
+      configured: this.payPhoneService.isConfigured(),
+      provider: 'PayPhone',
+      description: 'Pasarela de pagos para Ecuador',
+    };
+  }
+
+  @Post(':id/payphone/iniciar')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Iniciar pago con PayPhone (Paciente)',
+    description: 'Genera un link de pago y retorna la URL para redirigir al paciente',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'URL de pago generada',
+    schema: {
+      properties: {
+        paymentUrl: { type: 'string', description: 'URL de redirección a PayPhone' },
+        paymentId: { type: 'number', description: 'ID del pago en PayPhone' },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Cotización no válida para pago' })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  async iniciarPagoPayPhone(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') codigo_paciente: number,
+  ) {
+    return this.payPhoneService.iniciarPago(id, codigo_paciente);
+  }
+
+  @Post('payphone/confirmar')
+  @Public()
+  @ApiOperation({
+    summary: 'Confirmar pago de PayPhone (Callback)',
+    description: 'Endpoint llamado después de que el usuario regresa de PayPhone',
+  })
+  @ApiResponse({ status: 200, description: 'Pago confirmado' })
+  @ApiResponse({ status: 400, description: 'Error en confirmación' })
+  async confirmarPagoPayPhone(
+    @Body('id') id: string,
+    @Body('clientTransactionId') clientTransactionId: string,
+  ) {
+    if (!id || !clientTransactionId) {
+      throw new BadRequestException('Parámetros de confirmación requeridos');
+    }
+    return this.payPhoneService.confirmarPago(id, clientTransactionId);
+  }
+
+  @Get('payphone/verificar/:clientTransactionId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Verificar estado de pago PayPhone',
+    description: 'Consulta el estado de un pago específico',
+  })
+  @ApiResponse({ status: 200, description: 'Estado del pago' })
+  @ApiResponse({ status: 404, description: 'Pago no encontrado' })
+  async verificarPagoPayPhone(
+    @Param('clientTransactionId') clientTransactionId: string,
+  ) {
+    return this.payPhoneService.verificarEstadoPago(clientTransactionId);
   }
 }
