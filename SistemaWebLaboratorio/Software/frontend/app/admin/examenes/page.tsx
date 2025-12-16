@@ -12,6 +12,7 @@ interface Categoria {
   codigo_categoria: number
   nombre: string
   descripcion: string | null
+  activo?: boolean
 }
 
 interface Examen {
@@ -33,8 +34,11 @@ interface Examen {
   precios?: Array<{ precio: number; activo: boolean }>
 }
 
+type Tab = 'examenes' | 'categorias'
+
 export default function ExamenesPage() {
   const { accessToken } = useAuthStore()
+  const [activeTab, setActiveTab] = useState<Tab>('examenes')
   const [examenes, setExamenes] = useState<Examen[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,6 +46,14 @@ export default function ExamenesPage() {
   const [editingExamen, setEditingExamen] = useState<Examen | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Categoria modal state
+  const [showCategoriaModal, setShowCategoriaModal] = useState(false)
+  const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null)
+  const [categoriaFormData, setCategoriaFormData] = useState({
+    nombre: '',
+    descripcion: '',
+  })
 
   // Form state
   const [formData, setFormData] = useState({
@@ -65,6 +77,13 @@ export default function ExamenesPage() {
     loadCategorias()
   }, [])
 
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
+
   const loadExamenes = async () => {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exams`, {
@@ -72,7 +91,6 @@ export default function ExamenesPage() {
       })
       if (response.ok) {
         const result = await response.json()
-        // Backend returns paginated data: { data: [], pagination: {} }
         const examenes = result.data || result
         setExamenes(examenes)
       }
@@ -85,7 +103,7 @@ export default function ExamenesPage() {
 
   const loadCategorias = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/examenes/categorias`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exam-categories`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       if (response.ok) {
@@ -97,12 +115,11 @@ export default function ExamenesPage() {
     }
   }
 
+  // ==================== EXAMENES HANDLERS ====================
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validaciones críticas antes de enviar
-
-    // 1. Validar precio (si está presente, debe ser positivo)
     if (formData.precio) {
       const precio = parseFloat(formData.precio)
       if (!validatePositiveNumber(precio)) {
@@ -115,7 +132,6 @@ export default function ExamenesPage() {
       }
     }
 
-    // 2. Validar horas de ayuno (0-24 horas)
     if (formData.requiere_ayuno && formData.horas_ayuno) {
       const horasAyuno = parseInt(formData.horas_ayuno)
       if (!validateRange(horasAyuno, 0, 24)) {
@@ -124,14 +140,12 @@ export default function ExamenesPage() {
       }
     }
 
-    // 3. Validar tiempo de entrega (1-720 horas = 30 días)
     const tiempoEntrega = parseInt(formData.tiempo_entrega_horas)
     if (!validateRange(tiempoEntrega, 1, 720)) {
       setMessage({ type: 'error', text: '❌ El tiempo de entrega debe estar entre 1 y 720 horas (30 días).' })
       return
     }
 
-    // 4. Validar valores de referencia (min < max)
     const valorRefMin = formData.valor_referencia_min ? parseFloat(formData.valor_referencia_min) : undefined
     const valorRefMax = formData.valor_referencia_max ? parseFloat(formData.valor_referencia_max) : undefined
 
@@ -143,7 +157,6 @@ export default function ExamenesPage() {
       return
     }
 
-    // 5. Validar que si hay valores de referencia, también haya unidad de medida
     if ((valorRefMin !== undefined || valorRefMax !== undefined) && !formData.unidad_medida) {
       setMessage({
         type: 'error',
@@ -170,7 +183,6 @@ export default function ExamenesPage() {
 
     try {
       if (editingExamen) {
-        // Update
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/admin/exams/${editingExamen.codigo_examen}`,
           {
@@ -192,7 +204,6 @@ export default function ExamenesPage() {
           setMessage({ type: 'error', text: error.message || 'Error al actualizar examen' })
         }
       } else {
-        // Create
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exams`, {
           method: 'POST',
           headers: {
@@ -205,7 +216,6 @@ export default function ExamenesPage() {
         if (response.ok) {
           const newExamen = await response.json()
 
-          // Create precio if provided
           if (formData.precio) {
             await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/prices`, {
               method: 'POST',
@@ -265,7 +275,6 @@ export default function ExamenesPage() {
       })
 
       if (response.ok) {
-        // Update local state immediately for instant feedback
         setExamenes((prevExamenes) =>
           prevExamenes.map((examen) =>
             examen.codigo_examen === codigo_examen
@@ -300,6 +309,90 @@ export default function ExamenesPage() {
     })
   }
 
+  // ==================== CATEGORIAS HANDLERS ====================
+
+  const handleOpenCategoriaModal = (categoria?: Categoria) => {
+    if (categoria) {
+      setEditingCategoria(categoria)
+      setCategoriaFormData({
+        nombre: categoria.nombre,
+        descripcion: categoria.descripcion || '',
+      })
+    } else {
+      setEditingCategoria(null)
+      setCategoriaFormData({ nombre: '', descripcion: '' })
+    }
+    setShowCategoriaModal(true)
+  }
+
+  const handleCloseCategoriaModal = () => {
+    setShowCategoriaModal(false)
+    setEditingCategoria(null)
+    setCategoriaFormData({ nombre: '', descripcion: '' })
+  }
+
+  const handleCategoriaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!categoriaFormData.nombre.trim()) {
+      setMessage({ type: 'error', text: 'El nombre de la categoría es requerido' })
+      return
+    }
+
+    try {
+      const url = editingCategoria
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/exam-categories/${editingCategoria.codigo_categoria}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/exam-categories`
+
+      const response = await fetch(url, {
+        method: editingCategoria ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          nombre: categoriaFormData.nombre.trim(),
+          descripcion: categoriaFormData.descripcion.trim() || null,
+        }),
+      })
+
+      if (response.ok) {
+        setMessage({
+          type: 'success',
+          text: editingCategoria ? 'Categoría actualizada correctamente' : 'Categoría creada correctamente',
+        })
+        handleCloseCategoriaModal()
+        loadCategorias()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al guardar categoría' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleDeleteCategoria = async (codigo_categoria: number) => {
+    if (!confirm('¿Está seguro de eliminar esta categoría?')) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exam-categories/${codigo_categoria}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Categoría eliminada correctamente' })
+        loadCategorias()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al eliminar categoría' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
   const filteredExamenes = examenes.filter(
     (examen) =>
       examen.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -321,15 +414,25 @@ export default function ExamenesPage() {
         <div>
           <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Exámenes</h1>
           <p className="text-lab-neutral-600 mt-2">
-            Administra el catálogo de exámenes. Los cambios se reflejan inmediatamente en el portal del paciente.
+            Administra el catálogo de exámenes y sus categorías.
           </p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
-          <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nuevo Examen
-        </Button>
+        {activeTab === 'examenes' && (
+          <Button onClick={() => setShowModal(true)}>
+            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nuevo Examen
+          </Button>
+        )}
+        {activeTab === 'categorias' && (
+          <Button onClick={() => handleOpenCategoriaModal()}>
+            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nueva Categoría
+          </Button>
+        )}
       </div>
 
       {/* Message */}
@@ -345,104 +448,198 @@ export default function ExamenesPage() {
         </div>
       )}
 
-      {/* Search */}
-      <Card>
-        <CardContent className="pt-6">
-          <Input
-            placeholder="Buscar por nombre o código..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-md"
-          />
-        </CardContent>
-      </Card>
+      {/* Tabs */}
+      <div className="border-b border-lab-neutral-200">
+        <nav className="flex space-x-8">
+          <button
+            onClick={() => setActiveTab('examenes')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'examenes'
+                ? 'border-lab-primary-500 text-lab-primary-600'
+                : 'border-transparent text-lab-neutral-500 hover:text-lab-neutral-700 hover:border-lab-neutral-300'
+            }`}
+          >
+            Exámenes ({examenes.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('categorias')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'categorias'
+                ? 'border-lab-primary-500 text-lab-primary-600'
+                : 'border-transparent text-lab-neutral-500 hover:text-lab-neutral-700 hover:border-lab-neutral-300'
+            }`}
+          >
+            Categorías ({categorias.length})
+          </button>
+        </nav>
+      </div>
 
-      {/* Examenes Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Exámenes ({filteredExamenes.length})</CardTitle>
-          <CardDescription>Lista de todos los exámenes disponibles</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-lab-neutral-200">
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Código</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Nombre</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Categoría</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Precio</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Ayuno</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Estado</th>
-                  <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredExamenes.map((examen) => (
-                  <tr key={examen.codigo_examen} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
-                    <td className="p-4 text-sm font-mono text-lab-neutral-700">{examen.codigo_interno}</td>
-                    <td className="p-4">
-                      <div className="font-medium text-lab-neutral-900">{examen.nombre}</div>
-                      {examen.descripcion && (
-                        <div className="text-sm text-lab-neutral-600 truncate max-w-xs">{examen.descripcion}</div>
-                      )}
-                    </td>
-                    <td className="p-4 text-sm text-lab-neutral-700">{examen.categoria?.nombre}</td>
-                    <td className="p-4 text-sm font-semibold text-lab-neutral-900">
-                      ${examen.precios?.[0]?.precio ? Number(examen.precios[0].precio).toFixed(2) : '0.00'}
-                    </td>
-                    <td className="p-4">
-                      {examen.requiere_ayuno ? (
-                        <span className="text-xs px-2 py-1 bg-lab-warning-100 text-lab-warning-800 rounded">
-                          {examen.horas_ayuno}h
-                        </span>
-                      ) : (
-                        <span className="text-xs text-lab-neutral-500">No</span>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <span
-                        className={`text-xs px-2 py-1 rounded ${
-                          examen.activo
-                            ? 'bg-lab-success-100 text-lab-success-800'
-                            : 'bg-lab-neutral-100 text-lab-neutral-600'
-                        }`}
-                      >
-                        {examen.activo ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right space-x-2">
-                      <Button size="sm" variant="outline" onClick={() => handleEdit(examen)}>
-                        Editar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className={
-                          examen.activo
-                            ? 'text-lab-danger-600 hover:text-lab-danger-700'
-                            : 'text-lab-success-600 hover:text-lab-success-700'
-                        }
-                        onClick={() => handleToggleActive(examen.codigo_examen, examen.activo)}
-                      >
-                        {examen.activo ? 'Desactivar' : 'Activar'}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Tab Content: Examenes */}
+      {activeTab === 'examenes' && (
+        <>
+          {/* Search */}
+          <Card>
+            <CardContent className="pt-6">
+              <Input
+                placeholder="Buscar por nombre o código..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="max-w-md"
+              />
+            </CardContent>
+          </Card>
 
-            {filteredExamenes.length === 0 && (
-              <div className="text-center py-12 text-lab-neutral-500">
-                No se encontraron exámenes
+          {/* Examenes Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Exámenes ({filteredExamenes.length})</CardTitle>
+              <CardDescription>Lista de todos los exámenes disponibles</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-lab-neutral-200">
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Código</th>
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Nombre</th>
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Categoría</th>
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Precio</th>
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Ayuno</th>
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Estado</th>
+                      <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredExamenes.map((examen) => (
+                      <tr key={examen.codigo_examen} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
+                        <td className="p-4 text-sm font-mono text-lab-neutral-700">{examen.codigo_interno}</td>
+                        <td className="p-4">
+                          <div className="font-medium text-lab-neutral-900">{examen.nombre}</div>
+                          {examen.descripcion && (
+                            <div className="text-sm text-lab-neutral-600 truncate max-w-xs">{examen.descripcion}</div>
+                          )}
+                        </td>
+                        <td className="p-4 text-sm text-lab-neutral-700">{examen.categoria?.nombre || '-'}</td>
+                        <td className="p-4 text-sm font-semibold text-lab-neutral-900">
+                          ${examen.precios?.[0]?.precio ? Number(examen.precios[0].precio).toFixed(2) : '0.00'}
+                        </td>
+                        <td className="p-4">
+                          {examen.requiere_ayuno ? (
+                            <span className="text-xs px-2 py-1 bg-lab-warning-100 text-lab-warning-800 rounded">
+                              {examen.horas_ayuno}h
+                            </span>
+                          ) : (
+                            <span className="text-xs text-lab-neutral-500">No</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <span
+                            className={`text-xs px-2 py-1 rounded ${
+                              examen.activo
+                                ? 'bg-lab-success-100 text-lab-success-800'
+                                : 'bg-lab-neutral-100 text-lab-neutral-600'
+                            }`}
+                          >
+                            {examen.activo ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right space-x-2">
+                          <Button size="sm" variant="outline" onClick={() => handleEdit(examen)}>
+                            Editar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={
+                              examen.activo
+                                ? 'text-lab-danger-600 hover:text-lab-danger-700'
+                                : 'text-lab-success-600 hover:text-lab-success-700'
+                            }
+                            onClick={() => handleToggleActive(examen.codigo_examen, examen.activo)}
+                          >
+                            {examen.activo ? 'Desactivar' : 'Activar'}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {filteredExamenes.length === 0 && (
+                  <div className="text-center py-12 text-lab-neutral-500">
+                    No se encontraron exámenes
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
-      {/* Modal */}
+      {/* Tab Content: Categorias */}
+      {activeTab === 'categorias' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Categorías de Exámenes ({categorias.length})</CardTitle>
+            <CardDescription>Organiza los exámenes por categoría</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-lab-neutral-200">
+                    <th className="text-left p-4 font-semibold text-lab-neutral-900">ID</th>
+                    <th className="text-left p-4 font-semibold text-lab-neutral-900">Nombre</th>
+                    <th className="text-left p-4 font-semibold text-lab-neutral-900">Descripción</th>
+                    <th className="text-left p-4 font-semibold text-lab-neutral-900">Exámenes</th>
+                    <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categorias.map((cat) => {
+                    const examenesEnCategoria = examenes.filter(e => e.codigo_categoria === cat.codigo_categoria).length
+                    return (
+                      <tr key={cat.codigo_categoria} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
+                        <td className="p-4 text-sm font-mono text-lab-neutral-600">{cat.codigo_categoria}</td>
+                        <td className="p-4 font-medium text-lab-neutral-900">{cat.nombre}</td>
+                        <td className="p-4 text-sm text-lab-neutral-600">{cat.descripcion || '-'}</td>
+                        <td className="p-4">
+                          <span className="text-xs px-2 py-1 bg-lab-info-100 text-lab-info-800 rounded">
+                            {examenesEnCategoria} exámenes
+                          </span>
+                        </td>
+                        <td className="p-4 text-right space-x-2">
+                          <Button size="sm" variant="outline" onClick={() => handleOpenCategoriaModal(cat)}>
+                            Editar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-lab-danger-600 hover:text-lab-danger-700"
+                            onClick={() => handleDeleteCategoria(cat.codigo_categoria)}
+                            disabled={examenesEnCategoria > 0}
+                            title={examenesEnCategoria > 0 ? 'No se puede eliminar una categoría con exámenes' : ''}
+                          >
+                            Eliminar
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+
+              {categorias.length === 0 && (
+                <div className="text-center py-12 text-lab-neutral-500">
+                  No hay categorías. Crea la primera para organizar tus exámenes.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Modal Examen */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-xl max-w-2xl w-full my-8">
@@ -633,6 +830,58 @@ export default function ExamenesPage() {
                   Cancelar
                 </Button>
                 <Button type="submit">{editingExamen ? 'Actualizar' : 'Crear'} Examen</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Categoria */}
+      {showCategoriaModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-6 border-b border-lab-neutral-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-lab-neutral-900">
+                  {editingCategoria ? 'Editar Categoría' : 'Nueva Categoría'}
+                </h2>
+                <button onClick={handleCloseCategoriaModal} className="text-lab-neutral-400 hover:text-lab-neutral-600">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleCategoriaSubmit} className="p-6 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="cat_nombre">Nombre *</Label>
+                <Input
+                  id="cat_nombre"
+                  value={categoriaFormData.nombre}
+                  onChange={(e) => setCategoriaFormData({ ...categoriaFormData, nombre: e.target.value })}
+                  placeholder="Hematología"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cat_descripcion">Descripción</Label>
+                <textarea
+                  id="cat_descripcion"
+                  value={categoriaFormData.descripcion}
+                  onChange={(e) => setCategoriaFormData({ ...categoriaFormData, descripcion: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-md border border-lab-neutral-300"
+                  placeholder="Exámenes relacionados con la sangre..."
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t border-lab-neutral-200">
+                <Button type="button" variant="outline" onClick={handleCloseCategoriaModal}>
+                  Cancelar
+                </Button>
+                <Button type="submit">{editingCategoria ? 'Actualizar' : 'Crear'} Categoría</Button>
               </div>
             </form>
           </div>
