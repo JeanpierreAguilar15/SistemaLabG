@@ -847,13 +847,48 @@ export default function ExamenesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="unidad_medida">Unidad</Label>
-                  <Input
+                  <Label htmlFor="unidad_medida">Unidad de Medida</Label>
+                  <select
                     id="unidad_medida"
                     value={formData.unidad_medida}
                     onChange={(e) => setFormData({ ...formData, unidad_medida: e.target.value })}
-                    placeholder="mg/dL"
-                  />
+                    className="w-full h-10 px-3 rounded-md border border-lab-neutral-300 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                  >
+                    <option value="">Seleccionar...</option>
+                    <optgroup label="Concentración">
+                      <option value="mg/dL">mg/dL (miligramos por decilitro)</option>
+                      <option value="g/dL">g/dL (gramos por decilitro)</option>
+                      <option value="g/L">g/L (gramos por litro)</option>
+                      <option value="mmol/L">mmol/L (milimoles por litro)</option>
+                      <option value="μmol/L">μmol/L (micromoles por litro)</option>
+                      <option value="mEq/L">mEq/L (miliequivalentes por litro)</option>
+                    </optgroup>
+                    <optgroup label="Enzimas/Hormonas">
+                      <option value="UI/L">UI/L (unidades internacionales por litro)</option>
+                      <option value="U/L">U/L (unidades por litro)</option>
+                      <option value="mUI/mL">mUI/mL (miliunidades por mililitro)</option>
+                      <option value="μUI/mL">μUI/mL (microunidades por mililitro)</option>
+                      <option value="ng/mL">ng/mL (nanogramos por mililitro)</option>
+                      <option value="pg/mL">pg/mL (picogramos por mililitro)</option>
+                      <option value="ng/dL">ng/dL (nanogramos por decilitro)</option>
+                    </optgroup>
+                    <optgroup label="Hematología">
+                      <option value="células/μL">células/μL</option>
+                      <option value="x10³/μL">x10³/μL (miles por microlitro)</option>
+                      <option value="x10⁶/μL">x10⁶/μL (millones por microlitro)</option>
+                      <option value="mm³">mm³ (milímetros cúbicos)</option>
+                      <option value="fL">fL (femtolitros)</option>
+                      <option value="pg">pg (picogramos)</option>
+                    </optgroup>
+                    <optgroup label="Otros">
+                      <option value="%">% (porcentaje)</option>
+                      <option value="segundos">segundos</option>
+                      <option value="mm/h">mm/h (milímetros por hora)</option>
+                      <option value="pH">pH</option>
+                      <option value="Positivo/Negativo">Positivo/Negativo</option>
+                      <option value="Reactivo/No Reactivo">Reactivo/No Reactivo</option>
+                    </optgroup>
+                  </select>
                 </div>
               </div>
 
