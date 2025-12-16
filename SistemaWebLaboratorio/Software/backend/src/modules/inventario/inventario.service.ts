@@ -2834,7 +2834,7 @@ export class InventarioService {
             stock_nuevo: stockNuevo,
             motivo: `Consumo automático - Examen: ${insumo.examen.nombre} (Resultado #${codigoResultado})`,
             referencia: `RES-${codigoResultado}`,
-            usuario_id: usuarioId,
+            realizado_por: usuarioId,
           },
         });
 
@@ -3224,7 +3224,7 @@ export class InventarioService {
     const ordenesPendientes = await this.prisma.ordenCompraDetalle.count({
       where: {
         codigo_item: codigoItem,
-        orden: {
+        orden_compra: {
           estado: { in: ['BORRADOR', 'EMITIDA'] },
         },
       },

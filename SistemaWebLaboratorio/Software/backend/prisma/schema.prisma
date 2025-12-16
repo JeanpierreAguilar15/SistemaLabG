@@ -552,6 +552,7 @@ model Item {
   movimientos       Movimiento[]
   detalles_orden    OrdenCompraDetalle[]
   insumos_examen    ExamenInsumo[]
+  alertas           AlertaInventario[]
 
   @@map("item")
   @@schema("inventario")
@@ -582,6 +583,7 @@ model Movimiento {
   tipo_movimiento     String    @db.VarChar(50)
   cantidad            Int
   motivo              String?   @db.Text
+  referencia          String?   @db.VarChar(100)
   stock_anterior      Int
   stock_nuevo         Int
   fecha_movimiento    DateTime  @default(now())
@@ -660,6 +662,29 @@ model ExamenInsumo {
   item                 Item      @relation(fields: [codigo_item], references: [codigo_item])
 
   @@map("examen_insumo")
+  @@schema("inventario")
+}
+
+model AlertaInventario {
+  codigo_alerta       Int       @id @default(autoincrement())
+  codigo_item         Int
+  tipo_alerta         String    @db.VarChar(50)   // STOCK_BAJO, STOCK_CRITICO, VENCIMIENTO_PROXIMO
+  prioridad           String    @db.VarChar(20)   // BAJA, MEDIA, ALTA, CRITICA
+  mensaje             String    @db.Text
+  stock_actual        Int?
+  stock_minimo        Int?
+  fecha_vencimiento   DateTime? @db.Date
+  resuelta            Boolean   @default(false)
+  fecha_resolucion    DateTime?
+  resuelta_por        Int?
+  fecha_creacion      DateTime  @default(now())
+
+  item                Item      @relation(fields: [codigo_item], references: [codigo_item])
+
+  @@index([tipo_alerta])
+  @@index([resuelta])
+  @@index([fecha_creacion])
+  @@map("alerta_inventario")
   @@schema("inventario")
 }
 

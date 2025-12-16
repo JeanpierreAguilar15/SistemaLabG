@@ -272,7 +272,7 @@ export class AlertasProgramadasService implements OnModuleInit {
       const resultado = await this.whatsAppService.sendMessage({
         to: '',
         message: mensaje,
-        tipo: 'ALERTA',
+        tipo: 'ALERTA_STOCK',
       });
 
       return { success: resultado.success, enviados: resultado.success ? 1 : 0 };

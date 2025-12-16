@@ -105,14 +105,14 @@ export class PdfInventarioService {
 
     doc
       .font('Helvetica-Bold')
-      .text('Razón Social:', 60, { continued: true })
+      .text('Razón Social:', { continued: true })
       .font('Helvetica')
       .text(` ${orden.proveedor.razon_social}`);
 
     if (orden.proveedor.telefono) {
       doc
         .font('Helvetica-Bold')
-        .text('Teléfono:', 60, { continued: true })
+        .text('Teléfono:', { continued: true })
         .font('Helvetica')
         .text(` ${orden.proveedor.telefono}`, { continued: true });
     }
