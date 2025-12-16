@@ -144,7 +144,13 @@ export default function PreciosPage() {
 
     try {
       if (editingPrecio) {
-        // Update
+        // Update - No enviamos codigo_examen ya que no se puede cambiar
+        const updateData = {
+          precio: precio,
+          fecha_inicio: formData.fecha_inicio || null,
+          fecha_fin: formData.fecha_fin || null,
+          activo: formData.activo,
+        }
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/admin/prices/${editingPrecio.codigo_precio}`,
           {
@@ -153,7 +159,7 @@ export default function PreciosPage() {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${accessToken}`,
             },
-            body: JSON.stringify(precioData),
+            body: JSON.stringify(updateData),
           }
         )
 
