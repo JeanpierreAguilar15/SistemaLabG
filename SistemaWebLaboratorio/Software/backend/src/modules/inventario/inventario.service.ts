@@ -521,22 +521,26 @@ export class InventarioService {
       _count: true,
     });
 
-    // 3. Obtener último movimiento por item usando raw query para eficiencia
-    // Usamos una subquery con DISTINCT ON (PostgreSQL)
-    const ultimosMovimientos = await this.prisma.$queryRaw<Array<{
-      codigo_item: number;
-      fecha_movimiento: Date;
-      tipo_movimiento: string;
-      cantidad: number;
-    }>>`
-      SELECT DISTINCT ON (codigo_item)
-        codigo_item, fecha_movimiento, tipo_movimiento, cantidad
-      FROM inventario.movimiento
-      WHERE codigo_item = ANY(${itemIds})
-      ${filters?.fecha_desde ? Prisma.sql`AND fecha_movimiento >= ${new Date(filters.fecha_desde)}` : Prisma.empty}
-      ${filters?.fecha_hasta ? Prisma.sql`AND fecha_movimiento <= ${new Date(filters.fecha_hasta)}` : Prisma.empty}
-      ORDER BY codigo_item, fecha_movimiento DESC
-    `;
+    // 3. Obtener último movimiento por item usando Prisma query
+    const ultimosMovimientos = await this.prisma.movimiento.findMany({
+      where: {
+        codigo_item: { in: itemIds },
+        ...(filters?.fecha_desde && {
+          fecha_movimiento: { gte: new Date(filters.fecha_desde) },
+        }),
+        ...(filters?.fecha_hasta && {
+          fecha_movimiento: { lte: new Date(filters.fecha_hasta) },
+        }),
+      },
+      orderBy: { fecha_movimiento: 'desc' },
+      distinct: ['codigo_item'],
+      select: {
+        codigo_item: true,
+        fecha_movimiento: true,
+        tipo_movimiento: true,
+        cantidad: true,
+      },
+    });
 
     // Crear mapas para acceso O(1)
     const totalesMap = new Map<number, { entradas: number; salidas: number; total: number }>();
