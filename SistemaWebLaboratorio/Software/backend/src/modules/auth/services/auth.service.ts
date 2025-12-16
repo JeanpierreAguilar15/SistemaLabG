@@ -671,7 +671,6 @@ export class AuthService {
       data: {
         password_hash: newPasswordHash,
         salt,
-        requiere_cambio_password: false,
       },
     });
 

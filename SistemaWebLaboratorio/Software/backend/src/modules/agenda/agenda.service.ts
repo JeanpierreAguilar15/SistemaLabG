@@ -573,7 +573,7 @@ export class AgendaService {
     }
 
     this.logger.log(
-      `Cita autorizada | Cotización: ${cotizacion.numero_cotizacion} | Estado: ${cotizacion.estado} | Método pago: ${cotizacion.metodo_pago_seleccionado || 'N/A'}`,
+      `Cita autorizada | Cotización: ${cotizacion.numero_cotizacion} | Estado: ${cotizacion.estado}`,
     );
 
     // Crear cita en transacción para asegurar consistencia de cupos
