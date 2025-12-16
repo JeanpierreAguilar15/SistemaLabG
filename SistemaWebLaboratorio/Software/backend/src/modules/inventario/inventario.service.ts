@@ -521,32 +521,47 @@ export class InventarioService {
       _count: true,
     });
 
-    // 3. Obtener último movimiento por item usando Prisma query
-    // Construir filtro de fecha correctamente para evitar sobrescritura
-    const fechaFilterUltimo: { gte?: Date; lte?: Date } = {};
-    if (filters?.fecha_desde) {
-      fechaFilterUltimo.gte = new Date(filters.fecha_desde);
-    }
-    if (filters?.fecha_hasta) {
-      fechaFilterUltimo.lte = new Date(filters.fecha_hasta);
-    }
+    // 3. Obtener último movimiento por item
+    // Usamos una query por cada item para obtener el último movimiento
+    const ultimosMovimientos: Array<{
+      codigo_item: number;
+      fecha_movimiento: Date;
+      tipo_movimiento: string;
+      cantidad: number;
+    }> = [];
 
-    const ultimosMovimientos = await this.prisma.movimiento.findMany({
-      where: {
-        codigo_item: { in: itemIds },
-        ...(Object.keys(fechaFilterUltimo).length > 0 && {
-          fecha_movimiento: fechaFilterUltimo,
-        }),
-      },
-      orderBy: { fecha_movimiento: 'desc' },
-      distinct: ['codigo_item'],
-      select: {
-        codigo_item: true,
-        fecha_movimiento: true,
-        tipo_movimiento: true,
-        cantidad: true,
-      },
+    // Obtener el último movimiento de cada item en paralelo
+    const ultimosPromises = itemIds.map(async (itemId) => {
+      const whereClause: any = { codigo_item: itemId };
+      if (filters?.fecha_desde || filters?.fecha_hasta) {
+        whereClause.fecha_movimiento = {};
+        if (filters?.fecha_desde) {
+          whereClause.fecha_movimiento.gte = new Date(filters.fecha_desde);
+        }
+        if (filters?.fecha_hasta) {
+          whereClause.fecha_movimiento.lte = new Date(filters.fecha_hasta);
+        }
+      }
+
+      const ultimo = await this.prisma.movimiento.findFirst({
+        where: whereClause,
+        orderBy: { fecha_movimiento: 'desc' },
+        select: {
+          codigo_item: true,
+          fecha_movimiento: true,
+          tipo_movimiento: true,
+          cantidad: true,
+        },
+      });
+      return ultimo;
     });
+
+    const resultados = await Promise.all(ultimosPromises);
+    for (const mov of resultados) {
+      if (mov) {
+        ultimosMovimientos.push(mov);
+      }
+    }
 
     // Crear mapas para acceso O(1)
     const totalesMap = new Map<number, { entradas: number; salidas: number; total: number }>();

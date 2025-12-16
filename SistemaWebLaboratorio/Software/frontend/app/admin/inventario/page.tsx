@@ -134,7 +134,7 @@ interface Lote {
   cantidad_inicial: number
   cantidad_actual: number
   costo_unitario: string | null
-  codigo_proveedor: number | null
+  proveedor: string | null
   activo: boolean
   fecha_registro: string
   item?: {
@@ -142,9 +142,6 @@ interface Lote {
     nombre: string
     unidad_medida: string
   }
-  proveedor?: {
-    razon_social: string
-  } | null
 }
 
 // Interface for Kardex
@@ -1102,6 +1099,8 @@ export default function InventarioPage() {
   const handleOpenLoteForm = (lote?: Lote) => {
     if (lote) {
       setEditingLote(lote)
+      // Buscar el codigo_proveedor basado en el nombre guardado
+      const matchingProveedor = proveedores.find(p => p.razon_social === lote.proveedor)
       setLoteFormData({
         codigo_item: lote.codigo_item.toString(),
         numero_lote: lote.numero_lote,
@@ -1109,7 +1108,7 @@ export default function InventarioPage() {
         fecha_vencimiento: lote.fecha_vencimiento?.split('T')[0] || '',
         cantidad_inicial: lote.cantidad_inicial.toString(),
         costo_unitario: lote.costo_unitario || '',
-        codigo_proveedor: lote.codigo_proveedor?.toString() || '',
+        codigo_proveedor: matchingProveedor?.codigo_proveedor.toString() || '',
       })
     } else {
       setEditingLote(null)
@@ -2687,7 +2686,7 @@ export default function InventarioPage() {
                               </span>
                             </td>
                             <td className="p-4 text-sm text-lab-neutral-600">
-                              {lote.proveedor?.razon_social || '-'}
+                              {lote.proveedor || '-'}
                             </td>
                             <td className="p-4 text-right">
                               <Button
