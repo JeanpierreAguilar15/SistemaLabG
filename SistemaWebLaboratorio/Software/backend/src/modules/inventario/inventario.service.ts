@@ -2913,7 +2913,8 @@ export class InventarioService {
         tipo_alerta: tipoAlerta,
         mensaje: `${tipoAlerta === 'STOCK_CRITICO' ? 'SIN STOCK' : 'Stock bajo'}: ${item.nombre} (${item.codigo_interno}) - Actual: ${stockActual}, Mínimo: ${item.stock_minimo}`,
         prioridad,
-        fecha_alerta: new Date(),
+        stock_actual: stockActual,
+        stock_minimo: item.stock_minimo,
       },
     });
 
