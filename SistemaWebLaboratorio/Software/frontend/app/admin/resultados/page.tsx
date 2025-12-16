@@ -252,12 +252,14 @@ export default function ResultadosAdminPage() {
     switch (estado) {
       case 'VALIDADO':
         return 'bg-lab-success-100 text-lab-success-800'
+      case 'LISTO':
+        return 'bg-lab-primary-100 text-lab-primary-800'
+      case 'ENTREGADO':
+        return 'bg-lab-neutral-100 text-lab-neutral-800'
       case 'EN_PROCESO':
         return 'bg-lab-warning-100 text-lab-warning-800'
-      case 'PENDIENTE':
-        return 'bg-lab-info-100 text-lab-info-800'
       default:
-        return 'bg-lab-neutral-100 text-lab-neutral-600'
+        return 'bg-lab-info-100 text-lab-info-600'
     }
   }
 
