@@ -31,7 +31,7 @@ interface Examen {
   unidad_medida: string | null
   activo: boolean
   categoria?: { nombre: string }
-  precios?: Array<{ precio: number; activo: boolean }>
+  precios?: Array<{ codigo_precio: number; precio: number; activo: boolean }>
 }
 
 type Tab = 'examenes' | 'categorias'
@@ -196,6 +196,38 @@ export default function ExamenesPage() {
         )
 
         if (response.ok) {
+          // Actualizar o crear precio si se especificó
+          if (formData.precio) {
+            const precioActual = editingExamen.precios?.[0]
+            if (precioActual?.codigo_precio) {
+              // Actualizar precio existente
+              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/prices/${precioActual.codigo_precio}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                  precio: parseFloat(formData.precio),
+                  activo: true,
+                }),
+              })
+            } else {
+              // Crear nuevo precio si no existe
+              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/prices`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                  codigo_examen: editingExamen.codigo_examen,
+                  precio: parseFloat(formData.precio),
+                  activo: true,
+                }),
+              })
+            }
+          }
           setMessage({ type: 'success', text: 'Examen actualizado correctamente' })
           loadExamenes()
           handleCloseModal()
