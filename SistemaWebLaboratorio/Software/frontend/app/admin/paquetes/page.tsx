@@ -53,7 +53,6 @@ export default function PackagesManagement() {
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
-    precio_paquete: '',
     descuento: '0',
     activo: true,
     examenes: [] as number[],
@@ -122,7 +121,6 @@ export default function PackagesManagement() {
       setFormData({
         nombre: pkg.nombre,
         descripcion: pkg.descripcion || '',
-        precio_paquete: String(pkg.precio_paquete || ''),
         descuento: String(pkg.descuento || '0'),
         activo: pkg.activo,
         examenes: pkg.examenes?.map(e => e.codigo_examen) || [],
@@ -132,7 +130,6 @@ export default function PackagesManagement() {
       setFormData({
         nombre: '',
         descripcion: '',
-        precio_paquete: '',
         descuento: '0',
         activo: true,
         examenes: [],
@@ -147,7 +144,6 @@ export default function PackagesManagement() {
     setFormData({
       nombre: '',
       descripcion: '',
-      precio_paquete: '',
       descuento: '0',
       activo: true,
       examenes: [],
@@ -188,8 +184,8 @@ export default function PackagesManagement() {
         body: JSON.stringify({
           nombre: formData.nombre,
           descripcion: formData.descripcion || null,
-          precio_paquete: parseFloat(formData.precio_paquete),
-          descuento: parseFloat(formData.descuento),
+          precio_paquete: calculateFinalPrice(),
+          descuento: parseFloat(formData.descuento) || 0,
           activo: formData.activo,
           examenes: formData.examenes,
         }),
@@ -235,20 +231,26 @@ export default function PackagesManagement() {
   }
 
   const calculateTotalPrice = () => {
-    if (formData.examenes.length === 0) return '0.00'
+    if (formData.examenes.length === 0) return 0
     const total = formData.examenes.reduce((sum, examId) => {
       const exam = exams.find(e => e.codigo_examen === examId)
       const precio = exam?.precios?.[0]?.precio || 0
       return sum + Number(precio)
     }, 0)
-    return total.toFixed(2)
+    return total
+  }
+
+  const calculateFinalPrice = () => {
+    const total = calculateTotalPrice()
+    const descuento = parseFloat(formData.descuento) || 0
+    const finalPrice = total - (total * descuento / 100)
+    return finalPrice
   }
 
   const calculateSavings = () => {
-    const total = parseFloat(calculateTotalPrice())
-    const packagePrice = parseFloat(formData.precio_paquete || '0')
-    const savings = total - packagePrice
-    return savings > 0 ? savings.toFixed(2) : '0.00'
+    const total = calculateTotalPrice()
+    const finalPrice = calculateFinalPrice()
+    return total - finalPrice
   }
 
   if (!mounted) {
@@ -339,22 +341,6 @@ export default function PackagesManagement() {
                     />
                   </div>
 
-                  <div>
-                    <label htmlFor="precio_paquete" className="block text-sm font-medium text-lab-neutral-700 mb-1">
-                      Precio del Paquete (USD) *
-                    </label>
-                    <input
-                      type="number"
-                      id="precio_paquete"
-                      name="precio_paquete"
-                      value={formData.precio_paquete}
-                      onChange={handleInputChange}
-                      step="0.01"
-                      min="0"
-                      required
-                      className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
-                    />
-                  </div>
 
                   <div>
                     <label htmlFor="descuento" className="block text-sm font-medium text-lab-neutral-700 mb-1">
@@ -391,16 +377,18 @@ export default function PackagesManagement() {
                   {formData.examenes.length > 0 && (
                     <div className="bg-lab-neutral-50 rounded-lg p-4 space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span className="text-lab-neutral-600">Precio individual de exámenes:</span>
-                        <span className="font-semibold">${calculateTotalPrice()}</span>
+                        <span className="text-lab-neutral-600">Suma de exámenes:</span>
+                        <span className="font-semibold">${calculateTotalPrice().toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-lab-neutral-600">Precio del paquete:</span>
-                        <span className="font-semibold">${formData.precio_paquete || '0.00'}</span>
-                      </div>
-                      <div className="flex justify-between text-sm pt-2 border-t border-lab-neutral-200">
-                        <span className="text-lab-success-600 font-medium">Ahorro:</span>
-                        <span className="font-bold text-lab-success-600">${calculateSavings()}</span>
+                      {parseFloat(formData.descuento) > 0 && (
+                        <div className="flex justify-between text-sm text-lab-success-600">
+                          <span>Descuento ({formData.descuento}%):</span>
+                          <span className="font-semibold">-${calculateSavings().toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-lg pt-2 border-t border-lab-neutral-200">
+                        <span className="text-lab-primary-700 font-bold">Precio Final:</span>
+                        <span className="font-bold text-lab-primary-700">${calculateFinalPrice().toFixed(2)}</span>
                       </div>
                     </div>
                   )}
