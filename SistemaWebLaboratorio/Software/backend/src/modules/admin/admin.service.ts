@@ -528,7 +528,7 @@ export class AdminService {
     const price = await this.prisma.precio.create({
       data: {
         precio: data.precio,
-        fecha_inicio: data.fecha_inicio,
+        fecha_inicio: data.fecha_inicio || new Date(),
         fecha_fin: data.fecha_fin,
         activo: data.activo !== undefined ? data.activo : true,
         examen: {

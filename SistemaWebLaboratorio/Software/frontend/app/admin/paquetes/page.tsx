@@ -29,11 +29,11 @@ interface Package {
 interface Exam {
   codigo_examen: number
   nombre: string
-  precio: string
   codigo_categoria: number
   categoria: {
     nombre: string
   }
+  precios?: Array<{ codigo_precio: number; precio: number; activo: boolean }>
 }
 
 interface Message {
@@ -238,7 +238,8 @@ export default function PackagesManagement() {
     if (formData.examenes.length === 0) return '0.00'
     const total = formData.examenes.reduce((sum, examId) => {
       const exam = exams.find(e => e.codigo_examen === examId)
-      return sum + (exam ? parseFloat(exam.precio) : 0)
+      const precio = exam?.precios?.[0]?.precio || 0
+      return sum + Number(precio)
     }, 0)
     return total.toFixed(2)
   }
@@ -434,7 +435,7 @@ export default function PackagesManagement() {
                                 <div className="text-sm font-medium text-lab-neutral-900">{exam.nombre}</div>
                                 <div className="text-xs text-lab-neutral-500">{exam.categoria.nombre}</div>
                               </div>
-                              <div className="text-sm font-semibold text-lab-primary-600">${Number(exam.precio).toFixed(2)}</div>
+                              <div className="text-sm font-semibold text-lab-primary-600">${Number(exam.precios?.[0]?.precio || 0).toFixed(2)}</div>
                             </div>
                           </div>
                         ))}

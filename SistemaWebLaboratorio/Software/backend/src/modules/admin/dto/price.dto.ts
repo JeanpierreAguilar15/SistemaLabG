@@ -19,10 +19,10 @@ export class CreatePriceDto {
   @Min(0, { message: 'El precio no puede ser negativo' })
   precio: number;
 
+  @IsOptional()
   @IsDate({ message: 'La fecha de inicio debe ser válida' })
-  @IsNotEmpty({ message: 'La fecha de inicio es requerida' })
   @Type(() => Date)
-  fecha_inicio: Date;
+  fecha_inicio?: Date;
 
   @IsOptional()
   @IsDate({ message: 'La fecha de fin debe ser válida' })
