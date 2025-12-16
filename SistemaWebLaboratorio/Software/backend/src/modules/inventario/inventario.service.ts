@@ -522,14 +522,20 @@ export class InventarioService {
     });
 
     // 3. Obtener último movimiento por item usando Prisma query
+    // Construir filtro de fecha correctamente para evitar sobrescritura
+    const fechaFilterUltimo: { gte?: Date; lte?: Date } = {};
+    if (filters?.fecha_desde) {
+      fechaFilterUltimo.gte = new Date(filters.fecha_desde);
+    }
+    if (filters?.fecha_hasta) {
+      fechaFilterUltimo.lte = new Date(filters.fecha_hasta);
+    }
+
     const ultimosMovimientos = await this.prisma.movimiento.findMany({
       where: {
         codigo_item: { in: itemIds },
-        ...(filters?.fecha_desde && {
-          fecha_movimiento: { gte: new Date(filters.fecha_desde) },
-        }),
-        ...(filters?.fecha_hasta && {
-          fecha_movimiento: { lte: new Date(filters.fecha_hasta) },
+        ...(Object.keys(fechaFilterUltimo).length > 0 && {
+          fecha_movimiento: fechaFilterUltimo,
         }),
       },
       orderBy: { fecha_movimiento: 'desc' },
@@ -1280,6 +1286,7 @@ export class InventarioService {
     fecha_vencimiento?: Date;
     cantidad_inicial: number;
     proveedor?: string;
+    codigo_proveedor?: number;
   }, adminId: number) {
     const item = await this.prisma.item.findUnique({
       where: { codigo_item: data.codigo_item },
@@ -1287,6 +1294,17 @@ export class InventarioService {
 
     if (!item) {
       throw new NotFoundException('Item no encontrado');
+    }
+
+    // Resolver nombre del proveedor si se pasa codigo_proveedor
+    let proveedorNombre = data.proveedor || null;
+    if (data.codigo_proveedor) {
+      const proveedor = await this.prisma.proveedor.findUnique({
+        where: { codigo_proveedor: data.codigo_proveedor },
+      });
+      if (proveedor) {
+        proveedorNombre = proveedor.razon_social;
+      }
     }
 
     // Crear lote y actualizar stock en transacción
@@ -1299,7 +1317,7 @@ export class InventarioService {
           fecha_vencimiento: data.fecha_vencimiento || null,
           cantidad_inicial: data.cantidad_inicial,
           cantidad_actual: data.cantidad_inicial,
-          proveedor: data.proveedor || null,
+          proveedor: proveedorNombre,
         },
         include: { item: true },
       });
@@ -1333,6 +1351,7 @@ export class InventarioService {
     fecha_fabricacion?: Date;
     fecha_vencimiento?: Date;
     proveedor?: string;
+    codigo_proveedor?: number;
   }, adminId: number) {
     const lote = await this.prisma.lote.findUnique({
       where: { codigo_lote },
@@ -1342,13 +1361,24 @@ export class InventarioService {
       throw new NotFoundException('Lote no encontrado');
     }
 
+    // Resolver nombre del proveedor si se pasa codigo_proveedor
+    let proveedorNombre = data.proveedor;
+    if (data.codigo_proveedor) {
+      const proveedor = await this.prisma.proveedor.findUnique({
+        where: { codigo_proveedor: data.codigo_proveedor },
+      });
+      if (proveedor) {
+        proveedorNombre = proveedor.razon_social;
+      }
+    }
+
     return this.prisma.lote.update({
       where: { codigo_lote },
       data: {
         numero_lote: data.numero_lote,
         fecha_fabricacion: data.fecha_fabricacion,
         fecha_vencimiento: data.fecha_vencimiento,
-        proveedor: data.proveedor,
+        proveedor: proveedorNombre,
       },
     });
   }

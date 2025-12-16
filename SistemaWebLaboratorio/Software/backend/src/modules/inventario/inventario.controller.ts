@@ -325,6 +325,7 @@ export class InventarioController {
       fecha_vencimiento?: Date;
       cantidad_inicial: number;
       proveedor?: string;
+      codigo_proveedor?: number;
     },
   ) {
     return this.inventarioService.createLote(data, adminId);
@@ -340,6 +341,7 @@ export class InventarioController {
       fecha_fabricacion?: Date;
       fecha_vencimiento?: Date;
       proveedor?: string;
+      codigo_proveedor?: number;
     },
   ) {
     return this.inventarioService.updateLote(id, data, adminId);
