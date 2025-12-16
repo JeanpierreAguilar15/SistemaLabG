@@ -57,6 +57,10 @@ export class CreateOrdenCompraDto {
 
   @IsOptional()
   @IsString()
+  fecha_entrega_esperada?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(500, { message: 'Las observaciones no pueden exceder 500 caracteres' })
   observaciones?: string;
 
@@ -64,7 +68,7 @@ export class CreateOrdenCompraDto {
   @ValidateNested({ each: true })
   @Type(() => ItemOrdenCompraDto)
   @IsNotEmpty({ message: 'Debe incluir al menos un item en la orden' })
-  items: ItemOrdenCompraDto[];
+  detalles: ItemOrdenCompraDto[];
 }
 
 /**
@@ -74,6 +78,10 @@ export class UpdateOrdenCompraDto {
   @IsOptional()
   @IsInt()
   codigo_proveedor?: number;
+
+  @IsOptional()
+  @IsString()
+  fecha_entrega_esperada?: string;
 
   @IsOptional()
   @IsEnum(EstadoOrdenCompra)
@@ -88,7 +96,7 @@ export class UpdateOrdenCompraDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ItemOrdenCompraDto)
-  items?: ItemOrdenCompraDto[];
+  detalles?: ItemOrdenCompraDto[];
 }
 
 /**
