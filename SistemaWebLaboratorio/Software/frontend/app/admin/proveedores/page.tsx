@@ -77,7 +77,8 @@ export default function SuppliersManagement() {
   const loadSuppliers = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`, {
+      // Incluir proveedores inactivos para mostrarlos en la lista
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers?includeInactive=true`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -229,6 +230,35 @@ export default function SuppliersManagement() {
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.message || 'Error al desactivar proveedor' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    }
+  }
+
+  const handleToggleActive = async (codigo_proveedor: number, activar: boolean) => {
+    const mensaje = activar ? '¿Deseas reactivar este proveedor?' : '¿Deseas desactivar este proveedor?'
+    if (!confirm(mensaje)) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers/${codigo_proveedor}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ activo: activar }),
+      })
+
+      if (response.ok) {
+        setMessage({
+          type: 'success',
+          text: activar ? '✅ Proveedor activado correctamente' : '✅ Proveedor desactivado correctamente',
+        })
+        loadSuppliers()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al cambiar estado del proveedor' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
@@ -457,20 +487,27 @@ export default function SuppliersManagement() {
             </thead>
             <tbody className="bg-white divide-y divide-lab-neutral-200">
               {suppliers.map((supplier) => (
-                <tr key={supplier.codigo_proveedor} className="hover:bg-lab-neutral-50">
+                <tr
+                  key={supplier.codigo_proveedor}
+                  className={`hover:bg-lab-neutral-50 ${!supplier.activo ? 'bg-lab-neutral-50 opacity-60' : ''}`}
+                >
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-lab-neutral-900 font-mono">{supplier.ruc}</div>
+                    <div className={`text-sm font-medium font-mono ${!supplier.activo ? 'text-lab-neutral-500' : 'text-lab-neutral-900'}`}>
+                      {supplier.ruc}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-lab-neutral-900">{supplier.razon_social}</div>
+                    <div className={`text-sm font-medium ${!supplier.activo ? 'text-lab-neutral-500 line-through' : 'text-lab-neutral-900'}`}>
+                      {supplier.razon_social}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-lab-neutral-600">
+                    <div className={`text-sm ${!supplier.activo ? 'text-lab-neutral-400' : 'text-lab-neutral-600'}`}>
                       {supplier.nombre_comercial || '-'}
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-lab-neutral-600">
+                    <div className={`text-sm ${!supplier.activo ? 'text-lab-neutral-400' : 'text-lab-neutral-600'}`}>
                       {supplier.telefono && <div>{supplier.telefono}</div>}
                       {supplier.email && <div className="text-xs">{supplier.email}</div>}
                       {!supplier.telefono && !supplier.email && '-'}
@@ -481,7 +518,7 @@ export default function SuppliersManagement() {
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         supplier.activo
                           ? 'bg-lab-success-100 text-lab-success-800'
-                          : 'bg-lab-neutral-100 text-lab-neutral-800'
+                          : 'bg-red-100 text-red-800'
                       }`}
                     >
                       {supplier.activo ? 'Activo' : 'Inactivo'}
@@ -495,14 +532,25 @@ export default function SuppliersManagement() {
                     >
                       Editar
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(supplier.codigo_proveedor)}
-                      className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
-                    >
-                      Desactivar
-                    </Button>
+                    {supplier.activo ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleToggleActive(supplier.codigo_proveedor, false)}
+                        className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                      >
+                        Desactivar
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleToggleActive(supplier.codigo_proveedor, true)}
+                        className="text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50"
+                      >
+                        Activar
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}

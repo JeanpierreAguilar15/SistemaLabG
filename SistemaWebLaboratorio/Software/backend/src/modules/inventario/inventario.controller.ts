@@ -254,8 +254,9 @@ export class InventarioController {
   // ==================== PROVEEDORES ====================
 
   @Get('suppliers')
-  async getAllSuppliers() {
-    return this.inventarioService.getAllSuppliers();
+  @ApiQuery({ name: 'includeInactive', required: false, description: 'Incluir proveedores desactivados' })
+  async getAllSuppliers(@Query('includeInactive') includeInactive?: string) {
+    return this.inventarioService.getAllSuppliers(includeInactive === 'true');
   }
 
   @Get('suppliers/:id')

@@ -52,6 +52,14 @@ interface PaginationInfo {
   totalPages: number
 }
 
+interface OrderStats {
+  total: number
+  borradores: number
+  emitidas: number
+  recibidasMes: number
+  montoPendiente: number
+}
+
 const estadoColors: Record<string, string> = {
   BORRADOR: 'bg-gray-100 text-gray-800',
   EMITIDA: 'bg-blue-100 text-blue-800',
@@ -80,6 +88,13 @@ export default function OrdenesCompraPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [pagination, setPagination] = useState<PaginationInfo | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [stats, setStats] = useState<OrderStats>({
+    total: 0,
+    borradores: 0,
+    emitidas: 0,
+    recibidasMes: 0,
+    montoPendiente: 0,
+  })
 
   // Form state
   const [formData, setFormData] = useState({
@@ -93,6 +108,7 @@ export default function OrdenesCompraPage() {
     loadOrdenes()
     loadProveedores()
     loadItems()
+    loadStats()
   }, [currentPage, filterEstado])
 
   const loadOrdenes = async () => {
@@ -148,6 +164,46 @@ export default function OrdenesCompraPage() {
       }
     } catch (error) {
       console.error('Error loading items:', error)
+    }
+  }
+
+  const loadStats = async () => {
+    try {
+      // Cargar todas las órdenes para calcular estadísticas
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders?limit=1000`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+      if (response.ok) {
+        const result = await response.json()
+        const allOrders: OrdenCompra[] = result.data || []
+
+        // Calcular estadísticas
+        const borradores = allOrders.filter((o) => o.estado === 'BORRADOR')
+        const emitidas = allOrders.filter((o) => o.estado === 'EMITIDA')
+
+        // Órdenes recibidas este mes
+        const now = new Date()
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+        const recibidasMes = allOrders.filter((o) => {
+          if (o.estado !== 'RECIBIDA') return false
+          const fechaOrden = new Date(o.fecha_orden)
+          return fechaOrden >= firstDayOfMonth
+        })
+
+        // Monto pendiente de recibir (órdenes emitidas)
+        const montoPendiente = emitidas.reduce((sum, o) => sum + Number(o.total), 0)
+
+        setStats({
+          total: allOrders.length,
+          borradores: borradores.length,
+          emitidas: emitidas.length,
+          recibidasMes: recibidasMes.length,
+          montoPendiente,
+        })
+      }
+    } catch (error) {
+      console.error('Error loading stats:', error)
     }
   }
 
@@ -460,6 +516,92 @@ export default function OrdenesCompraPage() {
         </div>
       )}
 
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <Card className="bg-gradient-to-br from-lab-primary-50 to-white border-lab-primary-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-lab-primary-600">Total Órdenes</p>
+                <p className="text-3xl font-bold text-lab-primary-900">{stats.total}</p>
+              </div>
+              <div className="p-3 bg-lab-primary-100 rounded-full">
+                <svg className="w-6 h-6 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-gray-50 to-white border-gray-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">En Borrador</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.borradores}</p>
+              </div>
+              <div className="p-3 bg-gray-100 rounded-full">
+                <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-600">Emitidas</p>
+                <p className="text-3xl font-bold text-blue-900">{stats.emitidas}</p>
+                <p className="text-xs text-blue-500">Pendientes de recibir</p>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-full">
+                <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-50 to-white border-green-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-green-600">Recibidas (Mes)</p>
+                <p className="text-3xl font-bold text-green-900">{stats.recibidasMes}</p>
+                <p className="text-xs text-green-500">{new Date().toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })}</p>
+              </div>
+              <div className="p-3 bg-green-100 rounded-full">
+                <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-amber-600">Monto Pendiente</p>
+                <p className="text-2xl font-bold text-amber-900">{formatCurrency(stats.montoPendiente)}</p>
+                <p className="text-xs text-amber-500">En órdenes emitidas</p>
+              </div>
+              <div className="p-3 bg-amber-100 rounded-full">
+                <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
@@ -564,7 +706,25 @@ export default function OrdenesCompraPage() {
             </table>
 
             {ordenes.length === 0 && (
-              <div className="text-center py-12 text-lab-neutral-500">No se encontraron órdenes</div>
+              <div className="text-center py-12">
+                <svg className="w-16 h-16 mx-auto text-lab-neutral-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-lab-neutral-500 text-lg mb-2">No se encontraron órdenes</p>
+                <p className="text-lab-neutral-400 text-sm mb-4">
+                  {filterEstado !== 'all'
+                    ? `No hay órdenes con estado "${estadoLabels[filterEstado as keyof typeof estadoLabels] || filterEstado}"`
+                    : 'Crea tu primera orden de compra para comenzar'}
+                </p>
+                {filterEstado === 'all' && (
+                  <Button onClick={() => setShowModal(true)}>
+                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Crear Primera Orden
+                  </Button>
+                )}
+              </div>
             )}
           </div>
 

@@ -419,6 +419,7 @@ export default function InventarioPage() {
     if (activeTab === 'kardex') {
       loadItems()
       loadKardexGlobal()
+      loadProveedores() // Necesario para el modal "Generar Pedido"
     }
   }, [activeTab])
 

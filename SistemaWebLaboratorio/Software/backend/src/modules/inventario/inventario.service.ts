@@ -1016,10 +1016,13 @@ export class InventarioService {
 
   // ==================== PROVEEDORES ====================
 
-  async getAllSuppliers() {
+  async getAllSuppliers(includeInactive: boolean = false) {
     return this.prisma.proveedor.findMany({
-      where: { activo: true },
-      orderBy: { nombre_comercial: 'asc' },
+      where: includeInactive ? {} : { activo: true },
+      orderBy: [
+        { activo: 'desc' }, // Activos primero
+        { razon_social: 'asc' },
+      ],
     });
   }
 
