@@ -627,6 +627,185 @@ export class PdfInventarioService {
     doc.end();
   }
 
+  /**
+   * Genera PDF del Kardex Global de Inventario
+   */
+  async generateKardexGlobalPdf(data: any, res: Response): Promise<void> {
+    const doc = new PDFDocument({
+      size: 'A4',
+      layout: 'landscape',
+      margin: 40,
+      info: {
+        Title: 'Kardex Global de Inventario',
+        Author: 'Sistema Laboratorio Franz',
+      },
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=kardex-global-${Date.now()}.pdf`,
+    );
+
+    doc.pipe(res);
+
+    // === ENCABEZADO ===
+    doc
+      .fontSize(16)
+      .font('Helvetica-Bold')
+      .text('LABORATORIO CLÍNICO FRANZ', { align: 'center' });
+
+    doc
+      .fontSize(14)
+      .text('KARDEX GLOBAL DE INVENTARIO', { align: 'center' });
+
+    doc
+      .fontSize(10)
+      .font('Helvetica')
+      .text(`Generado: ${this.formatDateTime(new Date())}`, { align: 'center' });
+
+    doc.moveDown();
+
+    // === RESUMEN ===
+    doc
+      .fontSize(11)
+      .font('Helvetica-Bold')
+      .text('RESUMEN GENERAL');
+
+    doc
+      .fontSize(10)
+      .font('Helvetica')
+      .text(`Total ítems: ${data.resumen.total_items}`, { continued: true })
+      .text(`    Entradas: ${data.resumen.total_entradas}`, { continued: true })
+      .text(`    Salidas: ${data.resumen.total_salidas}`, { continued: true })
+      .text(`    Valor total: $${data.resumen.valor_total_inventario.toFixed(2)}`);
+
+    doc
+      .text(`Ítems agotados: ${data.resumen.items_agotados}`, { continued: true })
+      .text(`    Ítems críticos: ${data.resumen.items_criticos}`, { continued: true })
+      .text(`    Ítems bajos: ${data.resumen.items_bajos}`);
+
+    doc.moveDown();
+
+    // === TABLA DE ÍTEMS ===
+    const tableTop = doc.y;
+    const headers = [
+      'Código',
+      'Nombre',
+      'Categoría',
+      'U.M.',
+      'Stock',
+      'Mín.',
+      'Entradas',
+      'Salidas',
+      'Costo U.',
+      'Valor Inv.',
+      'Estado',
+    ];
+    const colWidths = [55, 120, 75, 40, 45, 40, 50, 50, 55, 60, 55];
+    let xPos = 40;
+
+    // Header de tabla
+    doc.rect(40, tableTop, 745, 18).fill('#1e3a5f');
+    doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+
+    headers.forEach((header, i) => {
+      doc.text(header, xPos + 2, tableTop + 4, {
+        width: colWidths[i] - 4,
+        align: i >= 4 ? 'right' : 'left',
+      });
+      xPos += colWidths[i];
+    });
+
+    // Filas de datos
+    let rowY = tableTop + 18;
+    doc.font('Helvetica').fontSize(7);
+    let itemCount = 0;
+
+    for (const item of data.items) {
+      if (rowY > doc.page.height - 60) {
+        doc.addPage();
+        rowY = 40;
+        itemCount = 0;
+
+        // Repetir header en nueva página
+        xPos = 40;
+        doc.rect(40, rowY, 745, 18).fill('#1e3a5f');
+        doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+        headers.forEach((header, i) => {
+          doc.text(header, xPos + 2, rowY + 4, {
+            width: colWidths[i] - 4,
+            align: i >= 4 ? 'right' : 'left',
+          });
+          xPos += colWidths[i];
+        });
+        rowY += 18;
+        doc.font('Helvetica').fontSize(7);
+      }
+
+      xPos = 40;
+
+      // Color de fondo según estado
+      let bgColor = '#ffffff';
+      if (item.estado_stock === 'AGOTADO') {
+        bgColor = '#fee2e2'; // Rojo claro
+      } else if (item.estado_stock === 'CRITICO') {
+        bgColor = '#fef3c7'; // Amarillo claro
+      } else if (item.estado_stock === 'BAJO') {
+        bgColor = '#fef9c3'; // Amarillo muy claro
+      } else if (itemCount % 2 === 1) {
+        bgColor = '#f8fafc';
+      }
+
+      doc.rect(40, rowY, 745, 16).fill(bgColor);
+      doc.fillColor('#000000');
+
+      const estadoLabel = {
+        NORMAL: 'Normal',
+        BAJO: 'Bajo',
+        CRITICO: 'Crítico',
+        AGOTADO: 'Agotado',
+      }[item.estado_stock] || item.estado_stock;
+
+      const rowData = [
+        item.codigo_interno || '-',
+        item.nombre.substring(0, 25),
+        (item.categoria || 'Sin cat.').substring(0, 15),
+        item.unidad_medida || '-',
+        item.stock_actual.toString(),
+        item.stock_minimo.toString(),
+        item.total_entradas.toString(),
+        item.total_salidas.toString(),
+        `$${item.costo_unitario.toFixed(2)}`,
+        `$${item.valor_inventario.toFixed(2)}`,
+        estadoLabel,
+      ];
+
+      rowData.forEach((cell, i) => {
+        doc.text(cell, xPos + 2, rowY + 3, {
+          width: colWidths[i] - 4,
+          align: i >= 4 ? 'right' : 'left',
+        });
+        xPos += colWidths[i];
+      });
+
+      rowY += 16;
+      itemCount++;
+    }
+
+    // Pie de página
+    doc
+      .fontSize(7)
+      .fillColor('#666666')
+      .text(
+        `Generado: ${this.formatDateTime(new Date())} | Sistema Laboratorio Franz | Total: ${data.items.length} ítems`,
+        40,
+        doc.page.height - 30,
+      );
+
+    doc.end();
+  }
+
   // === UTILIDADES ===
 
   private formatDate(date: Date | string): string {

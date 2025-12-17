@@ -5,7 +5,7 @@ import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { validateStockRanges, validatePriceRelation, formatDateTime, formatDate } from '@/lib/utils'
+import { validateStockRanges, validatePriceRelation, formatDateTime, formatDate, formatCurrency } from '@/lib/utils'
 
 // Interfaces for Items
 interface ItemInventario {
@@ -341,6 +341,23 @@ export default function InventarioPage() {
     selected: boolean
   }>>([])
 
+  // Generar Pedido de Reposición state
+  const [showGenerarPedidoModal, setShowGenerarPedidoModal] = useState(false)
+  const [generarPedidoItems, setGenerarPedidoItems] = useState<Array<{
+    codigo_item: number
+    codigo_interno: string
+    nombre: string
+    unidad_medida: string
+    stock_actual: number
+    stock_minimo: number
+    costo_unitario: number
+    estado_stock: string
+    cantidad_pedir: number
+    codigo_proveedor: string
+    selected: boolean
+  }>>([])
+  const [generarPedidoLoading, setGenerarPedidoLoading] = useState(false)
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -571,7 +588,7 @@ export default function InventarioPage() {
       if (!validatePriceRelation(precioVenta, costoUnitario)) {
         setMessage({
           type: 'error',
-          text: `El precio de venta ($${precioVenta.toFixed(2)}) debe ser mayor o igual al costo unitario ($${costoUnitario.toFixed(2)})`
+          text: `El precio de venta (${formatCurrency(precioVenta)}) debe ser mayor o igual al costo unitario (${formatCurrency(costoUnitario)})`
         })
         return
       }
@@ -1306,6 +1323,43 @@ export default function InventarioPage() {
     }
   }
 
+  // Exportar Kardex Global a PDF
+  const exportKardexGlobalPdf = async () => {
+    try {
+      setMessage({ type: 'info', text: 'Generando PDF...' })
+      const params = new URLSearchParams()
+      if (kardexFechaDesde) params.append('fecha_desde', kardexFechaDesde)
+      if (kardexFechaHasta) params.append('fecha_hasta', kardexFechaHasta)
+
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/kardex-global/pdf?${params.toString()}`
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const downloadUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = `kardex-global-${new Date().toISOString().split('T')[0]}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(downloadUrl)
+        setMessage({ type: 'success', text: 'PDF descargado exitosamente' })
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setMessage({ type: 'error', text: errorData.message || 'Error al generar PDF' })
+      }
+    } catch (error) {
+      console.error('Error exportando PDF:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al exportar PDF' })
+    }
+  }
+
   // Cambiar a vista de item individual desde el resumen global
   const handleViewItemKardex = (codigoItem: number) => {
     setSelectedItemKardex(codigoItem.toString())
@@ -1319,6 +1373,127 @@ export default function InventarioPage() {
     setKardexViewMode('global')
     setKardexData(null)
     setSelectedItemKardex('')
+  }
+
+  // ==================== GENERAR PEDIDO DE REPOSICIÓN ====================
+  const openGenerarPedidoModal = () => {
+    if (!kardexGlobal) {
+      setMessage({ type: 'error', text: 'No hay datos de Kardex Global disponibles' })
+      return
+    }
+
+    // Filtrar items con stock bajo, crítico o agotado
+    const itemsBajoStock = kardexGlobal.items
+      .filter(item => ['BAJO', 'CRITICO', 'AGOTADO'].includes(item.estado_stock))
+      .map(item => ({
+        codigo_item: item.codigo_item,
+        codigo_interno: item.codigo_interno,
+        nombre: item.nombre,
+        unidad_medida: item.unidad_medida,
+        stock_actual: item.stock_actual,
+        stock_minimo: item.stock_minimo,
+        costo_unitario: item.costo_unitario,
+        estado_stock: item.estado_stock,
+        cantidad_pedir: Math.max(item.stock_minimo - item.stock_actual + 10, 1), // Sugiere cantidad
+        codigo_proveedor: '',
+        selected: true, // Pre-seleccionado
+      }))
+
+    if (itemsBajoStock.length === 0) {
+      setMessage({ type: 'info', text: 'No hay items con stock bajo, crítico o agotado' })
+      return
+    }
+
+    setGenerarPedidoItems(itemsBajoStock)
+    setShowGenerarPedidoModal(true)
+  }
+
+  const handleGenerarPedidoItemChange = (codigoItem: number, field: string, value: any) => {
+    setGenerarPedidoItems(prev =>
+      prev.map(item =>
+        item.codigo_item === codigoItem
+          ? { ...item, [field]: value }
+          : item
+      )
+    )
+  }
+
+  const handleToggleAllPedidoItems = (selected: boolean) => {
+    setGenerarPedidoItems(prev =>
+      prev.map(item => ({ ...item, selected }))
+    )
+  }
+
+  const handleGenerarOrdenes = async () => {
+    const itemsSeleccionados = generarPedidoItems.filter(item => item.selected)
+
+    if (itemsSeleccionados.length === 0) {
+      setMessage({ type: 'error', text: 'Debe seleccionar al menos un item' })
+      return
+    }
+
+    // Validar que todos los items seleccionados tengan proveedor
+    const itemsSinProveedor = itemsSeleccionados.filter(item => !item.codigo_proveedor)
+    if (itemsSinProveedor.length > 0) {
+      setMessage({ type: 'error', text: 'Todos los items seleccionados deben tener un proveedor asignado' })
+      return
+    }
+
+    // Agrupar por proveedor
+    const itemsPorProveedor = new Map<string, typeof itemsSeleccionados>()
+    for (const item of itemsSeleccionados) {
+      const current = itemsPorProveedor.get(item.codigo_proveedor) || []
+      current.push(item)
+      itemsPorProveedor.set(item.codigo_proveedor, current)
+    }
+
+    setGenerarPedidoLoading(true)
+    let ordenesCreadas = 0
+    let errores = 0
+
+    try {
+      for (const [codigoProveedor, items] of itemsPorProveedor.entries()) {
+        const ordenData = {
+          codigo_proveedor: parseInt(codigoProveedor),
+          observaciones: `Pedido de reposición generado automáticamente - ${new Date().toLocaleDateString('es-EC')}`,
+          detalles: items.map(item => ({
+            codigo_item: item.codigo_item,
+            cantidad: item.cantidad_pedir,
+            precio_unitario: item.costo_unitario,
+          })),
+        }
+
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(ordenData),
+        })
+
+        if (response.ok) {
+          ordenesCreadas++
+        } else {
+          errores++
+        }
+      }
+
+      if (ordenesCreadas > 0) {
+        setMessage({
+          type: 'success',
+          text: `Se ${ordenesCreadas === 1 ? 'creó' : 'crearon'} ${ordenesCreadas} ${ordenesCreadas === 1 ? 'orden' : 'órdenes'} de compra${errores > 0 ? ` (${errores} con error)` : ''}`,
+        })
+        setShowGenerarPedidoModal(false)
+      } else {
+        setMessage({ type: 'error', text: 'No se pudo crear ninguna orden de compra' })
+      }
+    } catch (error) {
+      console.error('Error generando órdenes:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al generar órdenes' })
+    } finally {
+      setGenerarPedidoLoading(false)
+    }
   }
 
   // ==================== OCR FACTURA FUNCTIONS ====================
@@ -2956,7 +3131,7 @@ export default function InventarioPage() {
                     <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
                       <CardContent className="pt-4 pb-3">
                         <div className="text-lg font-bold text-purple-700">
-                          Bs. {kardexGlobal.resumen.valor_total_inventario.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                          {formatCurrency(kardexGlobal.resumen.valor_total_inventario)}
                         </div>
                         <div className="text-xs text-purple-600">Valor Total</div>
                       </CardContent>
@@ -2965,9 +3140,34 @@ export default function InventarioPage() {
 
                   {/* Global Kardex Table */}
                   <Card>
-                    <CardHeader>
-                      <CardTitle>Kardex Global de Inventario</CardTitle>
-                      <CardDescription>Resumen de todos los items con sus movimientos y estado de stock</CardDescription>
+                    <CardHeader className="flex flex-row items-start justify-between">
+                      <div>
+                        <CardTitle>Kardex Global de Inventario</CardTitle>
+                        <CardDescription>Resumen de todos los items con sus movimientos y estado de stock</CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={openGenerarPedidoModal}
+                          size="sm"
+                          className="bg-orange-600 hover:bg-orange-700 text-white"
+                        >
+                          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          Generar Pedido
+                        </Button>
+                        <Button
+                          onClick={exportKardexGlobalPdf}
+                          variant="outline"
+                          size="sm"
+                          className="border-lab-primary-600 text-lab-primary-600 hover:bg-lab-primary-50"
+                        >
+                          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Exportar PDF
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <div className="overflow-x-auto">
@@ -2999,7 +3199,7 @@ export default function InventarioPage() {
                                 <td className="p-3 text-center text-green-600 font-medium">+{item.total_entradas}</td>
                                 <td className="p-3 text-center text-red-600 font-medium">-{item.total_salidas}</td>
                                 <td className="p-3 text-right font-mono text-sm">
-                                  Bs. {item.valor_inventario.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                  {formatCurrency(item.valor_inventario)}
                                 </td>
                                 <td className="p-3 text-center">
                                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${
@@ -3014,7 +3214,7 @@ export default function InventarioPage() {
                                 <td className="p-3 text-sm text-lab-neutral-600">
                                   {item.ultimo_movimiento ? (
                                     <span title={item.ultimo_movimiento.tipo_movimiento}>
-                                      {new Date(item.ultimo_movimiento.fecha_movimiento).toLocaleDateString('es-BO')}
+                                      {new Date(item.ultimo_movimiento.fecha_movimiento).toLocaleDateString('es-EC')}
                                     </span>
                                   ) : '-'}
                                 </td>
@@ -3565,7 +3765,7 @@ export default function InventarioPage() {
                           {ocrResult.proveedor.ruc && <p><strong>RUC:</strong> {ocrResult.proveedor.ruc}</p>}
                           {ocrResult.factura?.numero && <p><strong>Factura N°:</strong> {ocrResult.factura.numero}</p>}
                           {ocrResult.factura?.fecha && <p><strong>Fecha:</strong> {ocrResult.factura.fecha}</p>}
-                          {ocrResult.factura?.total && <p><strong>Total:</strong> ${ocrResult.factura.total.toFixed(2)}</p>}
+                          {ocrResult.factura?.total && <p><strong>Total:</strong> {formatCurrency(ocrResult.factura.total)}</p>}
                         </div>
                       </div>
                     )}
@@ -3765,7 +3965,7 @@ export default function InventarioPage() {
                           </div>
                         </div>
                         <div className="text-right text-sm text-lab-neutral-500">
-                          {new Date(entry.fecha_actividad).toLocaleString('es-BO')}
+                          {new Date(entry.fecha_actividad).toLocaleString('es-EC')}
                         </div>
                       </div>
 
@@ -3849,6 +4049,181 @@ export default function InventarioPage() {
               <Button variant="outline" onClick={closeHistorialModal}>
                 Cerrar
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== GENERAR PEDIDO DE REPOSICIÓN MODAL ==================== */}
+      {showGenerarPedidoModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full my-8 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-lab-neutral-900">Generar Pedido de Reposición</h2>
+                <p className="text-sm text-lab-neutral-600 mt-1">
+                  Seleccione los items y proveedores para generar órdenes de compra automáticamente
+                </p>
+              </div>
+              <Button variant="outline" onClick={() => setShowGenerarPedidoModal(false)}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-red-700">
+                    {generarPedidoItems.filter(i => i.estado_stock === 'AGOTADO').length}
+                  </div>
+                  <div className="text-sm text-red-600">Agotados</div>
+                </div>
+                <div className="bg-orange-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-orange-700">
+                    {generarPedidoItems.filter(i => i.estado_stock === 'CRITICO').length}
+                  </div>
+                  <div className="text-sm text-orange-600">Críticos</div>
+                </div>
+                <div className="bg-yellow-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-yellow-700">
+                    {generarPedidoItems.filter(i => i.estado_stock === 'BAJO').length}
+                  </div>
+                  <div className="text-sm text-yellow-600">Stock Bajo</div>
+                </div>
+              </div>
+
+              {/* Select All */}
+              <div className="flex items-center gap-4 mb-4 p-3 bg-lab-neutral-50 rounded-lg">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={generarPedidoItems.every(i => i.selected)}
+                    onChange={(e) => handleToggleAllPedidoItems(e.target.checked)}
+                    className="w-4 h-4 rounded border-lab-neutral-300 text-lab-primary-600 focus:ring-lab-primary-500"
+                  />
+                  <span className="text-sm font-medium">Seleccionar todos</span>
+                </label>
+                <span className="text-sm text-lab-neutral-600">
+                  {generarPedidoItems.filter(i => i.selected).length} de {generarPedidoItems.length} seleccionados
+                </span>
+              </div>
+
+              {/* Items Table */}
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-lab-neutral-50 border-b">
+                      <th className="p-3 text-left w-10"></th>
+                      <th className="p-3 text-left text-sm font-semibold">Item</th>
+                      <th className="p-3 text-center text-sm font-semibold">Stock Actual</th>
+                      <th className="p-3 text-center text-sm font-semibold">Mínimo</th>
+                      <th className="p-3 text-center text-sm font-semibold">Estado</th>
+                      <th className="p-3 text-center text-sm font-semibold">Cantidad a Pedir</th>
+                      <th className="p-3 text-left text-sm font-semibold">Proveedor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {generarPedidoItems.map((item) => (
+                      <tr key={item.codigo_item} className={`border-b ${!item.selected ? 'opacity-50' : ''}`}>
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={item.selected}
+                            onChange={(e) => handleGenerarPedidoItemChange(item.codigo_item, 'selected', e.target.checked)}
+                            className="w-4 h-4 rounded border-lab-neutral-300 text-lab-primary-600 focus:ring-lab-primary-500"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <div className="font-medium">{item.nombre}</div>
+                          <div className="text-xs text-lab-neutral-500">{item.codigo_interno} - {item.unidad_medida}</div>
+                        </td>
+                        <td className="p-3 text-center font-semibold">{item.stock_actual}</td>
+                        <td className="p-3 text-center text-lab-neutral-600">{item.stock_minimo}</td>
+                        <td className="p-3 text-center">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            item.estado_stock === 'AGOTADO' ? 'bg-red-100 text-red-800' :
+                            item.estado_stock === 'CRITICO' ? 'bg-orange-100 text-orange-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {item.estado_stock === 'AGOTADO' ? 'Agotado' :
+                             item.estado_stock === 'CRITICO' ? 'Crítico' : 'Bajo'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <Input
+                            type="number"
+                            min="1"
+                            value={item.cantidad_pedir}
+                            onChange={(e) => handleGenerarPedidoItemChange(item.codigo_item, 'cantidad_pedir', parseInt(e.target.value) || 1)}
+                            className="w-20 text-center mx-auto"
+                            disabled={!item.selected}
+                          />
+                        </td>
+                        <td className="p-3">
+                          <select
+                            value={item.codigo_proveedor}
+                            onChange={(e) => handleGenerarPedidoItemChange(item.codigo_item, 'codigo_proveedor', e.target.value)}
+                            className="w-full rounded-md border-lab-neutral-300 text-sm"
+                            disabled={!item.selected}
+                          >
+                            <option value="">Seleccionar proveedor...</option>
+                            {proveedores.map((prov) => (
+                              <option key={prov.codigo_proveedor} value={prov.codigo_proveedor}>
+                                {prov.razon_social}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {proveedores.length === 0 && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Nota:</strong> No hay proveedores registrados. Debe crear proveedores en el módulo de Proveedores antes de poder generar órdenes de compra.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-lab-neutral-200 flex justify-between items-center">
+              <div className="text-sm text-lab-neutral-600">
+                Se {generarPedidoItems.filter(i => i.selected && i.codigo_proveedor).length > 0 ? 'crearán' : 'creará'}{' '}
+                <strong>
+                  {new Set(generarPedidoItems.filter(i => i.selected && i.codigo_proveedor).map(i => i.codigo_proveedor)).size}
+                </strong>{' '}
+                {new Set(generarPedidoItems.filter(i => i.selected && i.codigo_proveedor).map(i => i.codigo_proveedor)).size === 1 ? 'orden' : 'órdenes'} de compra
+              </div>
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setShowGenerarPedidoModal(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleGenerarOrdenes}
+                  disabled={generarPedidoLoading || generarPedidoItems.filter(i => i.selected).length === 0}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  {generarPedidoLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                      Generando...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      Generar Órdenes de Compra
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -148,6 +148,29 @@ export class InventarioController {
     });
   }
 
+  @Get('inventory/kardex-global/pdf')
+  @ApiOperation({
+    summary: 'Exportar Kardex Global a PDF',
+    description: 'Genera un documento PDF del Kardex Global con resumen y tabla de ítems.',
+  })
+  @ApiProduces('application/pdf')
+  @ApiQuery({ name: 'fecha_desde', required: false })
+  @ApiQuery({ name: 'fecha_hasta', required: false })
+  @ApiQuery({ name: 'categoria', required: false })
+  async exportKardexGlobalPdf(
+    @Res() res: Response,
+    @Query('fecha_desde') fecha_desde?: string,
+    @Query('fecha_hasta') fecha_hasta?: string,
+    @Query('categoria') categoria?: string,
+  ) {
+    const data = await this.inventarioService.getKardexGlobal({
+      fecha_desde,
+      fecha_hasta,
+      categoria: categoria ? parseInt(categoria, 10) : undefined,
+    });
+    return this.pdfInventarioService.generateKardexGlobalPdf(data, res);
+  }
+
   @Put('inventory/items/:id/toggle-status')
   async toggleInventoryItemStatus(
     @CurrentUser('codigo_usuario') adminId: number,
