@@ -3927,23 +3927,30 @@ export default function InventarioPage() {
                               />
                               <div className="flex-1 space-y-2">
                                 <div className="flex justify-between items-start gap-2">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <p className="font-medium text-lab-neutral-900">{item.descripcion}</p>
                                     {/* Indicador de match automático */}
-                                    {item.matchConfidence && item.matchConfidence >= 50 && (
+                                    {(item.matchConfidence ?? 0) >= 50 ? (
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                        item.matchConfidence >= 80 ? 'bg-green-100 text-green-800' :
-                                        item.matchConfidence >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                                        item.matchConfidence! >= 80 ? 'bg-green-100 text-green-800' :
+                                        item.matchConfidence! >= 60 ? 'bg-yellow-100 text-yellow-800' :
                                         'bg-orange-100 text-orange-800'
                                       }`}>
                                         <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                          {item.matchConfidence >= 80 ? (
+                                          {item.matchConfidence! >= 80 ? (
                                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                           ) : (
                                             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                                           )}
                                         </svg>
                                         {item.matchConfidence}% match
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                        <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Sin coincidencia
                                       </span>
                                     )}
                                   </div>
@@ -3995,14 +4002,21 @@ export default function InventarioPage() {
                                     />
                                   </div>
                                   <div className="col-span-2">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       <label className="text-lab-neutral-600">Asignar a Item: *</label>
-                                      {item.matchConfidence && item.matchConfidence >= 80 && item.codigo_item && (
+                                      {(item.matchConfidence ?? 0) >= 80 && item.codigo_item ? (
                                         <span className="text-xs text-green-600 flex items-center gap-1">
                                           <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                           </svg>
                                           Auto-asignado
+                                        </span>
+                                      ) : !item.codigo_item && (
+                                        <span className="text-xs text-amber-600 flex items-center gap-1">
+                                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                                          </svg>
+                                          Seleccione manualmente
                                         </span>
                                       )}
                                     </div>
@@ -4010,12 +4024,12 @@ export default function InventarioPage() {
                                       value={item.codigo_item}
                                       onChange={(e) => handleOcrItemChange(index, 'codigo_item', e.target.value)}
                                       className={`w-full border rounded px-2 py-1 mt-1 ${
-                                        item.selected && !item.codigo_item ? 'border-red-500 bg-red-50' :
-                                        item.matchConfidence && item.matchConfidence >= 80 && item.codigo_item ? 'border-green-500 bg-green-50' :
-                                        ''
+                                        item.selected && !item.codigo_item ? 'border-amber-500 bg-amber-50' :
+                                        (item.matchConfidence ?? 0) >= 80 && item.codigo_item ? 'border-green-500 bg-green-50' :
+                                        item.codigo_item ? 'border-blue-500 bg-blue-50' : ''
                                       }`}
                                     >
-                                      <option value="">Seleccionar item del inventario...</option>
+                                      <option value="">-- Seleccionar item del inventario --</option>
                                       {items.map((inv) => (
                                         <option key={inv.codigo_item} value={inv.codigo_item}>
                                           {inv.codigo_interno} - {inv.nombre}
@@ -4023,7 +4037,9 @@ export default function InventarioPage() {
                                       ))}
                                     </select>
                                     {item.selected && !item.codigo_item && (
-                                      <p className="text-xs text-red-500 mt-1">Debe asignar un item del inventario</p>
+                                      <p className="text-xs text-amber-600 mt-1">
+                                        ⚠️ Seleccione el item del inventario que corresponde a "{item.descripcion}"
+                                      </p>
                                     )}
                                   </div>
                                 </div>
