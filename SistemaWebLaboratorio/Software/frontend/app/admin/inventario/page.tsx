@@ -3832,18 +3832,37 @@ export default function InventarioPage() {
                                 type="checkbox"
                                 checked={item.selected}
                                 onChange={(e) => handleOcrItemChange(index, 'selected', e.target.checked)}
-                                className="mt-1"
+                                className="mt-1 h-5 w-5"
                               />
                               <div className="flex-1 space-y-2">
-                                <p className="font-medium text-lab-neutral-900">{item.descripcion}</p>
+                                <div className="flex justify-between items-start">
+                                  <p className="font-medium text-lab-neutral-900">{item.descripcion}</p>
+                                  {item.selected && item.cantidad > 0 && (
+                                    <span className="text-sm font-semibold text-lab-primary-700">
+                                      Subtotal: {formatCurrency(item.cantidad * (item.precio_unitario || 0))}
+                                    </span>
+                                  )}
+                                </div>
 
-                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
                                   <div>
-                                    <label className="text-lab-neutral-600">Cantidad:</label>
+                                    <label className="text-lab-neutral-600">Cantidad: *</label>
                                     <input
                                       type="number"
+                                      min="1"
                                       value={item.cantidad}
-                                      onChange={(e) => handleOcrItemChange(index, 'cantidad', parseInt(e.target.value) || 0)}
+                                      onChange={(e) => handleOcrItemChange(index, 'cantidad', Math.max(1, parseInt(e.target.value) || 1))}
+                                      className={`w-full border rounded px-2 py-1 mt-1 ${item.selected && item.cantidad < 1 ? 'border-red-500' : ''}`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-lab-neutral-600">Precio Unit.:</label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={item.precio_unitario || 0}
+                                      onChange={(e) => handleOcrItemChange(index, 'precio_unitario', Math.max(0, parseFloat(e.target.value) || 0))}
                                       className="w-full border rounded px-2 py-1 mt-1"
                                     />
                                   </div>
@@ -3865,20 +3884,23 @@ export default function InventarioPage() {
                                       className="w-full border rounded px-2 py-1 mt-1"
                                     />
                                   </div>
-                                  <div>
+                                  <div className="col-span-2">
                                     <label className="text-lab-neutral-600">Asignar a Item: *</label>
                                     <select
                                       value={item.codigo_item}
                                       onChange={(e) => handleOcrItemChange(index, 'codigo_item', e.target.value)}
-                                      className="w-full border rounded px-2 py-1 mt-1"
+                                      className={`w-full border rounded px-2 py-1 mt-1 ${item.selected && !item.codigo_item ? 'border-red-500 bg-red-50' : ''}`}
                                     >
-                                      <option value="">Seleccionar...</option>
+                                      <option value="">Seleccionar item del inventario...</option>
                                       {items.map((inv) => (
                                         <option key={inv.codigo_item} value={inv.codigo_item}>
                                           {inv.codigo_interno} - {inv.nombre}
                                         </option>
                                       ))}
                                     </select>
+                                    {item.selected && !item.codigo_item && (
+                                      <p className="text-xs text-red-500 mt-1">Debe asignar un item del inventario</p>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -3919,6 +3941,14 @@ export default function InventarioPage() {
                   <div className="flex items-center gap-4">
                     <div className="text-sm text-lab-neutral-600">
                       {ocrSelectedItems.filter(i => i.selected && i.codigo_item).length} items listos
+                    </div>
+                    {/* Total calculado desde items seleccionados */}
+                    <div className="text-sm font-semibold text-lab-primary-700 bg-lab-primary-50 px-3 py-1 rounded-lg">
+                      Total: {formatCurrency(
+                        ocrSelectedItems
+                          .filter(i => i.selected && i.codigo_item)
+                          .reduce((sum, item) => sum + (item.cantidad * (item.precio_unitario || 0)), 0)
+                      )}
                     </div>
                     <div className="flex space-x-3">
                       <Button variant="outline" onClick={closeOcrModal}>
