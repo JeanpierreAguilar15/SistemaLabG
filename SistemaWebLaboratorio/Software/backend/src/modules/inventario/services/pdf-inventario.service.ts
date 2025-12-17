@@ -806,6 +806,212 @@ export class PdfInventarioService {
     doc.end();
   }
 
+  /**
+   * Genera PDF de Pedido de Reposición (formato para imprimir y llenar a mano)
+   */
+  async generatePedidoReposicionPdf(data: any, res: Response): Promise<void> {
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 40,
+      info: {
+        Title: 'Pedido de Reposición de Inventario',
+        Author: 'Sistema Laboratorio Franz',
+      },
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=pedido-reposicion-${Date.now()}.pdf`,
+    );
+
+    doc.pipe(res);
+
+    // === ENCABEZADO ===
+    doc
+      .fontSize(18)
+      .font('Helvetica-Bold')
+      .text('LABORATORIO CLÍNICO FRANZ', { align: 'center' });
+
+    doc
+      .fontSize(14)
+      .text('PEDIDO DE REPOSICIÓN DE INVENTARIO', { align: 'center' });
+
+    doc.moveDown(0.5);
+
+    // === CAMPOS PARA LLENAR A MANO ===
+    const fieldY = doc.y + 10;
+    const leftCol = 50;
+    const rightCol = 320;
+    const lineWidth = 200;
+
+    doc.fontSize(10).font('Helvetica');
+
+    // Fila 1
+    doc.text('Fecha:', leftCol, fieldY);
+    doc.moveTo(leftCol + 40, fieldY + 12).lineTo(leftCol + 40 + lineWidth, fieldY + 12).stroke();
+
+    doc.text('N° Pedido:', rightCol, fieldY);
+    doc.moveTo(rightCol + 60, fieldY + 12).lineTo(rightCol + 60 + 120, fieldY + 12).stroke();
+
+    // Fila 2
+    const row2Y = fieldY + 35;
+    doc.text('Proveedor:', leftCol, row2Y);
+    doc.moveTo(leftCol + 60, row2Y + 12).lineTo(550, row2Y + 12).stroke();
+
+    // Fila 3
+    const row3Y = row2Y + 35;
+    doc.text('Solicitado por:', leftCol, row3Y);
+    doc.moveTo(leftCol + 80, row3Y + 12).lineTo(leftCol + 80 + lineWidth, row3Y + 12).stroke();
+
+    doc.text('Cargo:', rightCol, row3Y);
+    doc.moveTo(rightCol + 40, row3Y + 12).lineTo(rightCol + 40 + 140, row3Y + 12).stroke();
+
+    doc.moveDown(4);
+
+    // === RESUMEN DE ESTADO ===
+    const summaryY = doc.y;
+    doc.fontSize(9).font('Helvetica');
+
+    const agotados = data.items.filter((i: any) => i.estado_stock === 'AGOTADO').length;
+    const criticos = data.items.filter((i: any) => i.estado_stock === 'CRITICO').length;
+    const bajos = data.items.filter((i: any) => i.estado_stock === 'BAJO').length;
+
+    doc.rect(50, summaryY, 150, 40).stroke();
+    doc.text(`Agotados: ${agotados}`, 60, summaryY + 8);
+    doc.text(`Críticos: ${criticos}`, 60, summaryY + 20);
+    doc.text(`Stock Bajo: ${bajos}`, 60, summaryY + 32);
+
+    doc.rect(210, summaryY, 150, 40).stroke();
+    doc.text(`Total Items: ${data.items.length}`, 220, summaryY + 14);
+    doc.text(`Valor Est.: $${data.resumen?.valor_total_inventario?.toFixed(2) || '0.00'}`, 220, summaryY + 26);
+
+    doc.moveDown(3);
+
+    // === TABLA DE ITEMS ===
+    const tableTop = doc.y + 10;
+    const headers = ['#', 'Código', 'Descripción del Item', 'U.M.', 'Stock', 'Mín.', 'Cant. Pedir', 'Costo U.'];
+    const colWidths = [25, 55, 180, 40, 45, 40, 65, 55];
+    let xPos = 40;
+
+    // Header de tabla
+    doc.rect(40, tableTop, 515, 20).fill('#2c3e50');
+    doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+
+    headers.forEach((header, i) => {
+      doc.text(header, xPos + 3, tableTop + 5, {
+        width: colWidths[i] - 6,
+        align: i >= 4 ? 'center' : 'left',
+      });
+      xPos += colWidths[i];
+    });
+
+    // Filas de datos
+    let rowY = tableTop + 20;
+    doc.font('Helvetica').fontSize(8);
+    let itemNum = 1;
+
+    for (const item of data.items) {
+      if (rowY > doc.page.height - 120) {
+        doc.addPage();
+        rowY = 50;
+
+        // Repetir header en nueva página
+        xPos = 40;
+        doc.rect(40, rowY, 515, 20).fill('#2c3e50');
+        doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+        headers.forEach((header, i) => {
+          doc.text(header, xPos + 3, rowY + 5, {
+            width: colWidths[i] - 6,
+            align: i >= 4 ? 'center' : 'left',
+          });
+          xPos += colWidths[i];
+        });
+        rowY += 20;
+        doc.font('Helvetica').fontSize(8);
+      }
+
+      xPos = 40;
+
+      // Fondo alternado y color según estado
+      let bgColor = itemNum % 2 === 0 ? '#f8f9fa' : '#ffffff';
+      if (item.estado_stock === 'AGOTADO') bgColor = '#ffebee';
+      else if (item.estado_stock === 'CRITICO') bgColor = '#fff3e0';
+      else if (item.estado_stock === 'BAJO') bgColor = '#fffde7';
+
+      doc.rect(40, rowY, 515, 22).fill(bgColor);
+      doc.fillColor('#000000');
+
+      // Calcular cantidad sugerida
+      const cantSugerida = Math.max(item.stock_minimo - item.stock_actual + 10, 1);
+
+      const rowData = [
+        itemNum.toString(),
+        item.codigo_interno || '-',
+        item.nombre.substring(0, 40),
+        item.unidad_medida || '-',
+        item.stock_actual.toString(),
+        item.stock_minimo.toString(),
+        cantSugerida.toString(),
+        `$${(item.costo_unitario || 0).toFixed(2)}`,
+      ];
+
+      rowData.forEach((cell, i) => {
+        doc.text(cell, xPos + 3, rowY + 6, {
+          width: colWidths[i] - 6,
+          align: i >= 4 ? 'center' : 'left',
+        });
+        xPos += colWidths[i];
+      });
+
+      // Dibujar líneas verticales y caja para escribir cantidad real
+      doc.rect(40, rowY, 515, 22).stroke('#dee2e6');
+
+      rowY += 22;
+      itemNum++;
+    }
+
+    // === SECCIÓN DE FIRMAS ===
+    doc.moveDown(2);
+    const signaturesY = Math.min(rowY + 40, doc.page.height - 100);
+
+    doc.fontSize(9).font('Helvetica');
+
+    // Firma solicitante
+    doc.text('Solicitado por:', 50, signaturesY);
+    doc.moveTo(50, signaturesY + 40).lineTo(200, signaturesY + 40).stroke();
+    doc.text('Firma y Sello', 100, signaturesY + 45);
+
+    // Firma aprobación
+    doc.text('Aprobado por:', 230, signaturesY);
+    doc.moveTo(230, signaturesY + 40).lineTo(380, signaturesY + 40).stroke();
+    doc.text('Firma y Sello', 280, signaturesY + 45);
+
+    // Firma recepción
+    doc.text('Recibido por:', 410, signaturesY);
+    doc.moveTo(410, signaturesY + 40).lineTo(555, signaturesY + 40).stroke();
+    doc.text('Firma y Sello', 460, signaturesY + 45);
+
+    // === NOTAS ===
+    const notasY = signaturesY + 70;
+    doc.fontSize(8).font('Helvetica');
+    doc.text('Observaciones:', 50, notasY);
+    doc.rect(50, notasY + 12, 505, 40).stroke();
+
+    // === PIE DE PÁGINA ===
+    doc
+      .fontSize(7)
+      .fillColor('#666666')
+      .text(
+        `Generado: ${this.formatDateTime(new Date())} | Sistema Laboratorio Franz | Este documento requiere firmas para ser válido`,
+        40,
+        doc.page.height - 25,
+        { align: 'center' }
+      );
+
+    doc.end();
+  }
+
   // === UTILIDADES ===
 
   private formatDate(date: Date | string): string {

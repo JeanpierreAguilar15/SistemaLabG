@@ -1408,6 +1408,40 @@ export default function InventarioPage() {
     setShowGenerarPedidoModal(true)
   }
 
+  // Descargar PDF de Pedido de Reposición (para imprimir y llenar a mano)
+  const downloadPedidoReposicionPdf = async () => {
+    try {
+      setMessage({ type: 'info', text: 'Generando PDF de pedido...' })
+
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/pedido-reposicion/pdf`
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const downloadUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = `pedido-reposicion-${new Date().toISOString().split('T')[0]}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(downloadUrl)
+        setMessage({ type: 'success', text: 'PDF de pedido descargado' })
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setMessage({ type: 'error', text: errorData.message || 'Error al generar PDF de pedido' })
+      }
+    } catch (error) {
+      console.error('Error descargando PDF de pedido:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al descargar PDF' })
+    }
+  }
+
   const handleGenerarPedidoItemChange = (codigoItem: number, field: string, value: any) => {
     setGenerarPedidoItems(prev =>
       prev.map(item =>
@@ -3155,6 +3189,17 @@ export default function InventarioPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                           </svg>
                           Generar Pedido
+                        </Button>
+                        <Button
+                          onClick={downloadPedidoReposicionPdf}
+                          variant="outline"
+                          size="sm"
+                          className="border-orange-600 text-orange-600 hover:bg-orange-50"
+                        >
+                          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                          Imprimir Pedido
                         </Button>
                         <Button
                           onClick={exportKardexGlobalPdf}

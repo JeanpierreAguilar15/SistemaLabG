@@ -423,22 +423,98 @@ export class InventarioService {
   }
 
   async deleteInventoryItem(codigo_item: number, adminId: number) {
-    // Verificar si tiene movimientos
-    const movimientos = await this.prisma.movimiento.count({
+    // Verificar item existe
+    const item = await this.prisma.item.findUnique({
       where: { codigo_item },
     });
 
-    if (movimientos > 0) {
-      // Soft delete
-      return this.prisma.item.update({
+    if (!item) {
+      throw new NotFoundException('Item no encontrado');
+    }
+
+    // Verificar dependencias en paralelo
+    const [movimientos, ordenesActivas, insumosActivos, lotesConStock] = await Promise.all([
+      // 1. Movimientos registrados
+      this.prisma.movimiento.count({
+        where: { codigo_item },
+      }),
+      // 2. Órdenes de compra activas (no canceladas) que incluyen este item
+      this.prisma.ordenCompraDetalle.count({
+        where: {
+          codigo_item,
+          orden_compra: {
+            estado: { in: ['BORRADOR', 'EMITIDA'] },
+          },
+        },
+      }),
+      // 3. Insumos de exámenes activos que usan este item
+      this.prisma.examenInsumo.count({
+        where: {
+          codigo_item,
+          activo: true,
+        },
+      }),
+      // 4. Lotes con stock disponible
+      this.prisma.lote.count({
+        where: {
+          codigo_item,
+          cantidad_actual: { gt: 0 },
+        },
+      }),
+    ]);
+
+    // Si tiene órdenes activas, NO permitir eliminar
+    if (ordenesActivas > 0) {
+      throw new BadRequestException(
+        `No se puede eliminar: el item tiene ${ordenesActivas} ${ordenesActivas === 1 ? 'orden' : 'órdenes'} de compra activa(s). Cancele las órdenes primero.`
+      );
+    }
+
+    // Si tiene insumos activos en exámenes, advertir
+    if (insumosActivos > 0) {
+      throw new BadRequestException(
+        `No se puede eliminar: el item está configurado como insumo en ${insumosActivos} ${insumosActivos === 1 ? 'examen' : 'exámenes'}. Desactive primero los insumos.`
+      );
+    }
+
+    // Si tiene movimientos, lotes con stock, siempre soft delete
+    if (movimientos > 0 || lotesConStock > 0) {
+      const result = await this.prisma.item.update({
         where: { codigo_item },
         data: { activo: false },
       });
+
+      // Registrar auditoría
+      await this.registrarAuditoria(
+        adminId,
+        'DELETE',
+        'Item',
+        codigo_item,
+        item,
+        { activo: false },
+        `Item desactivado (soft delete): ${item.nombre}`,
+      );
+
+      return result;
     }
 
-    return this.prisma.item.delete({
+    // Sin dependencias, hard delete
+    const result = await this.prisma.item.delete({
       where: { codigo_item },
     });
+
+    // Registrar auditoría
+    await this.registrarAuditoria(
+      adminId,
+      'DELETE',
+      'Item',
+      codigo_item,
+      item,
+      null,
+      `Item eliminado permanentemente: ${item.nombre}`,
+    );
+
+    return result;
   }
 
   async getKardexReport() {
@@ -1955,30 +2031,243 @@ export class InventarioService {
   }
 
   async deleteOrdenCompra(id: number, adminId: number) {
-    return this.prisma.ordenCompra.delete({ where: { codigo_orden_compra: id } });
+    const orden = await this.prisma.ordenCompra.findUnique({
+      where: { codigo_orden_compra: id },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    // No permitir eliminar órdenes ya recibidas (tienen lotes creados)
+    if (orden.estado === 'RECIBIDA') {
+      throw new BadRequestException(
+        'No se puede eliminar una orden ya recibida. Los lotes y movimientos ya fueron registrados.'
+      );
+    }
+
+    // Soft delete: cambiar a CANCELADA en lugar de eliminar
+    const result = await this.prisma.ordenCompra.update({
+      where: { codigo_orden_compra: id },
+      data: { estado: 'CANCELADA' },
+    });
+
+    // Registrar auditoría
+    await this.registrarAuditoria(
+      adminId,
+      'DELETE',
+      'OrdenCompra',
+      id,
+      orden,
+      { estado: 'CANCELADA' },
+      `Orden ${orden.numero_orden} cancelada/eliminada`,
+    );
+
+    return result;
   }
 
   async emitirOrdenCompra(id: number, adminId: number) {
-    return this.prisma.ordenCompra.update({
+    const orden = await this.prisma.ordenCompra.findUnique({
       where: { codigo_orden_compra: id },
-      // fecha_emision no existe en schema, solo fecha_orden y fecha_entrega...
-      // Asumimos cambio de estado
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    // Validar transición de estado: solo BORRADOR puede pasar a EMITIDA
+    if (orden.estado !== 'BORRADOR') {
+      throw new BadRequestException(
+        `No se puede emitir: la orden está en estado "${orden.estado}". Solo órdenes en BORRADOR pueden ser emitidas.`
+      );
+    }
+
+    const result = await this.prisma.ordenCompra.update({
+      where: { codigo_orden_compra: id },
       data: { estado: 'EMITIDA' },
     });
+
+    // Registrar auditoría
+    await this.registrarAuditoria(
+      adminId,
+      'UPDATE',
+      'OrdenCompra',
+      id,
+      { estado: 'BORRADOR' },
+      { estado: 'EMITIDA' },
+      `Orden ${orden.numero_orden} emitida`,
+    );
+
+    return result;
   }
 
-  async recibirOrdenCompra(id: number, data: any, adminId: number) {
-    return this.prisma.ordenCompra.update({
+  async recibirOrdenCompra(
+    id: number,
+    data: {
+      items_recibidos?: Array<{
+        codigo_item: number;
+        cantidad_recibida: number;
+        numero_lote?: string;
+        fecha_vencimiento?: string;
+      }>;
+      observaciones_recepcion?: string;
+    },
+    adminId: number,
+  ) {
+    const orden = await this.prisma.ordenCompra.findUnique({
       where: { codigo_orden_compra: id },
-      data: { estado: 'RECIBIDA', fecha_entrega_real: new Date() },
+      include: {
+        detalles: {
+          include: { item: true },
+        },
+        proveedor: true,
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    // Validar transición de estado: solo EMITIDA puede pasar a RECIBIDA
+    if (orden.estado !== 'EMITIDA') {
+      throw new BadRequestException(
+        `No se puede recibir: la orden está en estado "${orden.estado}". Solo órdenes EMITIDA pueden ser recibidas.`
+      );
+    }
+
+    // Usar transacción para crear lotes y actualizar stock
+    return this.prisma.$transaction(async (prisma) => {
+      const lotesCreados: any[] = [];
+
+      for (const detalle of orden.detalles) {
+        // Buscar si hay datos específicos de recepción para este item
+        const datosRecepcion = data.items_recibidos?.find(
+          (i) => i.codigo_item === detalle.codigo_item,
+        );
+
+        const cantidadRecibida = datosRecepcion?.cantidad_recibida || detalle.cantidad;
+        const numeroLote = datosRecepcion?.numero_lote || `OC-${orden.numero_orden}-${detalle.codigo_item}`;
+        const fechaVencimiento = datosRecepcion?.fecha_vencimiento
+          ? new Date(datosRecepcion.fecha_vencimiento)
+          : null;
+
+        // 1. Crear lote
+        const lote = await prisma.lote.create({
+          data: {
+            codigo_item: detalle.codigo_item,
+            numero_lote: numeroLote,
+            cantidad_inicial: cantidadRecibida,
+            cantidad_actual: cantidadRecibida,
+            fecha_vencimiento: fechaVencimiento,
+            proveedor: orden.proveedor?.razon_social || null,
+          },
+        });
+
+        lotesCreados.push(lote);
+
+        // 2. Obtener stock actual del item
+        const item = await prisma.item.findUnique({
+          where: { codigo_item: detalle.codigo_item },
+        });
+
+        const stockAnterior = item?.stock_actual || 0;
+        const stockNuevo = stockAnterior + cantidadRecibida;
+
+        // 3. Crear movimiento de COMPRA
+        await prisma.movimiento.create({
+          data: {
+            codigo_item: detalle.codigo_item,
+            codigo_lote: lote.codigo_lote,
+            tipo_movimiento: 'COMPRA',
+            cantidad: cantidadRecibida,
+            motivo: `Recepción orden de compra ${orden.numero_orden}`,
+            referencia: `OC-${orden.numero_orden}`,
+            stock_anterior: stockAnterior,
+            stock_nuevo: stockNuevo,
+            realizado_por: adminId,
+          },
+        });
+
+        // 4. Actualizar stock del item
+        await prisma.item.update({
+          where: { codigo_item: detalle.codigo_item },
+          data: { stock_actual: { increment: cantidadRecibida } },
+        });
+      }
+
+      // 5. Actualizar estado de la orden
+      const ordenActualizada = await prisma.ordenCompra.update({
+        where: { codigo_orden_compra: id },
+        data: {
+          estado: 'RECIBIDA',
+          fecha_entrega_real: new Date(),
+          observaciones: data.observaciones_recepcion
+            ? `${orden.observaciones || ''}\n[Recepción]: ${data.observaciones_recepcion}`
+            : orden.observaciones,
+        },
+        include: {
+          detalles: { include: { item: true } },
+          proveedor: true,
+        },
+      });
+
+      // Registrar auditoría
+      await this.registrarAuditoria(
+        adminId,
+        'UPDATE',
+        'OrdenCompra',
+        id,
+        { estado: 'EMITIDA' },
+        { estado: 'RECIBIDA', lotes_creados: lotesCreados.length },
+        `Orden ${orden.numero_orden} recibida - ${lotesCreados.length} lotes creados`,
+      );
+
+      return {
+        orden: ordenActualizada,
+        lotes_creados: lotesCreados,
+        mensaje: `Orden recibida exitosamente. Se crearon ${lotesCreados.length} lotes y se actualizó el stock.`,
+      };
     });
   }
 
   async cancelarOrdenCompra(id: number, adminId: number) {
-    return this.prisma.ordenCompra.update({
+    const orden = await this.prisma.ordenCompra.findUnique({
+      where: { codigo_orden_compra: id },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    // No permitir cancelar órdenes ya recibidas
+    if (orden.estado === 'RECIBIDA') {
+      throw new BadRequestException(
+        'No se puede cancelar una orden ya recibida. Los lotes y movimientos ya fueron registrados.'
+      );
+    }
+
+    // Ya está cancelada
+    if (orden.estado === 'CANCELADA') {
+      throw new BadRequestException('La orden ya está cancelada.');
+    }
+
+    const result = await this.prisma.ordenCompra.update({
       where: { codigo_orden_compra: id },
       data: { estado: 'CANCELADA' },
     });
+
+    // Registrar auditoría
+    await this.registrarAuditoria(
+      adminId,
+      'UPDATE',
+      'OrdenCompra',
+      id,
+      { estado: orden.estado },
+      { estado: 'CANCELADA' },
+      `Orden ${orden.numero_orden} cancelada`,
+    );
+
+    return result;
   }
 
   // ==================== WORKFLOW AUTOMATIZADO DE FACTURA ====================

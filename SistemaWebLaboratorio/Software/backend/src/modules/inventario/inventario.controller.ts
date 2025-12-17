@@ -171,6 +171,24 @@ export class InventarioController {
     return this.pdfInventarioService.generateKardexGlobalPdf(data, res);
   }
 
+  @Get('inventory/pedido-reposicion/pdf')
+  @ApiOperation({
+    summary: 'Generar PDF de Pedido de Reposición',
+    description: 'Genera un documento PDF para imprimir con items de stock bajo, campos en blanco para llenar a mano.',
+  })
+  @ApiProduces('application/pdf')
+  async exportPedidoReposicionPdf(@Res() res: Response) {
+    // Obtener items con stock bajo, crítico o agotado
+    const kardexData = await this.inventarioService.getKardexGlobal({});
+    const itemsBajoStock = {
+      ...kardexData,
+      items: kardexData.items.filter((item: any) =>
+        ['BAJO', 'CRITICO', 'AGOTADO'].includes(item.estado_stock)
+      ),
+    };
+    return this.pdfInventarioService.generatePedidoReposicionPdf(itemsBajoStock, res);
+  }
+
   @Put('inventory/items/:id/toggle-status')
   async toggleInventoryItemStatus(
     @CurrentUser('codigo_usuario') adminId: number,
