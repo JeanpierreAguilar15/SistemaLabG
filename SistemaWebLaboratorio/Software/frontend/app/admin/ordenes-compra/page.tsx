@@ -978,15 +978,6 @@ export default function OrdenesCompraPage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => handleExportPdf(selectedOrden.codigo_orden)}
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Exportar PDF
-                </Button>
                 <Button variant="outline" onClick={() => setShowDetailsModal(false)}>
                   Cerrar
                 </Button>

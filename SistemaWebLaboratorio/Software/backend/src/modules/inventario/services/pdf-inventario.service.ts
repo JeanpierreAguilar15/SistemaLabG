@@ -210,25 +210,28 @@ export class PdfInventarioService {
     doc.y = rowY + 20;
 
     // === TOTALES ===
-    const totalsX = 380;
+    const totalsLabelX = 380;
+    const totalsValueX = 480;
     const subtotalNum = orden.subtotal ? Number(orden.subtotal) : 0;
     const ivaNum = orden.iva ? Number(orden.iva) : 0;
     const totalNum = orden.total ? Number(orden.total) : 0;
 
-    doc
-      .fontSize(10)
-      .font('Helvetica')
-      .text('Subtotal:', totalsX, doc.y, { continued: true, width: 80, align: 'right' })
-      .text(`$${subtotalNum.toFixed(2)}`, { align: 'right' });
+    let totalsY = doc.y;
 
-    doc
-      .text('IVA (12%):', totalsX, doc.y, { continued: true, width: 80, align: 'right' })
-      .text(`$${ivaNum.toFixed(2)}`, { align: 'right' });
+    doc.fontSize(10).font('Helvetica');
+    doc.text('Subtotal:', totalsLabelX, totalsY, { width: 80, align: 'right' });
+    doc.text(`$${subtotalNum.toFixed(2)}`, totalsValueX, totalsY, { width: 65, align: 'right' });
 
-    doc
-      .font('Helvetica-Bold')
-      .text('TOTAL:', totalsX, doc.y, { continued: true, width: 80, align: 'right' })
-      .text(`$${totalNum.toFixed(2)}`, { align: 'right' });
+    totalsY += 15;
+    doc.text('IVA (0%):', totalsLabelX, totalsY, { width: 80, align: 'right' });
+    doc.text(`$${ivaNum.toFixed(2)}`, totalsValueX, totalsY, { width: 65, align: 'right' });
+
+    totalsY += 15;
+    doc.font('Helvetica-Bold');
+    doc.text('TOTAL:', totalsLabelX, totalsY, { width: 80, align: 'right' });
+    doc.text(`$${totalNum.toFixed(2)}`, totalsValueX, totalsY, { width: 65, align: 'right' });
+
+    doc.y = totalsY + 20;
 
     doc.moveDown(2);
 
