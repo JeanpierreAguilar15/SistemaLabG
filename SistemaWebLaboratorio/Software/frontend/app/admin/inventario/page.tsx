@@ -340,8 +340,11 @@ export default function InventarioPage() {
     codigo_item: string
     precio_unitario: number
     selected: boolean
+    matchConfidence?: number
+    matchedName?: string
   }>>([])
   const [ocrSelectedProveedor, setOcrSelectedProveedor] = useState<string>('')
+  const [ocrImageZoom, setOcrImageZoom] = useState(false)
 
   // Generar Pedido de Reposición state
   const [showGenerarPedidoModal, setShowGenerarPedidoModal] = useState(false)
@@ -1517,6 +1520,73 @@ export default function InventarioPage() {
   }
 
   // ==================== OCR FACTURA FUNCTIONS ====================
+
+  /**
+   * Función para encontrar el mejor item coincidente del inventario
+   * basado en la descripción del OCR
+   */
+  const findBestMatchingItem = (descripcion: string, inventoryItems: typeof items): {
+    codigo_item: number
+    nombre: string
+    confidence: number
+  } | null => {
+    if (!descripcion || inventoryItems.length === 0) return null
+
+    const normalizedDesc = descripcion.toLowerCase().trim()
+    let bestMatch: { codigo_item: number; nombre: string; confidence: number } | null = null
+    let highestScore = 0
+
+    for (const item of inventoryItems) {
+      const normalizedName = item.nombre.toLowerCase().trim()
+      const normalizedCode = item.codigo_interno.toLowerCase()
+
+      let score = 0
+
+      // Match exacto = 100%
+      if (normalizedName === normalizedDesc) {
+        score = 100
+      }
+      // Nombre contiene descripción o viceversa
+      else if (normalizedName.includes(normalizedDesc) || normalizedDesc.includes(normalizedName)) {
+        score = 80
+      }
+      // Código interno coincide
+      else if (normalizedCode === normalizedDesc || normalizedDesc.includes(normalizedCode)) {
+        score = 90
+      }
+      // Palabras clave coinciden
+      else {
+        const descWords = normalizedDesc.split(/\s+/).filter(w => w.length > 2)
+        const nameWords = normalizedName.split(/\s+/).filter(w => w.length > 2)
+
+        let matchedWords = 0
+        for (const descWord of descWords) {
+          for (const nameWord of nameWords) {
+            if (nameWord.includes(descWord) || descWord.includes(nameWord)) {
+              matchedWords++
+              break
+            }
+          }
+        }
+
+        if (descWords.length > 0) {
+          score = Math.round((matchedWords / descWords.length) * 70)
+        }
+      }
+
+      if (score > highestScore && score >= 50) { // Mínimo 50% de confianza
+        highestScore = score
+        bestMatch = {
+          codigo_item: item.codigo_item,
+          nombre: item.nombre,
+          confidence: score,
+        }
+      }
+    }
+
+    return bestMatch
+  }
+
   const openOcrModal = () => {
     setShowOcrModal(true)
     setOcrResult(null)
@@ -1567,17 +1637,24 @@ export default function InventarioPage() {
         const data = await response.json()
         setOcrResult(data)
 
-        // Preparar items para selección
+        // Preparar items para selección con auto-matching
         if (data.success && data.items?.length > 0) {
-          setOcrSelectedItems(data.items.map((item: any) => ({
-            descripcion: item.descripcion || '',
-            cantidad: item.cantidad || 1,
-            numero_lote: item.numero_lote || `LOT-${Date.now()}`,
-            fecha_vencimiento: item.fecha_vencimiento || '',
-            codigo_item: '', // El usuario debe seleccionar
-            precio_unitario: item.precio_unitario || 0,
-            selected: true,
-          })))
+          setOcrSelectedItems(data.items.map((item: any) => {
+            // Intentar auto-match con inventario existente
+            const matchedItem = findBestMatchingItem(item.descripcion || '', items)
+
+            return {
+              descripcion: item.descripcion || '',
+              cantidad: item.cantidad || 1,
+              numero_lote: item.numero_lote || `LOT-${Date.now()}`,
+              fecha_vencimiento: item.fecha_vencimiento || '',
+              codigo_item: matchedItem?.codigo_item?.toString() || '',
+              precio_unitario: item.precio_unitario || 0,
+              selected: true,
+              matchConfidence: matchedItem?.confidence || 0, // Guardar nivel de confianza
+              matchedName: matchedItem?.nombre || '', // Guardar nombre del match
+            }
+          }))
         }
       } else {
         const error = await response.json()
@@ -3777,8 +3854,22 @@ export default function InventarioPage() {
                   <div>
                     <h3 className="font-semibold text-lab-neutral-900 mb-3">Imagen de Factura</h3>
                     {ocrPreviewUrl && (
-                      <div className="border rounded-lg overflow-hidden bg-lab-neutral-50">
-                        <img src={ocrPreviewUrl} alt="Factura" className="w-full h-auto max-h-96 object-contain" />
+                      <div
+                        className="border rounded-lg overflow-hidden bg-lab-neutral-50 relative group cursor-pointer"
+                        onClick={() => setOcrImageZoom(true)}
+                      >
+                        <img src={ocrPreviewUrl} alt="Factura" className="w-full h-auto max-h-80 object-contain" />
+                        {/* Overlay con icono de zoom */}
+                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full p-3 shadow-lg">
+                            <svg className="w-6 h-6 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                            </svg>
+                          </div>
+                        </div>
+                        <p className="text-xs text-center text-lab-neutral-500 py-1 bg-lab-neutral-100">
+                          Click para ampliar
+                        </p>
                       </div>
                     )}
 
@@ -3835,10 +3926,29 @@ export default function InventarioPage() {
                                 className="mt-1 h-5 w-5"
                               />
                               <div className="flex-1 space-y-2">
-                                <div className="flex justify-between items-start">
-                                  <p className="font-medium text-lab-neutral-900">{item.descripcion}</p>
+                                <div className="flex justify-between items-start gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-lab-neutral-900">{item.descripcion}</p>
+                                    {/* Indicador de match automático */}
+                                    {item.matchConfidence && item.matchConfidence >= 50 && (
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                        item.matchConfidence >= 80 ? 'bg-green-100 text-green-800' :
+                                        item.matchConfidence >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-orange-100 text-orange-800'
+                                      }`}>
+                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                          {item.matchConfidence >= 80 ? (
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                          ) : (
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                          )}
+                                        </svg>
+                                        {item.matchConfidence}% match
+                                      </span>
+                                    )}
+                                  </div>
                                   {item.selected && item.cantidad > 0 && (
-                                    <span className="text-sm font-semibold text-lab-primary-700">
+                                    <span className="text-sm font-semibold text-lab-primary-700 whitespace-nowrap">
                                       Subtotal: {formatCurrency(item.cantidad * (item.precio_unitario || 0))}
                                     </span>
                                   )}
@@ -3885,11 +3995,25 @@ export default function InventarioPage() {
                                     />
                                   </div>
                                   <div className="col-span-2">
-                                    <label className="text-lab-neutral-600">Asignar a Item: *</label>
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-lab-neutral-600">Asignar a Item: *</label>
+                                      {item.matchConfidence && item.matchConfidence >= 80 && item.codigo_item && (
+                                        <span className="text-xs text-green-600 flex items-center gap-1">
+                                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                          </svg>
+                                          Auto-asignado
+                                        </span>
+                                      )}
+                                    </div>
                                     <select
                                       value={item.codigo_item}
                                       onChange={(e) => handleOcrItemChange(index, 'codigo_item', e.target.value)}
-                                      className={`w-full border rounded px-2 py-1 mt-1 ${item.selected && !item.codigo_item ? 'border-red-500 bg-red-50' : ''}`}
+                                      className={`w-full border rounded px-2 py-1 mt-1 ${
+                                        item.selected && !item.codigo_item ? 'border-red-500 bg-red-50' :
+                                        item.matchConfidence && item.matchConfidence >= 80 && item.codigo_item ? 'border-green-500 bg-green-50' :
+                                        ''
+                                      }`}
                                     >
                                       <option value="">Seleccionar item del inventario...</option>
                                       {items.map((inv) => (
@@ -3981,6 +4105,34 @@ export default function InventarioPage() {
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== ZOOM IMAGE MODAL ==================== */}
+      {ocrImageZoom && ocrPreviewUrl && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[60] p-4"
+          onClick={() => setOcrImageZoom(false)}
+        >
+          <div className="relative max-w-full max-h-full">
+            <button
+              onClick={() => setOcrImageZoom(false)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+            >
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img
+              src={ocrPreviewUrl}
+              alt="Factura ampliada"
+              className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <p className="text-center text-white text-sm mt-4">
+              Click fuera de la imagen o en la X para cerrar
+            </p>
           </div>
         </div>
       )}
