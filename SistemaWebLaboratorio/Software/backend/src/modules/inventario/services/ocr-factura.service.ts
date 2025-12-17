@@ -36,14 +36,14 @@ export class OcrFacturaService {
   private readonly logger = new Logger(OcrFacturaService.name);
   private readonly apiKey: string;
   private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
-  // Lista de modelos a intentar en orden de preferencia
+  // Lista de modelos a intentar en orden de preferencia (según docs oficiales)
   private readonly models = [
-    'gemini-2.0-flash',      // Más estable y disponible
-    'gemini-2.0-flash-lite', // Alternativa más ligera
-    'gemini-1.5-flash',      // Fallback anterior
+    'gemini-2.5-flash',      // Modelo recomendado actual
+    'gemini-2.5-flash-lite', // Versión lite más rápida
+    'gemini-2.0-flash',      // Generación anterior estable
   ];
-  private readonly maxRetries = 3;
-  private readonly retryDelayMs = 2000;
+  private readonly maxRetries = 2;
+  private readonly retryDelayMs = 5000; // 5 segundos entre reintentos para evitar rate limit
 
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
@@ -104,6 +104,10 @@ export class OcrFacturaService {
       }
     }
 
+    // Si todos fallaron con rate limit, dar mensaje específico
+    if (lastError?.message?.includes('429')) {
+      throw new Error('Límite de solicitudes excedido. Espera 1-2 minutos e intenta de nuevo.');
+    }
     throw lastError || new Error('No se pudo conectar con ningún modelo de Gemini');
   }
 
