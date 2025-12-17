@@ -35,13 +35,80 @@ export interface FacturaOCRResult {
 export class OcrFacturaService {
   private readonly logger = new Logger(OcrFacturaService.name);
   private readonly apiKey: string;
-  private readonly apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+  private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
+  // Lista de modelos a intentar en orden de preferencia
+  private readonly models = [
+    'gemini-2.0-flash',      // Más estable y disponible
+    'gemini-2.0-flash-lite', // Alternativa más ligera
+    'gemini-1.5-flash',      // Fallback anterior
+  ];
+  private readonly maxRetries = 3;
+  private readonly retryDelayMs = 2000;
 
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
     if (!this.apiKey) {
       this.logger.warn('GEMINI_API_KEY no está configurada. El OCR de facturas no funcionará.');
     }
+  }
+
+  /**
+   * Hace la llamada a Gemini API con reintentos y fallback de modelos
+   */
+  private async callGeminiWithRetry(body: object): Promise<any> {
+    let lastError: Error | null = null;
+
+    for (const model of this.models) {
+      const apiUrl = `${this.baseUrl}/${model}:generateContent?key=${this.apiKey}`;
+
+      for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+        try {
+          this.logger.log(`Intentando con modelo ${model} (intento ${attempt}/${this.maxRetries})`);
+
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+
+          if (response.ok) {
+            this.logger.log(`Éxito con modelo ${model}`);
+            return await response.json();
+          }
+
+          const errorData = await response.text();
+
+          // Si es 503 (sobrecargado) o 429 (rate limit), reintentar
+          if (response.status === 503 || response.status === 429) {
+            this.logger.warn(`Modelo ${model} sobrecargado (${response.status}), reintentando en ${this.retryDelayMs * attempt}ms...`);
+            await this.delay(this.retryDelayMs * attempt);
+            continue;
+          }
+
+          // Si es 404 (modelo no existe), probar siguiente modelo
+          if (response.status === 404) {
+            this.logger.warn(`Modelo ${model} no disponible, probando siguiente...`);
+            break;
+          }
+
+          // Otro error, lanzar
+          this.logger.error(`Error de Gemini API: ${response.status} - ${errorData}`);
+          throw new Error(`Error de API: ${response.status}`);
+
+        } catch (error) {
+          lastError = error;
+          if (attempt < this.maxRetries) {
+            await this.delay(this.retryDelayMs * attempt);
+          }
+        }
+      }
+    }
+
+    throw lastError || new Error('No se pudo conectar con ningún modelo de Gemini');
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
@@ -98,40 +165,28 @@ Si algún campo no está visible o no puedes determinarlo, usa null.
 Los números deben ser numéricos, no strings.
 Extrae TODOS los items/productos que aparezcan en la factura.`;
 
-      // Llamar a la API de Gemini
-      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt },
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64Image,
-                  },
+      // Llamar a la API de Gemini con reintentos
+      const requestBody = {
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: base64Image,
                 },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 4096,
+              },
+            ],
           },
-        }),
-      });
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 4096,
+        },
+      };
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        this.logger.error(`Error de Gemini API: ${response.status} - ${errorData}`);
-        throw new BadRequestException(`Error al procesar imagen: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await this.callGeminiWithRetry(requestBody);
 
       // Extraer el texto de la respuesta
       const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -209,39 +264,27 @@ Si algún campo no está visible o no puedes determinarlo, usa null.
 Los números deben ser numéricos, no strings.
 Extrae TODOS los items/productos que aparezcan en la factura.`;
 
-      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt },
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: cleanBase64,
-                  },
+      const requestBody = {
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: cleanBase64,
                 },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 4096,
+              },
+            ],
           },
-        }),
-      });
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 4096,
+        },
+      };
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        this.logger.error(`Error de Gemini API: ${response.status} - ${errorData}`);
-        throw new BadRequestException(`Error al procesar imagen: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await this.callGeminiWithRetry(requestBody);
       const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (!responseText) {
