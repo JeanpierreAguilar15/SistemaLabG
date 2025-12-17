@@ -1278,7 +1278,7 @@ export default function InventarioPage() {
       if (kardexFechaDesde) params.append('fecha_desde', kardexFechaDesde)
       if (kardexFechaHasta) params.append('fecha_hasta', kardexFechaHasta)
 
-      const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/kardex/global?${params.toString()}`
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/kardex-global?${params.toString()}`
       console.log('Llamando a Kardex Global:', url)
 
       const response = await fetch(url, {

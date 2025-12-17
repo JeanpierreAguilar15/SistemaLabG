@@ -131,7 +131,7 @@ export class InventarioController {
     return this.inventarioService.getKardexReport();
   }
 
-  @Get('inventory/kardex/global')
+  @Get('inventory/kardex-global')
   @ApiOperation({
     summary: 'Kardex Global - Resumen de todos los items',
     description: 'Retorna un resumen completo del inventario con totales de entradas/salidas, stock actual, valor y estado de cada item.',
