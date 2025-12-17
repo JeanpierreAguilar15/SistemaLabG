@@ -270,7 +270,7 @@ export default function OrdenesCompraPage() {
   }
 
   const handleEmit = async (codigo_orden: number) => {
-    if (!confirm('¿Está seguro de emitir esta orden de compra? Una vez emitida no podrá modificarse.')) return
+    if (!confirm('¿Está seguro de emitir esta orden de compra? Una vez emitida no podrá modificarse. Se descargará el PDF para imprimir.')) return
 
     try {
       const response = await fetch(
@@ -282,8 +282,11 @@ export default function OrdenesCompraPage() {
       )
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Orden emitida correctamente' })
+        setMessage({ type: 'success', text: 'Orden emitida correctamente. Descargando PDF...' })
         loadOrdenes()
+        loadStats()
+        // Descargar PDF automáticamente después de emitir
+        await handleExportPdf(codigo_orden)
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.message || 'Error al emitir orden' })

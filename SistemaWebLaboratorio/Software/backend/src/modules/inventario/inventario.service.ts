@@ -1843,8 +1843,51 @@ export class InventarioService {
   // ==================== ÓRDENES DE COMPRA ====================
 
   async createOrdenCompra(data: any, adminId: number) {
-    // Calcular totales
+    // Validar que el proveedor existe y está activo
+    const proveedor = await this.prisma.proveedor.findUnique({
+      where: { codigo_proveedor: data.codigo_proveedor },
+    });
+
+    if (!proveedor) {
+      throw new BadRequestException('El proveedor seleccionado no existe');
+    }
+
+    if (!proveedor.activo) {
+      throw new BadRequestException('El proveedor seleccionado está desactivado. Por favor seleccione un proveedor activo.');
+    }
+
+    // Validar detalles
     const detalles = data.detalles || [];
+    if (detalles.length === 0) {
+      throw new BadRequestException('La orden debe tener al menos un item');
+    }
+
+    // Validar que todos los items existen
+    const codigosItems = detalles.map((d) => d.codigo_item);
+    const itemsExistentes = await this.prisma.item.findMany({
+      where: { codigo_item: { in: codigosItems } },
+      select: { codigo_item: true, nombre: true, activo: true },
+    });
+
+    const itemsMap = new Map(itemsExistentes.map((i) => [i.codigo_item, i]));
+
+    for (const detalle of detalles) {
+      const item = itemsMap.get(detalle.codigo_item);
+      if (!item) {
+        throw new BadRequestException(`El item con código ${detalle.codigo_item} no existe`);
+      }
+      if (!item.activo) {
+        throw new BadRequestException(`El item "${item.nombre}" está desactivado y no puede incluirse en la orden`);
+      }
+      if (detalle.cantidad <= 0) {
+        throw new BadRequestException(`La cantidad para el item "${item.nombre}" debe ser mayor a 0`);
+      }
+      if (detalle.precio_unitario < 0) {
+        throw new BadRequestException(`El precio para el item "${item.nombre}" no puede ser negativo`);
+      }
+    }
+
+    // Calcular totales
     const subtotal = detalles.reduce(
       (sum, d) => sum + d.cantidad * d.precio_unitario,
       0,

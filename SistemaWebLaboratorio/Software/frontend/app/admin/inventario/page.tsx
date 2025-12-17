@@ -338,8 +338,10 @@ export default function InventarioPage() {
     numero_lote: string
     fecha_vencimiento: string
     codigo_item: string
+    precio_unitario: number
     selected: boolean
   }>>([])
+  const [ocrSelectedProveedor, setOcrSelectedProveedor] = useState<string>('')
 
   // Generar Pedido de Reposición state
   const [showGenerarPedidoModal, setShowGenerarPedidoModal] = useState(false)
@@ -1537,6 +1539,11 @@ export default function InventarioPage() {
     setOcrResult(null)
     setOcrPreviewUrl(null)
     setOcrSelectedItems([])
+    setOcrSelectedProveedor('')
+    // Cargar proveedores si no están cargados
+    if (proveedores.length === 0) {
+      loadProveedores()
+    }
   }
 
   const closeOcrModal = () => {
@@ -1585,6 +1592,7 @@ export default function InventarioPage() {
             numero_lote: item.numero_lote || `LOT-${Date.now()}`,
             fecha_vencimiento: item.fecha_vencimiento || '',
             codigo_item: '', // El usuario debe seleccionar
+            precio_unitario: item.precio_unitario || 0,
             selected: true,
           })))
         }
@@ -1607,7 +1615,7 @@ export default function InventarioPage() {
     })
   }
 
-  const handleCreateLotesFromOcr = async () => {
+  const handleCreateOrdenFromOcr = async () => {
     const itemsToCreate = ocrSelectedItems.filter(item => item.selected && item.codigo_item)
 
     if (itemsToCreate.length === 0) {
@@ -1615,37 +1623,48 @@ export default function InventarioPage() {
       return
     }
 
+    if (!ocrSelectedProveedor) {
+      setMessage({ type: 'error', text: 'Debe seleccionar un proveedor para la orden de compra' })
+      return
+    }
+
     setOcrLoading(true)
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/ocr/create-from-result`, {
+      // Crear orden de compra con los items del OCR
+      const ordenData = {
+        codigo_proveedor: parseInt(ocrSelectedProveedor),
+        observaciones: `Orden creada desde escaneo de factura${ocrResult?.factura?.numero ? ` - Factura: ${ocrResult.factura.numero}` : ''}${ocrResult?.factura?.fecha ? ` - Fecha: ${ocrResult.factura.fecha}` : ''}`,
+        detalles: itemsToCreate.map(item => ({
+          codigo_item: parseInt(item.codigo_item),
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario || 0,
+          // Guardar info de lote en observaciones para cuando se reciba
+          observaciones_item: `Lote: ${item.numero_lote}${item.fecha_vencimiento ? `, Venc: ${item.fecha_vencimiento}` : ''}`,
+        })),
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          items: itemsToCreate.map(item => ({
-            codigo_item: parseInt(item.codigo_item),
-            numero_lote: item.numero_lote,
-            cantidad: item.cantidad,
-            fecha_vencimiento: item.fecha_vencimiento || undefined,
-          })),
-        }),
+        body: JSON.stringify(ordenData),
       })
 
       if (response.ok) {
         const result = await response.json()
         setMessage({
           type: 'success',
-          text: `Se crearon ${result.exitosos} lotes exitosamente${result.fallidos > 0 ? ` (${result.fallidos} fallidos)` : ''}`,
+          text: `Orden de compra ${result.numero_orden} creada exitosamente. Vaya a Órdenes de Compra para emitirla y recibirla.`,
         })
         closeOcrModal()
-        loadLotes()
+        // Recargar datos
         loadItems()
       } else {
         const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al crear lotes' })
+        setMessage({ type: 'error', text: error.message || 'Error al crear orden de compra' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
@@ -3741,7 +3760,7 @@ export default function InventarioPage() {
               <div>
                 <h2 className="text-2xl font-bold text-lab-neutral-900">Escanear Factura de Proveedor</h2>
                 <p className="text-sm text-lab-neutral-600 mt-1">
-                  Suba una imagen de factura para extraer automáticamente los productos y crear lotes
+                  Suba una imagen de factura para extraer los productos y crear una orden de compra
                 </p>
               </div>
               <Button variant="outline" onClick={closeOcrModal}>
@@ -3914,34 +3933,61 @@ export default function InventarioPage() {
 
             {/* Footer Actions */}
             {ocrResult && ocrSelectedItems.length > 0 && (
-              <div className="p-6 border-t border-lab-neutral-200 flex justify-between items-center">
-                <div className="text-sm text-lab-neutral-600">
-                  {ocrSelectedItems.filter(i => i.selected && i.codigo_item).length} items listos para crear
+              <div className="p-6 border-t border-lab-neutral-200">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  {/* Selector de Proveedor */}
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm font-medium text-lab-neutral-700 whitespace-nowrap">
+                      Proveedor para la orden:
+                    </label>
+                    <select
+                      value={ocrSelectedProveedor}
+                      onChange={(e) => setOcrSelectedProveedor(e.target.value)}
+                      className="flex-1 min-w-[200px] rounded-md border-lab-neutral-300 text-sm"
+                    >
+                      <option value="">Seleccionar proveedor...</option>
+                      {proveedores.filter(p => p.activo !== false).map((prov) => (
+                        <option key={prov.codigo_proveedor} value={prov.codigo_proveedor}>
+                          {prov.razon_social}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Info y Botones */}
+                  <div className="flex items-center gap-4">
+                    <div className="text-sm text-lab-neutral-600">
+                      {ocrSelectedItems.filter(i => i.selected && i.codigo_item).length} items listos
+                    </div>
+                    <div className="flex space-x-3">
+                      <Button variant="outline" onClick={closeOcrModal}>
+                        Cancelar
+                      </Button>
+                      <Button
+                        onClick={handleCreateOrdenFromOcr}
+                        disabled={ocrLoading || !ocrSelectedProveedor || ocrSelectedItems.filter(i => i.selected && i.codigo_item).length === 0}
+                        className="bg-lab-primary-600 hover:bg-lab-primary-700"
+                      >
+                        {ocrLoading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                            Procesando...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Crear Orden de Compra
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex space-x-3">
-                  <Button variant="outline" onClick={closeOcrModal}>
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleCreateLotesFromOcr}
-                    disabled={ocrLoading || ocrSelectedItems.filter(i => i.selected && i.codigo_item).length === 0}
-                    className="bg-lab-primary-600 hover:bg-lab-primary-700"
-                  >
-                    {ocrLoading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                        Procesando...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Crear Lotes en Inventario
-                      </>
-                    )}
-                  </Button>
-                </div>
+                <p className="mt-2 text-xs text-lab-neutral-500">
+                  Se creará una orden en estado BORRADOR. Luego deberá emitirla y recibirla desde Órdenes de Compra.
+                </p>
               </div>
             )}
           </div>
