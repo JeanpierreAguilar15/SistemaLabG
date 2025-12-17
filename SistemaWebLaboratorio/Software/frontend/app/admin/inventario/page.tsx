@@ -355,9 +355,9 @@ export default function InventarioPage() {
     costo_unitario: number
     estado_stock: string
     cantidad_pedir: number
-    codigo_proveedor: string
     selected: boolean
   }>>([])
+  const [generarPedidoProveedor, setGenerarPedidoProveedor] = useState<string>('')
   const [generarPedidoLoading, setGenerarPedidoLoading] = useState(false)
 
   useEffect(() => {
@@ -1398,7 +1398,6 @@ export default function InventarioPage() {
         costo_unitario: item.costo_unitario,
         estado_stock: item.estado_stock,
         cantidad_pedir: Math.max(item.stock_minimo - item.stock_actual + 10, 1), // Sugiere cantidad
-        codigo_proveedor: '',
         selected: true, // Pre-seleccionado
       }))
 
@@ -1408,6 +1407,7 @@ export default function InventarioPage() {
     }
 
     setGenerarPedidoItems(itemsBajoStock)
+    setGenerarPedidoProveedor('') // Resetear proveedor
     setShowGenerarPedidoModal(true)
   }
 
@@ -1469,65 +1469,48 @@ export default function InventarioPage() {
       return
     }
 
-    // Validar que todos los items seleccionados tengan proveedor
-    const itemsSinProveedor = itemsSeleccionados.filter(item => !item.codigo_proveedor)
-    if (itemsSinProveedor.length > 0) {
-      setMessage({ type: 'error', text: 'Todos los items seleccionados deben tener un proveedor asignado' })
+    if (!generarPedidoProveedor) {
+      setMessage({ type: 'error', text: 'Debe seleccionar un proveedor para la orden' })
       return
     }
 
-    // Agrupar por proveedor
-    const itemsPorProveedor = new Map<string, typeof itemsSeleccionados>()
-    for (const item of itemsSeleccionados) {
-      const current = itemsPorProveedor.get(item.codigo_proveedor) || []
-      current.push(item)
-      itemsPorProveedor.set(item.codigo_proveedor, current)
-    }
-
     setGenerarPedidoLoading(true)
-    let ordenesCreadas = 0
-    let errores = 0
 
     try {
-      for (const [codigoProveedor, items] of itemsPorProveedor.entries()) {
-        const ordenData = {
-          codigo_proveedor: parseInt(codigoProveedor),
-          observaciones: `Pedido de reposición generado automáticamente - ${new Date().toLocaleDateString('es-EC')}`,
-          detalles: items.map(item => ({
-            codigo_item: item.codigo_item,
-            cantidad: item.cantidad_pedir,
-            precio_unitario: item.costo_unitario,
-          })),
-        }
-
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(ordenData),
-        })
-
-        if (response.ok) {
-          ordenesCreadas++
-        } else {
-          errores++
-        }
+      // Crear UNA sola orden con todos los items seleccionados
+      const ordenData = {
+        codigo_proveedor: parseInt(generarPedidoProveedor),
+        observaciones: `Pedido de reposición generado automáticamente - ${new Date().toLocaleDateString('es-EC')} - ${itemsSeleccionados.length} items`,
+        detalles: itemsSeleccionados.map(item => ({
+          codigo_item: item.codigo_item,
+          cantidad: item.cantidad_pedir,
+          precio_unitario: item.costo_unitario,
+        })),
       }
 
-      if (ordenesCreadas > 0) {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(ordenData),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
         setMessage({
           type: 'success',
-          text: `Se ${ordenesCreadas === 1 ? 'creó' : 'crearon'} ${ordenesCreadas} ${ordenesCreadas === 1 ? 'orden' : 'órdenes'} de compra${errores > 0 ? ` (${errores} con error)` : ''}`,
+          text: `Orden de compra ${result.numero_orden} creada con ${itemsSeleccionados.length} items. Vaya a Órdenes de Compra para emitirla.`,
         })
         setShowGenerarPedidoModal(false)
       } else {
-        setMessage({ type: 'error', text: 'No se pudo crear ninguna orden de compra' })
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al crear orden de compra' })
       }
     } catch (error) {
-      console.error('Error generando órdenes:', error)
-      setMessage({ type: 'error', text: 'Error de conexión al generar órdenes' })
+      console.error('Error generando orden:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al generar orden' })
     } finally {
       setGenerarPedidoLoading(false)
     }
@@ -3210,28 +3193,6 @@ export default function InventarioPage() {
                           </svg>
                           Generar Pedido
                         </Button>
-                        <Button
-                          onClick={downloadPedidoReposicionPdf}
-                          variant="outline"
-                          size="sm"
-                          className="border-orange-600 text-orange-600 hover:bg-orange-50"
-                        >
-                          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                          </svg>
-                          Imprimir Pedido
-                        </Button>
-                        <Button
-                          onClick={exportKardexGlobalPdf}
-                          variant="outline"
-                          size="sm"
-                          className="border-lab-primary-600 text-lab-primary-600 hover:bg-lab-primary-50"
-                        >
-                          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          Exportar PDF
-                        </Button>
                       </div>
                     </CardHeader>
                     <CardContent>
@@ -4154,7 +4115,7 @@ export default function InventarioPage() {
               <div>
                 <h2 className="text-2xl font-bold text-lab-neutral-900">Generar Pedido de Reposición</h2>
                 <p className="text-sm text-lab-neutral-600 mt-1">
-                  Seleccione los items y proveedores para generar órdenes de compra automáticamente
+                  Seleccione los items para generar una orden de compra
                 </p>
               </div>
               <Button variant="outline" onClick={() => setShowGenerarPedidoModal(false)}>
@@ -4187,6 +4148,28 @@ export default function InventarioPage() {
                 </div>
               </div>
 
+              {/* Proveedor Selector */}
+              <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                <label className="block text-sm font-semibold text-orange-900 mb-2">
+                  Proveedor para la orden de compra *
+                </label>
+                <select
+                  value={generarPedidoProveedor}
+                  onChange={(e) => setGenerarPedidoProveedor(e.target.value)}
+                  className="w-full md:w-1/2 rounded-md border-orange-300 text-sm focus:ring-orange-500 focus:border-orange-500"
+                >
+                  <option value="">Seleccionar proveedor...</option>
+                  {proveedores.filter(p => p.activo !== false).map((prov) => (
+                    <option key={prov.codigo_proveedor} value={prov.codigo_proveedor}>
+                      {prov.razon_social}
+                    </option>
+                  ))}
+                </select>
+                {!generarPedidoProveedor && (
+                  <p className="mt-1 text-xs text-orange-600">Debe seleccionar un proveedor para crear la orden</p>
+                )}
+              </div>
+
               {/* Select All */}
               <div className="flex items-center gap-4 mb-4 p-3 bg-lab-neutral-50 rounded-lg">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -4214,7 +4197,6 @@ export default function InventarioPage() {
                       <th className="p-3 text-center text-sm font-semibold">Mínimo</th>
                       <th className="p-3 text-center text-sm font-semibold">Estado</th>
                       <th className="p-3 text-center text-sm font-semibold">Cantidad a Pedir</th>
-                      <th className="p-3 text-left text-sm font-semibold">Proveedor</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4254,21 +4236,6 @@ export default function InventarioPage() {
                             disabled={!item.selected}
                           />
                         </td>
-                        <td className="p-3">
-                          <select
-                            value={item.codigo_proveedor}
-                            onChange={(e) => handleGenerarPedidoItemChange(item.codigo_item, 'codigo_proveedor', e.target.value)}
-                            className="w-full rounded-md border-lab-neutral-300 text-sm"
-                            disabled={!item.selected}
-                          >
-                            <option value="">Seleccionar proveedor...</option>
-                            {proveedores.map((prov) => (
-                              <option key={prov.codigo_proveedor} value={prov.codigo_proveedor}>
-                                {prov.razon_social}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -4286,11 +4253,8 @@ export default function InventarioPage() {
 
             <div className="p-4 border-t border-lab-neutral-200 flex justify-between items-center">
               <div className="text-sm text-lab-neutral-600">
-                Se {generarPedidoItems.filter(i => i.selected && i.codigo_proveedor).length > 0 ? 'crearán' : 'creará'}{' '}
-                <strong>
-                  {new Set(generarPedidoItems.filter(i => i.selected && i.codigo_proveedor).map(i => i.codigo_proveedor)).size}
-                </strong>{' '}
-                {new Set(generarPedidoItems.filter(i => i.selected && i.codigo_proveedor).map(i => i.codigo_proveedor)).size === 1 ? 'orden' : 'órdenes'} de compra
+                Se creará <strong>1 orden</strong> con{' '}
+                <strong>{generarPedidoItems.filter(i => i.selected).length}</strong> items
               </div>
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setShowGenerarPedidoModal(false)}>
@@ -4298,7 +4262,7 @@ export default function InventarioPage() {
                 </Button>
                 <Button
                   onClick={handleGenerarOrdenes}
-                  disabled={generarPedidoLoading || generarPedidoItems.filter(i => i.selected).length === 0}
+                  disabled={generarPedidoLoading || !generarPedidoProveedor || generarPedidoItems.filter(i => i.selected).length === 0}
                   className="bg-orange-600 hover:bg-orange-700 text-white"
                 >
                   {generarPedidoLoading ? (
@@ -4311,7 +4275,7 @@ export default function InventarioPage() {
                       <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                       </svg>
-                      Generar Órdenes de Compra
+                      Generar Orden de Compra
                     </>
                   )}
                 </Button>
