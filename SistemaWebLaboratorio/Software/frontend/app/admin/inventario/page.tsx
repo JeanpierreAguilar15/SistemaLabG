@@ -1278,22 +1278,28 @@ export default function InventarioPage() {
       if (kardexFechaDesde) params.append('fecha_desde', kardexFechaDesde)
       if (kardexFechaHasta) params.append('fecha_hasta', kardexFechaHasta)
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/kardex/global?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/kardex/global?${params.toString()}`
+      console.log('Llamando a Kardex Global:', url)
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      console.log('Kardex Global response status:', response.status)
 
       if (response.ok) {
         const data = await response.json()
+        console.log('Kardex Global data recibida:', data)
         setKardexGlobal(data)
       } else {
-        setMessage({ type: 'error', text: 'Error al cargar kardex global' })
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Kardex Global error:', response.status, errorData)
+        setMessage({ type: 'error', text: errorData.message || `Error al cargar kardex global (${response.status})` })
       }
     } catch (error) {
+      console.error('Error en loadKardexGlobal:', error)
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     } finally {
       setKardexGlobalLoading(false)
