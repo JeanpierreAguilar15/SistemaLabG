@@ -289,35 +289,35 @@ export class AlertasProgramadasService implements OnModuleInit {
     items: Array<{ nombre: string; stock_actual: number; dias_sin_movimiento: number | null }>,
     dias: number
   ): string {
-    let mensaje = `⚠️ *ALERTA: ÍTEMS SIN MOVIMIENTOS*\n`;
-    mensaje += `📅 Período analizado: ${dias} días\n`;
-    mensaje += `📦 Total ítems: ${items.length}\n\n`;
+    let mensaje = `*ALERTA: ITEMS SIN MOVIMIENTOS*\n`;
+    mensaje += `Periodo analizado: ${dias} dias\n`;
+    mensaje += `Total items: ${items.length}\n\n`;
 
     const itemsConMov = items.filter(i => i.dias_sin_movimiento !== null);
     const itemsSinMov = items.filter(i => i.dias_sin_movimiento === null);
 
     if (itemsSinMov.length > 0) {
-      mensaje += `❌ *Nunca han tenido movimientos:*\n`;
+      mensaje += `*Nunca han tenido movimientos:*\n`;
       itemsSinMov.slice(0, 5).forEach(item => {
-        mensaje += `  • ${item.nombre} (Stock: ${item.stock_actual})\n`;
+        mensaje += `  - ${item.nombre} (Stock: ${item.stock_actual})\n`;
       });
       if (itemsSinMov.length > 5) {
-        mensaje += `  ... y ${itemsSinMov.length - 5} más\n`;
+        mensaje += `  ... y ${itemsSinMov.length - 5} mas\n`;
       }
       mensaje += `\n`;
     }
 
     if (itemsConMov.length > 0) {
-      mensaje += `⏰ *Sin movimientos recientes:*\n`;
+      mensaje += `*Sin movimientos recientes:*\n`;
       itemsConMov.slice(0, 5).forEach(item => {
-        mensaje += `  • ${item.nombre} (${item.dias_sin_movimiento} días)\n`;
+        mensaje += `  - ${item.nombre} (${item.dias_sin_movimiento} dias)\n`;
       });
       if (itemsConMov.length > 5) {
-        mensaje += `  ... y ${itemsConMov.length - 5} más\n`;
+        mensaje += `  ... y ${itemsConMov.length - 5} mas\n`;
       }
     }
 
-    mensaje += `\n💡 Revise estos ítems para evaluar rotación o ajuste de inventario.`;
+    mensaje += `\nRevise estos items para evaluar rotacion o ajuste de inventario.`;
 
     return mensaje;
   }

@@ -96,7 +96,7 @@ export default function AlertasStockPage() {
   // WhatsApp
   const [whatsappConfig, setWhatsappConfig] = useState<WhatsAppConfig | null>(null)
   const [whatsappLoading, setWhatsappLoading] = useState(false)
-  const [testMessage, setTestMessage] = useState('🧪 Prueba del sistema de alertas - Laboratorio Franz')
+  const [testMessage, setTestMessage] = useState('Prueba del sistema de alertas - Laboratorio Franz')
 
   useEffect(() => {
     setMounted(true)
@@ -390,7 +390,7 @@ export default function AlertasStockPage() {
                 : 'border-transparent text-lab-neutral-500 hover:text-lab-neutral-700 hover:border-lab-neutral-300'
             }`}
           >
-            📱 WhatsApp
+            WhatsApp
             {whatsappConfig?.configured && (
               <span className="ml-2 bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">
                 Activo
@@ -774,14 +774,14 @@ export default function AlertasStockPage() {
           <Card className={whatsappConfig?.configured ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                📱 Estado de WhatsApp
+                Estado de WhatsApp
                 {whatsappConfig?.configured ? (
                   <span className="text-sm font-normal bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                    ✅ Configurado
+                    Configurado
                   </span>
                 ) : (
                   <span className="text-sm font-normal bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                    ❌ No Configurado
+                    No Configurado
                   </span>
                 )}
               </CardTitle>
@@ -811,7 +811,7 @@ export default function AlertasStockPage() {
           {/* Enviar Mensaje de Prueba */}
           <Card>
             <CardHeader>
-              <CardTitle>🧪 Enviar Mensaje de Prueba</CardTitle>
+              <CardTitle>Enviar Mensaje de Prueba</CardTitle>
               <CardDescription>
                 Envía un mensaje personalizado para verificar que la configuración funciona
               </CardDescription>
@@ -848,7 +848,7 @@ export default function AlertasStockPage() {
           {/* Enviar Alertas */}
           <Card>
             <CardHeader>
-              <CardTitle>📤 Enviar Alertas Ahora</CardTitle>
+              <CardTitle>Enviar Alertas Ahora</CardTitle>
               <CardDescription>
                 Forzar el envío de alertas de inventario por WhatsApp (normalmente se envían automáticamente según horario programado)
               </CardDescription>
@@ -857,7 +857,7 @@ export default function AlertasStockPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Stock Bajo */}
                 <div className="border rounded-lg p-4 bg-lab-warning-50 border-lab-warning-200">
-                  <div className="text-lg font-semibold text-lab-warning-800 mb-2">⚠️ Stock Bajo</div>
+                  <div className="text-lg font-semibold text-lab-warning-800 mb-2">Stock Bajo</div>
                   <p className="text-sm text-lab-warning-700 mb-4">
                     Envía alerta de items con stock bajo o sin stock
                   </p>
@@ -872,7 +872,7 @@ export default function AlertasStockPage() {
 
                 {/* Vencimientos */}
                 <div className="border rounded-lg p-4 bg-lab-danger-50 border-lab-danger-200">
-                  <div className="text-lg font-semibold text-lab-danger-800 mb-2">⏰ Vencimientos</div>
+                  <div className="text-lg font-semibold text-lab-danger-800 mb-2">Vencimientos</div>
                   <p className="text-sm text-lab-danger-700 mb-4">
                     Envía alerta de lotes vencidos o próximos a vencer
                   </p>
@@ -887,7 +887,7 @@ export default function AlertasStockPage() {
 
                 {/* Todas */}
                 <div className="border rounded-lg p-4 bg-lab-primary-50 border-lab-primary-200">
-                  <div className="text-lg font-semibold text-lab-primary-800 mb-2">📱 Todas las Alertas</div>
+                  <div className="text-lg font-semibold text-lab-primary-800 mb-2">Todas las Alertas</div>
                   <p className="text-sm text-lab-primary-700 mb-4">
                     Envía todas las alertas pendientes en un solo mensaje
                   </p>
@@ -906,27 +906,27 @@ export default function AlertasStockPage() {
           {/* Información de Horarios */}
           <Card>
             <CardHeader>
-              <CardTitle>⏰ Horarios Automáticos</CardTitle>
+              <CardTitle>Horarios Automaticos</CardTitle>
               <CardDescription>
-                Las alertas se envían automáticamente según el siguiente horario
+                Las alertas se envían automaticamente segun el siguiente horario
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-lab-neutral-50 rounded-lg">
-                  <div className="font-semibold text-lab-neutral-900">📅 Diariamente - 8:00 AM</div>
+                  <div className="font-semibold text-lab-neutral-900">Diariamente - 8:00 AM</div>
                   <p className="text-sm text-lab-neutral-600 mt-1">Alertas de stock bajo</p>
                 </div>
                 <div className="p-4 bg-lab-neutral-50 rounded-lg">
-                  <div className="font-semibold text-lab-neutral-900">📅 Cada 4 horas</div>
-                  <p className="text-sm text-lab-neutral-600 mt-1">Alertas de stock crítico (sin stock)</p>
+                  <div className="font-semibold text-lab-neutral-900">Cada 4 horas</div>
+                  <p className="text-sm text-lab-neutral-600 mt-1">Alertas de stock critico (sin stock)</p>
                 </div>
                 <div className="p-4 bg-lab-neutral-50 rounded-lg">
-                  <div className="font-semibold text-lab-neutral-900">📅 Lunes - 9:00 AM</div>
+                  <div className="font-semibold text-lab-neutral-900">Lunes - 9:00 AM</div>
                   <p className="text-sm text-lab-neutral-600 mt-1">Alertas de vencimientos</p>
                 </div>
                 <div className="p-4 bg-lab-neutral-50 rounded-lg">
-                  <div className="font-semibold text-lab-neutral-900">📅 Lunes - 10:00 AM</div>
+                  <div className="font-semibold text-lab-neutral-900">Lunes - 10:00 AM</div>
                   <p className="text-sm text-lab-neutral-600 mt-1">Items sin movimientos</p>
                 </div>
               </div>

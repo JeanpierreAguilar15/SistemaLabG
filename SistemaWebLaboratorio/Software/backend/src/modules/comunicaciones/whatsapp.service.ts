@@ -127,22 +127,22 @@ export class WhatsAppService {
    * Formatea mensaje de stock bajo
    */
   private formatearMensajeStockBajo(items: Array<{ nombre: string; stock_actual: number; stock_minimo: number }>): string {
-    let mensaje = '🚨 *ALERTA DE STOCK BAJO* 🚨\n';
-    mensaje += '━━━━━━━━━━━━━━━━━━━━━\n';
-    mensaje += `📅 ${new Date().toLocaleDateString('es-EC')}\n\n`;
+    let mensaje = '*ALERTA DE STOCK BAJO*\n';
+    mensaje += '------------------------\n';
+    mensaje += `Fecha: ${new Date().toLocaleDateString('es-EC')}\n\n`;
 
-    for (const item of items.slice(0, 10)) { // Máximo 10 items para no exceder límite
-      const estado = item.stock_actual === 0 ? '🔴 AGOTADO' : '🟡 BAJO';
+    for (const item of items.slice(0, 10)) { // Maximo 10 items para no exceder limite
+      const estado = item.stock_actual === 0 ? '[AGOTADO]' : '[BAJO]';
       mensaje += `${estado} *${item.nombre}*\n`;
-      mensaje += `   Stock: ${item.stock_actual} / Mín: ${item.stock_minimo}\n\n`;
+      mensaje += `   Stock: ${item.stock_actual} / Min: ${item.stock_minimo}\n\n`;
     }
 
     if (items.length > 10) {
-      mensaje += `\n... y ${items.length - 10} items más\n`;
+      mensaje += `\n... y ${items.length - 10} items mas\n`;
     }
 
-    mensaje += '━━━━━━━━━━━━━━━━━━━━━\n';
-    mensaje += '📦 Sistema de Inventario - Laboratorio';
+    mensaje += '------------------------\n';
+    mensaje += 'Sistema de Inventario - Laboratorio';
 
     return mensaje;
   }
@@ -151,24 +151,24 @@ export class WhatsAppService {
    * Formatea mensaje de vencimiento
    */
   private formatearMensajeVencimiento(lotes: Array<{ item_nombre: string; numero_lote: string; fecha_vencimiento: Date; dias_restantes: number }>): string {
-    let mensaje = '⚠️ *ALERTA DE VENCIMIENTO* ⚠️\n';
-    mensaje += '━━━━━━━━━━━━━━━━━━━━━\n';
-    mensaje += `📅 ${new Date().toLocaleDateString('es-EC')}\n\n`;
+    let mensaje = '*ALERTA DE VENCIMIENTO*\n';
+    mensaje += '------------------------\n';
+    mensaje += `Fecha: ${new Date().toLocaleDateString('es-EC')}\n\n`;
 
     for (const lote of lotes.slice(0, 10)) {
-      const estado = lote.dias_restantes <= 0 ? '🔴 VENCIDO' : lote.dias_restantes <= 7 ? '🟠 CRÍTICO' : '🟡 PRÓXIMO';
+      const estado = lote.dias_restantes <= 0 ? '[VENCIDO]' : lote.dias_restantes <= 7 ? '[CRITICO]' : '[PROXIMO]';
       mensaje += `${estado} *${lote.item_nombre}*\n`;
       mensaje += `   Lote: ${lote.numero_lote}\n`;
       mensaje += `   Vence: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-EC')}`;
-      mensaje += lote.dias_restantes > 0 ? ` (${lote.dias_restantes} días)\n\n` : ' (VENCIDO)\n\n';
+      mensaje += lote.dias_restantes > 0 ? ` (${lote.dias_restantes} dias)\n\n` : ' (VENCIDO)\n\n';
     }
 
     if (lotes.length > 10) {
-      mensaje += `\n... y ${lotes.length - 10} lotes más\n`;
+      mensaje += `\n... y ${lotes.length - 10} lotes mas\n`;
     }
 
-    mensaje += '━━━━━━━━━━━━━━━━━━━━━\n';
-    mensaje += '📦 Sistema de Inventario - Laboratorio';
+    mensaje += '------------------------\n';
+    mensaje += 'Sistema de Inventario - Laboratorio';
 
     return mensaje;
   }

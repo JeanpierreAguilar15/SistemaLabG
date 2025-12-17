@@ -816,7 +816,7 @@ export class InventarioController {
   async testWhatsApp(
     @Body() data: { mensaje?: string; numero?: string },
   ) {
-    const mensaje = data.mensaje || '🔬 Mensaje de prueba del Sistema de Laboratorio';
+    const mensaje = data.mensaje || 'Mensaje de prueba del Sistema de Laboratorio';
     return this.whatsAppService.sendMessage({
       to: data.numero || '',
       message: mensaje,
