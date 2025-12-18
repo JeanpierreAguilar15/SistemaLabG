@@ -24,11 +24,12 @@ export class AlertasProgramadasService implements OnModuleInit {
   }
 
   /**
-   * Verifica stock bajo todos los días a las 8:00 AM
+   * Verifica stock bajo y critico todos los dias a las 8:00 AM
+   * Solo se envia UNA notificacion al dia con todos los items que necesitan atencion
    */
-  @Cron('0 8 * * *') // 8:00 AM todos los días
-  async verificarStockBajoDiario() {
-    this.logger.log('Ejecutando verificación diaria de stock bajo...');
+  @Cron('0 8 * * *') // 8:00 AM todos los dias
+  async verificarStockDiario() {
+    this.logger.log('Ejecutando verificacion diaria de stock...');
     await this.enviarAlertasStockBajo();
   }
 
@@ -37,27 +38,21 @@ export class AlertasProgramadasService implements OnModuleInit {
    */
   @Cron('0 9 * * 1') // 9:00 AM cada lunes
   async verificarVencimientosSemanal() {
-    this.logger.log('Ejecutando verificación semanal de vencimientos...');
+    this.logger.log('Ejecutando verificacion semanal de vencimientos...');
     await this.enviarAlertasVencimiento();
   }
 
   /**
-   * Verifica ítems sin movimientos todos los lunes a las 10:00 AM
+   * Verifica items sin movimientos todos los lunes a las 10:00 AM
    */
   @Cron('0 10 * * 1') // 10:00 AM cada lunes
   async verificarItemsSinMovimientos() {
-    this.logger.log('Ejecutando verificación semanal de ítems sin movimientos...');
+    this.logger.log('Ejecutando verificacion semanal de items sin movimientos...');
     await this.enviarAlertasSinMovimientos();
   }
 
-  /**
-   * Verifica stock crítico cada 4 horas (urgente)
-   */
-  @Cron('0 */4 * * *') // Cada 4 horas
-  async verificarStockCritico() {
-    this.logger.log('Verificando stock crítico...');
-    await this.enviarAlertasStockCritico();
-  }
+  // NOTA: Se elimino el cron de cada 4 horas para evitar multiples notificaciones
+  // Ahora todas las alertas de stock (bajo y critico) se envian solo 1 vez al dia a las 8:00 AM
 
   /**
    * Envía alertas de stock bajo (stock_actual <= stock_minimo)

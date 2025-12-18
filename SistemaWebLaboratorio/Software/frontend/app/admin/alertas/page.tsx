@@ -908,18 +908,14 @@ export default function AlertasStockPage() {
             <CardHeader>
               <CardTitle>Horarios Automaticos</CardTitle>
               <CardDescription>
-                Las alertas se envían automaticamente segun el siguiente horario
+                Las alertas se envian automaticamente segun el siguiente horario (1 vez al dia maximo)
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-lab-neutral-50 rounded-lg">
                   <div className="font-semibold text-lab-neutral-900">Diariamente - 8:00 AM</div>
-                  <p className="text-sm text-lab-neutral-600 mt-1">Alertas de stock bajo</p>
-                </div>
-                <div className="p-4 bg-lab-neutral-50 rounded-lg">
-                  <div className="font-semibold text-lab-neutral-900">Cada 4 horas</div>
-                  <p className="text-sm text-lab-neutral-600 mt-1">Alertas de stock critico (sin stock)</p>
+                  <p className="text-sm text-lab-neutral-600 mt-1">Alertas de stock bajo y critico (1 mensaje/dia)</p>
                 </div>
                 <div className="p-4 bg-lab-neutral-50 rounded-lg">
                   <div className="font-semibold text-lab-neutral-900">Lunes - 9:00 AM</div>
