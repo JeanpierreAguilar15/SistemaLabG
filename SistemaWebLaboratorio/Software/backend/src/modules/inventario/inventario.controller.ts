@@ -25,6 +25,7 @@ import { InventarioService } from './inventario.service';
 import { OcrFacturaService } from './services/ocr-factura.service';
 import { AlertasProgramadasService } from './services/alertas-programadas.service';
 import { PdfInventarioService } from './services/pdf-inventario.service';
+import { ReactivosService, AbrirLoteDto, RegistrarPruebasDto, DescartarLoteDto } from './services/reactivos.service';
 import { WhatsAppService } from '../comunicaciones/whatsapp.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -48,6 +49,7 @@ export class InventarioController {
     private readonly ocrFacturaService: OcrFacturaService,
     private readonly alertasProgramadasService: AlertasProgramadasService,
     private readonly pdfInventarioService: PdfInventarioService,
+    private readonly reactivosService: ReactivosService,
     private readonly whatsAppService: WhatsAppService,
   ) {}
 
@@ -1106,5 +1108,76 @@ export class InventarioController {
   })
   async getExamenesConInsumos() {
     return this.inventarioService.getExamenesConInsumos();
+  }
+
+  // ==================== CONTROL DE REACTIVOS ====================
+
+  @Get('inventory/reactivos/lotes-abiertos')
+  @ApiOperation({
+    summary: 'Obtener todos los lotes de reactivos abiertos',
+    description: 'Lista los lotes que han sido abiertos y están en uso, mostrando tiempo restante y pruebas disponibles',
+  })
+  async getLotesReactivosAbiertos() {
+    return this.reactivosService.getLotesAbiertos();
+  }
+
+  @Get('inventory/reactivos/proximos-vencer')
+  @ApiOperation({
+    summary: 'Obtener lotes abiertos próximos a vencer',
+    description: 'Lista los lotes abiertos que vencerán en las próximas horas especificadas',
+  })
+  @ApiQuery({ name: 'horas', required: false, description: 'Horas para considerar como "próximo a vencer" (default: 24)' })
+  async getLotesProximosVencer(@Query('horas') horas?: string) {
+    return this.reactivosService.getLotesProximosVencerApertura(horas ? parseInt(horas) : 24);
+  }
+
+  @Post('inventory/reactivos/abrir-lote')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Abrir un lote de reactivo',
+    description: 'Marca un lote como abierto e inicia el contador de vida útil. Calcula automáticamente la fecha de vencimiento por apertura.',
+  })
+  async abrirLoteReactivo(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() dto: AbrirLoteDto,
+  ) {
+    return this.reactivosService.abrirLote(dto, adminId);
+  }
+
+  @Post('inventory/reactivos/registrar-pruebas')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Registrar pruebas realizadas con un lote',
+    description: 'Incrementa el contador de pruebas realizadas. Si alcanza la capacidad máxima, marca el lote como agotado.',
+  })
+  async registrarPruebasReactivo(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() dto: RegistrarPruebasDto,
+  ) {
+    return this.reactivosService.registrarPruebas(dto, adminId);
+  }
+
+  @Post('inventory/reactivos/descartar-lote')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Descartar un lote de reactivo',
+    description: 'Marca el lote como descartado con un motivo específico y registra las pruebas no utilizadas.',
+  })
+  async descartarLoteReactivo(
+    @CurrentUser('codigo_usuario') adminId: number,
+    @Body() dto: DescartarLoteDto,
+  ) {
+    return this.reactivosService.descartarLote(dto, adminId);
+  }
+
+  @Post('inventory/reactivos/verificar-vencimientos')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verificar y notificar vencimientos de lotes abiertos',
+    description: 'Revisa los lotes abiertos próximos a vencer y envía notificación por WhatsApp',
+  })
+  async verificarVencimientosReactivos() {
+    await this.reactivosService.verificarYNotificarVencimientos();
+    return { success: true, message: 'Verificación de vencimientos completada' };
   }
 }

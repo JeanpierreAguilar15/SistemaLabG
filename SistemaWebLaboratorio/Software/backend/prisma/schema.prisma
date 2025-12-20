@@ -533,19 +533,25 @@ model CategoriaItem {
 }
 
 model Item {
-  codigo_item       Int       @id @default(autoincrement())
-  codigo_categoria  Int?
-  codigo_interno    String    @unique @db.VarChar(50)
-  nombre            String    @db.VarChar(200)
-  descripcion       String?   @db.Text
-  unidad_medida     String    @db.VarChar(50)
-  stock_actual      Int       @default(0)
-  stock_minimo      Int       @default(0)
-  stock_maximo      Int?
-  costo_unitario    Decimal?  @db.Decimal(10, 2)
-  precio_venta      Decimal?  @db.Decimal(10, 2)
-  activo            Boolean   @default(true)
-  fecha_creacion    DateTime  @default(now())
+  codigo_item           Int       @id @default(autoincrement())
+  codigo_categoria      Int?
+  codigo_interno        String    @unique @db.VarChar(50)
+  nombre                String    @db.VarChar(200)
+  descripcion           String?   @db.Text
+  unidad_medida         String    @db.VarChar(50)
+  stock_actual          Int       @default(0)
+  stock_minimo          Int       @default(0)
+  stock_maximo          Int?
+  costo_unitario        Decimal?  @db.Decimal(10, 2)
+  precio_venta          Decimal?  @db.Decimal(10, 2)
+
+  // Campos para control de reactivos
+  es_reactivo           Boolean   @default(false)  // Indica si es un reactivo que se abre
+  vida_util_dias_abierto Int?                      // Dias de vida util despues de abierto
+  capacidad_pruebas     Int?                       // Numero de pruebas por unidad/frasco
+
+  activo                Boolean   @default(true)
+  fecha_creacion        DateTime  @default(now())
 
   categoria         CategoriaItem? @relation(fields: [codigo_categoria], references: [codigo_categoria])
   lotes             Lote[]
@@ -559,15 +565,23 @@ model Item {
 }
 
 model Lote {
-  codigo_lote         Int       @id @default(autoincrement())
-  codigo_item         Int
-  numero_lote         String    @db.VarChar(100)
-  fecha_fabricacion   DateTime? @db.Date
-  fecha_vencimiento   DateTime? @db.Date
-  cantidad_inicial    Int
-  cantidad_actual     Int
-  proveedor           String?   @db.VarChar(200)
-  fecha_ingreso       DateTime  @default(now())
+  codigo_lote              Int       @id @default(autoincrement())
+  codigo_item              Int
+  numero_lote              String    @db.VarChar(100)
+  fecha_fabricacion        DateTime? @db.Date
+  fecha_vencimiento        DateTime? @db.Date
+  cantidad_inicial         Int
+  cantidad_actual          Int
+  proveedor                String?   @db.VarChar(200)
+  fecha_ingreso            DateTime  @default(now())
+
+  // Campos para control de apertura de reactivos
+  estado_lote              String    @default("CERRADO") @db.VarChar(20) // CERRADO, ABIERTO, AGOTADO, DESCARTADO
+  fecha_apertura           DateTime? @db.Timestamp                       // Cuando se abrio el lote
+  fecha_vencimiento_abierto DateTime? @db.Timestamp                      // Fecha vencimiento calculada tras apertura
+  pruebas_realizadas       Int       @default(0)                         // Contador de pruebas hechas
+  motivo_descarte          String?   @db.VarChar(100)                    // Razon del descarte
+  fecha_descarte           DateTime?                                     // Cuando se descarto
 
   item                Item      @relation(fields: [codigo_item], references: [codigo_item])
   movimientos         Movimiento[]
