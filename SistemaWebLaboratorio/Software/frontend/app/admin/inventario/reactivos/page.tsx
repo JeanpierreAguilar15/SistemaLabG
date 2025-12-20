@@ -23,6 +23,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import {
@@ -35,6 +40,8 @@ import {
   RefreshCw,
   Package,
   Timer,
+  Info,
+  AlertCircle,
 } from 'lucide-react';
 
 interface LoteAbierto {
@@ -50,6 +57,8 @@ interface LoteAbierto {
   capacidad_pruebas: number;
   pruebas_restantes: number;
   porcentaje_uso: number;
+  frascos_restantes: number;
+  frascos_totales: number;
   estado: string;
 }
 
@@ -57,6 +66,7 @@ interface LoteCerrado {
   codigo_lote: number;
   numero_lote: string;
   item: {
+    codigo_item: number;
     nombre: string;
     es_reactivo: boolean;
     vida_util_dias_abierto: number;
@@ -64,6 +74,7 @@ interface LoteCerrado {
   };
   fecha_vencimiento: string;
   cantidad_actual: number;
+  cantidad_inicial: number;
   estado_lote: string;
 }
 
@@ -75,7 +86,7 @@ export default function ReactivosPage() {
   const [dialogAbrirLote, setDialogAbrirLote] = useState(false);
   const [dialogRegistrarPruebas, setDialogRegistrarPruebas] = useState(false);
   const [dialogDescartar, setDialogDescartar] = useState(false);
-  const [loteSeleccionado, setLoteSeleccionado] = useState<number | null>(null);
+  const [loteSeleccionado, setLoteSeleccionado] = useState<LoteCerrado | LoteAbierto | null>(null);
   const [cantidadPruebas, setCantidadPruebas] = useState('');
   const [motivoDescarte, setMotivoDescarte] = useState('');
   const [observacion, setObservacion] = useState('');
@@ -100,9 +111,12 @@ export default function ReactivosPage() {
       });
       if (resLotes.ok) {
         const data = await resLotes.json();
-        // Filtrar solo lotes cerrados de items que son reactivos
+        // Filtrar solo lotes cerrados de items que son reactivos con frascos disponibles
         const cerrados = data.items?.filter(
-          (l: LoteCerrado) => l.estado_lote === 'CERRADO' && l.item?.es_reactivo
+          (l: LoteCerrado) =>
+            l.estado_lote === 'CERRADO' &&
+            l.item?.es_reactivo &&
+            l.cantidad_actual > 0
         ) || [];
         setLotesCerrados(cerrados);
       }
@@ -128,17 +142,17 @@ export default function ReactivosPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ codigo_lote: loteSeleccionado }),
+        body: JSON.stringify({ codigo_lote: loteSeleccionado.codigo_lote }),
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
-        toast.success(data.mensaje || 'Lote abierto exitosamente');
+        toast.success(data.mensaje || 'Frasco abierto exitosamente');
         setDialogAbrirLote(false);
         setLoteSeleccionado(null);
         fetchData();
       } else {
-        toast.error(data.message || 'Error al abrir lote');
+        toast.error(data.message || 'Error al abrir frasco');
       }
     } catch (error) {
       toast.error('Error de conexion');
@@ -156,7 +170,7 @@ export default function ReactivosPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          codigo_lote: loteSeleccionado,
+          codigo_lote: loteSeleccionado.codigo_lote,
           cantidad_pruebas: parseInt(cantidadPruebas),
           observacion: observacion || undefined,
         }),
@@ -164,7 +178,11 @@ export default function ReactivosPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        toast.success(`${cantidadPruebas} pruebas registradas. Restantes: ${data.pruebas_restantes}`);
+        if (data.frasco_agotado) {
+          toast.warning(data.mensaje);
+        } else {
+          toast.success(data.mensaje);
+        }
         setDialogRegistrarPruebas(false);
         setLoteSeleccionado(null);
         setCantidadPruebas('');
@@ -189,7 +207,7 @@ export default function ReactivosPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          codigo_lote: loteSeleccionado,
+          codigo_lote: loteSeleccionado.codigo_lote,
           motivo: motivoDescarte,
           observacion: observacion || undefined,
         }),
@@ -197,14 +215,14 @@ export default function ReactivosPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        toast.warning(`Lote descartado. ${data.pruebas_desperdiciadas} pruebas no utilizadas.`);
+        toast.warning(data.mensaje);
         setDialogDescartar(false);
         setLoteSeleccionado(null);
         setMotivoDescarte('');
         setObservacion('');
         fetchData();
       } else {
-        toast.error(data.message || 'Error al descartar lote');
+        toast.error(data.message || 'Error al descartar frasco');
       }
     } catch (error) {
       toast.error('Error de conexion');
@@ -218,7 +236,7 @@ export default function ReactivosPage() {
     if (estado === 'CRITICO' || horasRestantes <= 24) {
       return <Badge variant="destructive">CRITICO - {horasRestantes}h</Badge>;
     }
-    return <Badge variant="default">{estado}</Badge>;
+    return <Badge variant="default" className="bg-green-600">ACTIVO</Badge>;
   };
 
   const formatFecha = (fecha: string) => {
@@ -231,6 +249,9 @@ export default function ReactivosPage() {
     });
   };
 
+  const lotesVencidos = lotesAbiertos.filter(l => l.horas_restantes <= 0);
+  const lotesCriticos = lotesAbiertos.filter(l => l.horas_restantes > 0 && l.horas_restantes <= 24);
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -240,7 +261,7 @@ export default function ReactivosPage() {
             Control de Reactivos
           </h1>
           <p className="text-muted-foreground">
-            Gestion de lotes abiertos con vida util limitada
+            Gestion de frascos abiertos con vida util limitada
           </p>
         </div>
         <Button onClick={fetchData} variant="outline" size="sm">
@@ -249,28 +270,52 @@ export default function ReactivosPage() {
         </Button>
       </div>
 
+      {/* Alerta de vencidos */}
+      {lotesVencidos.length > 0 && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Frascos vencidos</AlertTitle>
+          <AlertDescription>
+            Hay {lotesVencidos.length} frasco(s) vencido(s) que deben descartarse inmediatamente.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Alerta de criticos */}
+      {lotesCriticos.length > 0 && (
+        <Alert className="border-orange-500 bg-orange-50">
+          <AlertTriangle className="h-4 w-4 text-orange-600" />
+          <AlertTitle className="text-orange-800">Frascos por vencer</AlertTitle>
+          <AlertDescription className="text-orange-700">
+            Hay {lotesCriticos.length} frasco(s) que venceran en menos de 24 horas. Uselos pronto o descartelos.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Resumen */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Lotes Abiertos
+              Frascos Abiertos
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{lotesAbiertos.length}</div>
+            <p className="text-xs text-muted-foreground">En uso actualmente</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Criticos (menos de 24h)
+              Criticos (menos 24h)
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {lotesAbiertos.filter(l => l.horas_restantes <= 24 && l.horas_restantes > 0).length}
+            <div className="text-2xl font-bold text-orange-600">
+              {lotesCriticos.length}
             </div>
+            <p className="text-xs text-muted-foreground">Usar pronto</p>
           </CardContent>
         </Card>
         <Card>
@@ -281,31 +326,47 @@ export default function ReactivosPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">
-              {lotesAbiertos.filter(l => l.horas_restantes <= 0).length}
+              {lotesVencidos.length}
             </div>
+            <p className="text-xs text-muted-foreground">Descartar</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Disponibles para Abrir
+              Lotes Disponibles
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{lotesCerrados.length}</div>
+            <p className="text-xs text-muted-foreground">Para abrir</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Lotes Abiertos */}
+      {/* Info */}
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertTitle>Como funciona</AlertTitle>
+        <AlertDescription>
+          <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+            <li><strong>Abrir frasco:</strong> Inicia el contador de vida util (ej: 3 dias)</li>
+            <li><strong>Registrar pruebas:</strong> Cada vez que usa el reactivo, registre cuantas pruebas hizo</li>
+            <li><strong>Descartar:</strong> Cuando vence o se dana, descarte el frasco (se resta 1 del stock)</li>
+            <li><strong>Solo 1 frasco abierto por reactivo:</strong> Debe descartar o agotar el actual antes de abrir otro</li>
+          </ul>
+        </AlertDescription>
+      </Alert>
+
+      {/* Frascos Abiertos */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Timer className="h-5 w-5" />
-            Lotes Abiertos en Uso
+            Frascos Abiertos en Uso
           </CardTitle>
           <CardDescription>
-            Lotes de reactivos que han sido abiertos y tienen vida util limitada
+            Frascos de reactivos que han sido abiertos y tienen vida util limitada
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -313,7 +374,7 @@ export default function ReactivosPage() {
             <div className="text-center py-8 text-muted-foreground">Cargando...</div>
           ) : lotesAbiertos.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No hay lotes abiertos actualmente
+              No hay frascos abiertos actualmente
             </div>
           ) : (
             <Table>
@@ -322,32 +383,33 @@ export default function ReactivosPage() {
                   <TableHead>Reactivo</TableHead>
                   <TableHead>Lote</TableHead>
                   <TableHead>Apertura</TableHead>
-                  <TableHead>Vence</TableHead>
                   <TableHead>Tiempo Restante</TableHead>
-                  <TableHead>Pruebas</TableHead>
+                  <TableHead>Pruebas Usadas</TableHead>
+                  <TableHead>Frascos en Lote</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {lotesAbiertos.map((lote) => (
-                  <TableRow key={lote.codigo_lote} className={lote.horas_restantes <= 0 ? 'bg-red-50' : ''}>
+                  <TableRow key={lote.codigo_lote} className={lote.horas_restantes <= 0 ? 'bg-red-50' : lote.horas_restantes <= 24 ? 'bg-orange-50' : ''}>
                     <TableCell className="font-medium">{lote.item_nombre}</TableCell>
                     <TableCell>{lote.numero_lote}</TableCell>
                     <TableCell className="text-sm">{formatFecha(lote.fecha_apertura)}</TableCell>
-                    <TableCell className="text-sm">{formatFecha(lote.fecha_vencimiento_abierto)}</TableCell>
                     <TableCell>
-                      {lote.horas_restantes > 24 ? (
+                      {lote.horas_restantes > 48 ? (
                         <span className="text-green-600 font-medium">{lote.dias_restantes} dias</span>
+                      ) : lote.horas_restantes > 24 ? (
+                        <span className="text-yellow-600 font-medium">{lote.horas_restantes}h</span>
                       ) : lote.horas_restantes > 0 ? (
-                        <span className="text-orange-600 font-medium">{lote.horas_restantes}h</span>
+                        <span className="text-orange-600 font-bold">{lote.horas_restantes}h</span>
                       ) : (
                         <span className="text-red-600 font-bold">VENCIDO</span>
                       )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span>{lote.pruebas_realizadas} / {lote.capacidad_pruebas}</span>
+                        <span className="font-medium">{lote.pruebas_realizadas}/{lote.capacidad_pruebas}</span>
                         <div className="w-16 bg-gray-200 rounded-full h-2">
                           <div
                             className="bg-blue-600 h-2 rounded-full"
@@ -356,14 +418,18 @@ export default function ReactivosPage() {
                         </div>
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <span className="text-sm">{lote.frascos_restantes}/{lote.frascos_totales}</span>
+                    </TableCell>
                     <TableCell>{getEstadoBadge(lote.estado, lote.horas_restantes)}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button
                           size="sm"
                           variant="outline"
+                          title="Registrar pruebas"
                           onClick={() => {
-                            setLoteSeleccionado(lote.codigo_lote);
+                            setLoteSeleccionado(lote);
                             setDialogRegistrarPruebas(true);
                           }}
                           disabled={lote.horas_restantes <= 0}
@@ -373,8 +439,9 @@ export default function ReactivosPage() {
                         <Button
                           size="sm"
                           variant="destructive"
+                          title="Descartar frasco"
                           onClick={() => {
-                            setLoteSeleccionado(lote.codigo_lote);
+                            setLoteSeleccionado(lote);
                             setDialogDescartar(true);
                           }}
                         >
@@ -395,10 +462,10 @@ export default function ReactivosPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5" />
-            Lotes Cerrados - Disponibles para Abrir
+            Lotes Disponibles - Listos para Abrir
           </CardTitle>
           <CardDescription>
-            Lotes de reactivos que aun no han sido abiertos
+            Lotes de reactivos cerrados con frascos disponibles
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -416,67 +483,114 @@ export default function ReactivosPage() {
                   <TableHead>Lote</TableHead>
                   <TableHead>Vencimiento Lote</TableHead>
                   <TableHead>Vida Util al Abrir</TableHead>
-                  <TableHead>Capacidad</TableHead>
+                  <TableHead>Frascos Disponibles</TableHead>
+                  <TableHead>Pruebas/Frasco</TableHead>
                   <TableHead>Accion</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lotesCerrados.map((lote) => (
-                  <TableRow key={lote.codigo_lote}>
-                    <TableCell className="font-medium">{lote.item?.nombre}</TableCell>
-                    <TableCell>{lote.numero_lote}</TableCell>
-                    <TableCell>
-                      {lote.fecha_vencimiento
-                        ? new Date(lote.fecha_vencimiento).toLocaleDateString('es-EC')
-                        : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      {lote.item?.vida_util_dias_abierto
-                        ? `${lote.item.vida_util_dias_abierto} dias`
-                        : 'Sin limite'}
-                    </TableCell>
-                    <TableCell>
-                      {lote.item?.capacidad_pruebas
-                        ? `${lote.item.capacidad_pruebas} pruebas`
-                        : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setLoteSeleccionado(lote.codigo_lote);
-                          setDialogAbrirLote(true);
-                        }}
-                      >
-                        <Play className="h-4 w-4 mr-1" />
-                        Abrir
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {lotesCerrados.map((lote) => {
+                  // Verificar si ya hay un lote abierto de este item
+                  const tieneAbierto = lotesAbiertos.some(la => la.codigo_item === lote.item?.codigo_item);
+
+                  return (
+                    <TableRow key={lote.codigo_lote}>
+                      <TableCell className="font-medium">{lote.item?.nombre}</TableCell>
+                      <TableCell>{lote.numero_lote}</TableCell>
+                      <TableCell>
+                        {lote.fecha_vencimiento
+                          ? new Date(lote.fecha_vencimiento).toLocaleDateString('es-EC')
+                          : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {lote.item?.vida_util_dias_abierto
+                          ? `${lote.item.vida_util_dias_abierto} dias`
+                          : 'Sin limite'}
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-medium">{lote.cantidad_actual}</span>
+                        <span className="text-muted-foreground">/{lote.cantidad_inicial}</span>
+                      </TableCell>
+                      <TableCell>
+                        {lote.item?.capacidad_pruebas
+                          ? `${lote.item.capacidad_pruebas} pruebas`
+                          : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {tieneAbierto ? (
+                          <span className="text-sm text-muted-foreground">
+                            Ya hay uno abierto
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setLoteSeleccionado(lote);
+                              setDialogAbrirLote(true);
+                            }}
+                          >
+                            <Play className="h-4 w-4 mr-1" />
+                            Abrir Frasco
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
 
-      {/* Dialog Abrir Lote */}
+      {/* Dialog Abrir Frasco */}
       <Dialog open={dialogAbrirLote} onOpenChange={setDialogAbrirLote}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Abrir Lote de Reactivo</DialogTitle>
+            <DialogTitle>Abrir Frasco de Reactivo</DialogTitle>
             <DialogDescription>
-              Al abrir el lote, comenzara el contador de vida util. Esta accion no se puede deshacer.
+              Al abrir el frasco, comenzara el contador de vida util. Esta accion no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              Lote seleccionado: <strong>{lotesCerrados.find(l => l.codigo_lote === loteSeleccionado)?.numero_lote}</strong>
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Reactivo: <strong>{lotesCerrados.find(l => l.codigo_lote === loteSeleccionado)?.item?.nombre}</strong>
-            </p>
-          </div>
+          {loteSeleccionado && 'item' in loteSeleccionado && (
+            <div className="py-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Reactivo:</span>
+                  <p className="font-medium">{(loteSeleccionado as LoteCerrado).item?.nombre}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Lote:</span>
+                  <p className="font-medium">{loteSeleccionado.numero_lote}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Vida util:</span>
+                  <p className="font-medium">
+                    {(loteSeleccionado as LoteCerrado).item?.vida_util_dias_abierto
+                      ? `${(loteSeleccionado as LoteCerrado).item.vida_util_dias_abierto} dias`
+                      : 'Sin limite'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Capacidad:</span>
+                  <p className="font-medium">
+                    {(loteSeleccionado as LoteCerrado).item?.capacidad_pruebas || 'N/A'} pruebas
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Frascos disponibles:</span>
+                  <p className="font-medium">{(loteSeleccionado as LoteCerrado).cantidad_actual}</p>
+                </div>
+              </div>
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Al abrir, el frasco tendra {(loteSeleccionado as LoteCerrado).item?.vida_util_dias_abierto || 'ilimitados'} dias de vida util.
+                  Despues debera descartarlo aunque no haya usado todas las pruebas.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogAbrirLote(false)}>
               Cancelar
@@ -494,83 +608,149 @@ export default function ReactivosPage() {
           <DialogHeader>
             <DialogTitle>Registrar Pruebas Realizadas</DialogTitle>
             <DialogDescription>
-              Ingrese la cantidad de pruebas que se realizaron con este lote
+              Ingrese la cantidad de pruebas que se realizaron con este frasco
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="cantidad">Cantidad de Pruebas</Label>
-              <Input
-                id="cantidad"
-                type="number"
-                min="1"
-                value={cantidadPruebas}
-                onChange={(e) => setCantidadPruebas(e.target.value)}
-                placeholder="Ej: 10"
-              />
+          {loteSeleccionado && 'pruebas_restantes' in loteSeleccionado && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-2 text-sm bg-muted p-3 rounded-lg">
+                <div>
+                  <span className="text-muted-foreground">Reactivo:</span>
+                  <p className="font-medium">{(loteSeleccionado as LoteAbierto).item_nombre}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Pruebas usadas:</span>
+                  <p className="font-medium">
+                    {(loteSeleccionado as LoteAbierto).pruebas_realizadas}/
+                    {(loteSeleccionado as LoteAbierto).capacidad_pruebas}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Restantes:</span>
+                  <p className="font-medium text-green-600">
+                    {(loteSeleccionado as LoteAbierto).pruebas_restantes} pruebas
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Tiempo restante:</span>
+                  <p className="font-medium">
+                    {(loteSeleccionado as LoteAbierto).horas_restantes}h
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cantidad">Cantidad de Pruebas a Registrar</Label>
+                <Input
+                  id="cantidad"
+                  type="number"
+                  min="1"
+                  max={(loteSeleccionado as LoteAbierto).pruebas_restantes}
+                  value={cantidadPruebas}
+                  onChange={(e) => setCantidadPruebas(e.target.value)}
+                  placeholder={`Max: ${(loteSeleccionado as LoteAbierto).pruebas_restantes}`}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="obs">Observacion (opcional)</Label>
+                <Input
+                  id="obs"
+                  value={observacion}
+                  onChange={(e) => setObservacion(e.target.value)}
+                  placeholder="Ej: Pruebas de glucosa dia 20/12"
+                />
+              </div>
+              {parseInt(cantidadPruebas) >= (loteSeleccionado as LoteAbierto).pruebas_restantes && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Al registrar estas pruebas, el frasco quedara agotado y se restara 1 del stock.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="obs">Observacion (opcional)</Label>
-              <Input
-                id="obs"
-                value={observacion}
-                onChange={(e) => setObservacion(e.target.value)}
-                placeholder="Ej: Pruebas de glucosa dia 20/12"
-              />
-            </div>
-          </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogRegistrarPruebas(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleRegistrarPruebas} disabled={!cantidadPruebas}>
+            <Button onClick={handleRegistrarPruebas} disabled={!cantidadPruebas || parseInt(cantidadPruebas) <= 0}>
               Registrar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Descartar Lote */}
+      {/* Dialog Descartar Frasco */}
       <Dialog open={dialogDescartar} onOpenChange={setDialogDescartar}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Descartar Lote</DialogTitle>
+            <DialogTitle>Descartar Frasco</DialogTitle>
             <DialogDescription>
-              Esta accion descartara el lote y actualizara el inventario
+              Esta accion descartara el frasco actual y restara 1 del stock
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="motivo">Motivo del Descarte</Label>
-              <Select value={motivoDescarte} onValueChange={setMotivoDescarte}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccione un motivo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="VENCIDO_APERTURA">Vencido por tiempo de apertura</SelectItem>
-                  <SelectItem value="VENCIDO_LOTE">Vencido por fecha de lote</SelectItem>
-                  <SelectItem value="AGOTADO">Capacidad agotada</SelectItem>
-                  <SelectItem value="DANADO">Danado/Contaminado</SelectItem>
-                  <SelectItem value="MANUAL">Descarte manual</SelectItem>
-                </SelectContent>
-              </Select>
+          {loteSeleccionado && 'pruebas_restantes' in loteSeleccionado && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-2 text-sm bg-muted p-3 rounded-lg">
+                <div>
+                  <span className="text-muted-foreground">Reactivo:</span>
+                  <p className="font-medium">{(loteSeleccionado as LoteAbierto).item_nombre}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Lote:</span>
+                  <p className="font-medium">{loteSeleccionado.numero_lote}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Pruebas usadas:</span>
+                  <p className="font-medium">
+                    {(loteSeleccionado as LoteAbierto).pruebas_realizadas}/
+                    {(loteSeleccionado as LoteAbierto).capacidad_pruebas}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Se desperdiciaran:</span>
+                  <p className="font-medium text-red-600">
+                    {(loteSeleccionado as LoteAbierto).pruebas_restantes} pruebas
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="motivo">Motivo del Descarte</Label>
+                <Select value={motivoDescarte} onValueChange={setMotivoDescarte}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccione un motivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="VENCIDO_APERTURA">Vencido por tiempo de apertura</SelectItem>
+                    <SelectItem value="VENCIDO_LOTE">Vencido por fecha de lote</SelectItem>
+                    <SelectItem value="DANADO">Danado/Contaminado</SelectItem>
+                    <SelectItem value="MANUAL">Descarte manual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="obs-descarte">Observacion (opcional)</Label>
+                <Input
+                  id="obs-descarte"
+                  value={observacion}
+                  onChange={(e) => setObservacion(e.target.value)}
+                  placeholder="Detalles adicionales..."
+                />
+              </div>
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Se restara 1 frasco del stock. Frascos restantes en lote: {(loteSeleccionado as LoteAbierto).frascos_restantes - 1}
+                </AlertDescription>
+              </Alert>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="obs-descarte">Observacion (opcional)</Label>
-              <Input
-                id="obs-descarte"
-                value={observacion}
-                onChange={(e) => setObservacion(e.target.value)}
-                placeholder="Detalles adicionales..."
-              />
-            </div>
-          </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogDescartar(false)}>
               Cancelar
             </Button>
             <Button variant="destructive" onClick={handleDescartarLote} disabled={!motivoDescarte}>
-              Descartar
+              Descartar Frasco
             </Button>
           </DialogFooter>
         </DialogContent>
