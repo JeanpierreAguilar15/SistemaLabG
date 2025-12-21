@@ -28,7 +28,6 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert';
-import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import {
   FlaskConical,
@@ -90,8 +89,14 @@ export default function ReactivosPage() {
   const [cantidadPruebas, setCantidadPruebas] = useState('');
   const [motivoDescarte, setMotivoDescarte] = useState('');
   const [observacion, setObservacion] = useState('');
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+
+  const showMessage = (type: 'success' | 'error' | 'warning', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 5000);
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -122,7 +127,7 @@ export default function ReactivosPage() {
       }
     } catch (error) {
       console.error('Error fetching data:', error);
-      toast.error('Error al cargar datos de reactivos');
+      showMessage('error', 'Error al cargar datos de reactivos');
     } finally {
       setLoading(false);
     }
@@ -147,15 +152,15 @@ export default function ReactivosPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        toast.success(data.mensaje || 'Frasco abierto exitosamente');
+        showMessage('success', data.mensaje || 'Frasco abierto exitosamente');
         setDialogAbrirLote(false);
         setLoteSeleccionado(null);
         fetchData();
       } else {
-        toast.error(data.message || 'Error al abrir frasco');
+        showMessage('error', data.message || 'Error al abrir frasco');
       }
     } catch (error) {
-      toast.error('Error de conexion');
+      showMessage('error', 'Error de conexion');
     }
   };
 
@@ -179,9 +184,9 @@ export default function ReactivosPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         if (data.frasco_agotado) {
-          toast.warning(data.mensaje);
+          showMessage('warning', data.mensaje);
         } else {
-          toast.success(data.mensaje);
+          showMessage('success', data.mensaje);
         }
         setDialogRegistrarPruebas(false);
         setLoteSeleccionado(null);
@@ -189,10 +194,10 @@ export default function ReactivosPage() {
         setObservacion('');
         fetchData();
       } else {
-        toast.error(data.message || 'Error al registrar pruebas');
+        showMessage('error', data.message || 'Error al registrar pruebas');
       }
     } catch (error) {
-      toast.error('Error de conexion');
+      showMessage('error', 'Error de conexion');
     }
   };
 
@@ -215,17 +220,17 @@ export default function ReactivosPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        toast.warning(data.mensaje);
+        showMessage('warning', data.mensaje);
         setDialogDescartar(false);
         setLoteSeleccionado(null);
         setMotivoDescarte('');
         setObservacion('');
         fetchData();
       } else {
-        toast.error(data.message || 'Error al descartar frasco');
+        showMessage('error', data.message || 'Error al descartar frasco');
       }
     } catch (error) {
-      toast.error('Error de conexion');
+      showMessage('error', 'Error de conexion');
     }
   };
 
@@ -269,6 +274,23 @@ export default function ReactivosPage() {
           Actualizar
         </Button>
       </div>
+
+      {/* Toast message */}
+      {message && (
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm ${
+          message.type === 'success' ? 'bg-green-100 border border-green-400 text-green-700' :
+          message.type === 'error' ? 'bg-red-100 border border-red-400 text-red-700' :
+          'bg-yellow-100 border border-yellow-400 text-yellow-700'
+        }`}>
+          <div className="flex items-center gap-2">
+            {message.type === 'success' && <span>✓</span>}
+            {message.type === 'error' && <span>✕</span>}
+            {message.type === 'warning' && <span>⚠</span>}
+            <span>{message.text}</span>
+            <button onClick={() => setMessage(null)} className="ml-2 font-bold">×</button>
+          </div>
+        </div>
+      )}
 
       {/* Alerta de vencidos */}
       {lotesVencidos.length > 0 && (
