@@ -105,7 +105,7 @@ export default function ExamenesInsumosPage() {
   const [itemsDisponibles, setItemsDisponibles] = useState<ItemDisponible[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchExamen, setSearchExamen] = useState('');
-  const [filterCategoria, setFilterCategoria] = useState('');
+  const [filterCategoria, setFilterCategoria] = useState('__all__');
   const [filterConfigured, setFilterConfigured] = useState<'todos' | 'configurados' | 'sin_configurar'>('todos');
 
   // Dialog states
@@ -165,7 +165,7 @@ export default function ExamenesInsumosPage() {
         e.codigo_interno.toLowerCase().includes(searchExamen.toLowerCase());
 
       // Filtro por categoria
-      const matchCategoria = !filterCategoria || e.categoria === filterCategoria;
+      const matchCategoria = filterCategoria === '__all__' || e.categoria === filterCategoria;
 
       // Filtro por configuracion
       let matchConfigured = true;
@@ -398,7 +398,7 @@ export default function ExamenesInsumosPage() {
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
+                  <SelectItem value="__all__">Todas</SelectItem>
                   {categorias.map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
@@ -428,7 +428,7 @@ export default function ExamenesInsumosPage() {
                 variant="outline"
                 onClick={() => {
                   setSearchExamen('');
-                  setFilterCategoria('');
+                  setFilterCategoria('__all__');
                   setFilterConfigured('todos');
                 }}
               >
