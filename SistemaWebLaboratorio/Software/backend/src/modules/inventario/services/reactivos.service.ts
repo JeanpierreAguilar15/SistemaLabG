@@ -562,4 +562,183 @@ export class ReactivosService {
       vida_util_dias: lote.item.vida_util_dias_abierto,
     }));
   }
+
+  /**
+   * PROCESO AUTOMATICO DE USO DE REACTIVO
+   *
+   * Se llama cuando se procesa un examen que usa un reactivo.
+   * Maneja todo el ciclo de vida del frasco automaticamente:
+   *
+   * 1. Busca frasco abierto del item
+   * 2. Si esta vencido -> lo descarta automaticamente y busca otro
+   * 3. Si no hay abierto -> abre uno automaticamente (FIFO)
+   * 4. Registra las pruebas
+   * 5. Si el frasco se agota -> marca y abre otro si hay
+   *
+   * @param codigoItem - El item reactivo a usar
+   * @param cantidadPruebas - Cuantas pruebas se van a realizar (normalmente 1)
+   * @param referencia - Texto para trazabilidad (ej: "Examen Glucosa - Cita #123")
+   * @param usuarioId - Quien realiza la operacion
+   * @returns Resultado del proceso con detalles
+   */
+  async procesarUsoReactivoAutomatico(
+    codigoItem: number,
+    cantidadPruebas: number,
+    referencia: string,
+    usuarioId: number,
+  ): Promise<{
+    success: boolean;
+    mensaje: string;
+    lote_usado?: any;
+    frasco_abierto_automaticamente?: boolean;
+    frasco_descartado_por_vencimiento?: boolean;
+    frasco_agotado?: boolean;
+    alertas?: string[];
+  }> {
+    const alertas: string[] = [];
+
+    // Verificar que el item existe y es reactivo
+    const item = await this.prisma.item.findUnique({
+      where: { codigo_item: codigoItem },
+    });
+
+    if (!item) {
+      throw new NotFoundException(`Item ${codigoItem} no encontrado`);
+    }
+
+    if (!item.es_reactivo) {
+      // No es reactivo, no aplica este proceso
+      return {
+        success: true,
+        mensaje: 'Item no es reactivo, no requiere control de frascos',
+      };
+    }
+
+    // Buscar frasco abierto de este item
+    let loteAbierto = await this.prisma.lote.findFirst({
+      where: {
+        codigo_item: codigoItem,
+        estado_lote: 'ABIERTO',
+      },
+      include: { item: true },
+    });
+
+    let frascoAbiertoAutomaticamente = false;
+    let frascoDescartadoPorVencimiento = false;
+
+    // Si hay frasco abierto, verificar si esta vencido
+    if (loteAbierto) {
+      const ahora = new Date();
+      const vencido = loteAbierto.fecha_vencimiento_abierto && ahora > loteAbierto.fecha_vencimiento_abierto;
+
+      if (vencido) {
+        // Descartar automaticamente el frasco vencido
+        this.logger.warn(
+          `Descarte automatico de frasco vencido: ${loteAbierto.numero_lote} del item ${item.nombre}`
+        );
+
+        await this.descartarLote(
+          {
+            codigo_lote: loteAbierto.codigo_lote,
+            motivo: 'VENCIDO_APERTURA',
+            observacion: `Descarte automatico al procesar ${referencia}`,
+          },
+          usuarioId,
+        );
+
+        alertas.push(`Frasco vencido descartado automaticamente (Lote: ${loteAbierto.numero_lote})`);
+        frascoDescartadoPorVencimiento = true;
+        loteAbierto = null; // Ahora necesitamos abrir otro
+      }
+    }
+
+    // Si no hay frasco abierto, abrir uno automaticamente (FIFO)
+    if (!loteAbierto) {
+      // Buscar lote cerrado disponible (el mas proximo a vencer)
+      const loteCerrado = await this.prisma.lote.findFirst({
+        where: {
+          codigo_item: codigoItem,
+          estado_lote: 'CERRADO',
+          cantidad_actual: { gt: 0 },
+          // No vencido
+          OR: [
+            { fecha_vencimiento: null },
+            { fecha_vencimiento: { gt: new Date() } },
+          ],
+        },
+        orderBy: { fecha_vencimiento: 'asc' },
+        include: { item: true },
+      });
+
+      if (!loteCerrado) {
+        throw new BadRequestException(
+          `No hay frascos disponibles de "${item.nombre}" para abrir. ` +
+          `Stock insuficiente para completar el examen.`
+        );
+      }
+
+      // Abrir el lote automaticamente
+      this.logger.log(
+        `Apertura automatica de frasco: Lote ${loteCerrado.numero_lote} del item ${item.nombre}`
+      );
+
+      const resultadoApertura = await this.abrirLote(
+        { codigo_lote: loteCerrado.codigo_lote },
+        usuarioId,
+      );
+
+      frascoAbiertoAutomaticamente = true;
+      alertas.push(`Frasco abierto automaticamente (Lote: ${loteCerrado.numero_lote})`);
+
+      // Recargar el lote abierto
+      loteAbierto = await this.prisma.lote.findFirst({
+        where: {
+          codigo_item: codigoItem,
+          estado_lote: 'ABIERTO',
+        },
+        include: { item: true },
+      });
+    }
+
+    if (!loteAbierto) {
+      throw new BadRequestException(
+        `Error inesperado: No se pudo obtener frasco abierto de "${item.nombre}"`
+      );
+    }
+
+    // Registrar las pruebas
+    const resultadoPruebas = await this.registrarPruebas(
+      {
+        codigo_lote: loteAbierto.codigo_lote,
+        cantidad_pruebas: cantidadPruebas,
+        observacion: referencia,
+      },
+      usuarioId,
+    );
+
+    // Verificar alertas de stock bajo
+    const stockActual = item.stock_actual - (resultadoPruebas.frasco_agotado ? 1 : 0);
+    if (stockActual <= item.stock_minimo) {
+      alertas.push(`ALERTA: Stock bajo de "${item.nombre}". Actual: ${stockActual}, Minimo: ${item.stock_minimo}`);
+    }
+
+    // Si el frasco se agoto y no quedan mas, alertar
+    if (resultadoPruebas.frasco_agotado && resultadoPruebas.frascos_restantes <= 0) {
+      alertas.push(`CRITICO: Ultimo frasco de "${item.nombre}" agotado. Reabastecer urgente.`);
+    }
+
+    return {
+      success: true,
+      mensaje: resultadoPruebas.mensaje,
+      lote_usado: {
+        codigo_lote: loteAbierto.codigo_lote,
+        numero_lote: loteAbierto.numero_lote,
+        pruebas_registradas: cantidadPruebas,
+      },
+      frasco_abierto_automaticamente: frascoAbiertoAutomaticamente,
+      frasco_descartado_por_vencimiento: frascoDescartadoPorVencimiento,
+      frasco_agotado: resultadoPruebas.frasco_agotado || false,
+      alertas: alertas.length > 0 ? alertas : undefined,
+    };
+  }
 }

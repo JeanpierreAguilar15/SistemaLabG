@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '@prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import {
@@ -10,12 +10,17 @@ import {
   FilterMovimientosDto,
   ValidateRucEcuador,
 } from './dto';
+import { ReactivosService } from './services/reactivos.service';
 
 @Injectable()
 export class InventarioService {
   private readonly logger = new Logger(InventarioService.name);
 
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => ReactivosService))
+    private reactivosService: ReactivosService,
+  ) { }
 
   // ==================== INVENTARIO ====================
 
@@ -1719,6 +1724,10 @@ export class InventarioService {
   /**
    * Descuenta los insumos del inventario al completar un examen
    * Registra movimientos en el Kardex con trazabilidad
+   *
+   * IMPORTANTE: Maneja dos tipos de items diferente:
+   * - Items normales: Descuento directo de stock y lotes (FIFO)
+   * - Reactivos: Uso automatico con control de frascos abiertos
    */
   async descontarInsumosExamen(
     codigo_examen: number,
@@ -1728,6 +1737,7 @@ export class InventarioService {
     success: boolean;
     movimientos: any[];
     mensaje: string;
+    alertas_reactivos?: string[];
   }> {
     // Obtener insumos requeridos para el examen
     const insumos = await this.prisma.examenInsumo.findMany({
@@ -1746,84 +1756,136 @@ export class InventarioService {
       };
     }
 
-    // Verificar stock antes de descontar
-    const verificacion = await this.verificarStockExamen(codigo_examen);
-    if (!verificacion.disponible) {
-      const faltantes = verificacion.insumosFaltantes
-        .map(f => `${f.item} (requiere: ${f.requerido}, disponible: ${f.disponible})`)
-        .join(', ');
-      throw new BadRequestException(
-        `Stock insuficiente para completar el examen. Faltantes: ${faltantes}`,
-      );
+    // Separar insumos en reactivos y no reactivos
+    const insumosReactivos = insumos.filter(i => i.item.es_reactivo);
+    const insumosNormales = insumos.filter(i => !i.item.es_reactivo);
+
+    // Verificar stock de insumos normales antes de descontar
+    if (insumosNormales.length > 0) {
+      for (const insumo of insumosNormales) {
+        const cantidadRequerida = Number(insumo.cantidad_requerida);
+        if (insumo.item.stock_actual < cantidadRequerida) {
+          throw new BadRequestException(
+            `Stock insuficiente de "${insumo.item.nombre}". ` +
+            `Requiere: ${cantidadRequerida}, Disponible: ${insumo.item.stock_actual}`
+          );
+        }
+      }
     }
 
-    // Ejecutar descuento en transacción
     const movimientos: any[] = [];
+    const alertasReactivos: string[] = [];
 
-    await this.prisma.$transaction(async (prisma) => {
-      for (const insumo of insumos) {
-        const cantidadRequerida = Number(insumo.cantidad_requerida);
-        const item = insumo.item;
+    // 1. PROCESAR REACTIVOS (fuera de transaccion para manejar apertura automatica)
+    for (const insumo of insumosReactivos) {
+      const cantidadPruebas = Number(insumo.cantidad_requerida);
+      const referencia = `Examen: ${insumo.examen.nombre} - Cita #${codigo_cita}`;
 
-        // Crear movimiento de salida
-        const movimiento = await prisma.movimiento.create({
-          data: {
-            codigo_item: item.codigo_item,
-            tipo_movimiento: 'SALIDA',
-            cantidad: cantidadRequerida,
-            motivo: `Uso en examen: ${insumo.examen.nombre} - Cita #${codigo_cita}`,
-            stock_anterior: item.stock_actual,
-            stock_nuevo: item.stock_actual - cantidadRequerida,
-            realizado_por: userId,
-          },
-        });
-
-        // Actualizar stock del item
-        await prisma.item.update({
-          where: { codigo_item: item.codigo_item },
-          data: { stock_actual: { decrement: cantidadRequerida } },
-        });
-
-        // Descontar de lotes (FIFO - primero los más próximos a vencer)
-        let cantidadPendiente = cantidadRequerida;
-        const lotes = await prisma.lote.findMany({
-          where: {
-            codigo_item: item.codigo_item,
-            cantidad_actual: { gt: 0 },
-          },
-          orderBy: { fecha_vencimiento: 'asc' },
-        });
-
-        for (const lote of lotes) {
-          if (cantidadPendiente <= 0) break;
-
-          const cantidadADescontar = Math.min(cantidadPendiente, lote.cantidad_actual);
-          await prisma.lote.update({
-            where: { codigo_lote: lote.codigo_lote },
-            data: { cantidad_actual: { decrement: cantidadADescontar } },
-          });
-
-          cantidadPendiente -= cantidadADescontar;
-        }
+      try {
+        const resultadoReactivo = await this.reactivosService.procesarUsoReactivoAutomatico(
+          insumo.item.codigo_item,
+          cantidadPruebas,
+          referencia,
+          userId,
+        );
 
         movimientos.push({
-          codigo_movimiento: movimiento.codigo_movimiento,
-          item: item.nombre,
-          cantidad: cantidadRequerida,
-          stock_anterior: item.stock_actual,
-          stock_nuevo: item.stock_actual - cantidadRequerida,
+          item: insumo.item.nombre,
+          tipo: 'REACTIVO',
+          cantidad_pruebas: cantidadPruebas,
+          lote_usado: resultadoReactivo.lote_usado,
+          frasco_abierto_automaticamente: resultadoReactivo.frasco_abierto_automaticamente,
+          mensaje: resultadoReactivo.mensaje,
         });
+
+        // Agregar alertas si las hay
+        if (resultadoReactivo.alertas) {
+          alertasReactivos.push(...resultadoReactivo.alertas);
+        }
+
+        this.logger.log(
+          `Reactivo procesado: ${insumo.item.nombre}, ${cantidadPruebas} prueba(s). ${referencia}`
+        );
+      } catch (error) {
+        this.logger.error(
+          `Error procesando reactivo ${insumo.item.nombre}: ${error.message}`
+        );
+        throw new BadRequestException(
+          `Error al procesar reactivo "${insumo.item.nombre}": ${error.message}`
+        );
       }
-    });
+    }
+
+    // 2. PROCESAR INSUMOS NORMALES (en transaccion)
+    if (insumosNormales.length > 0) {
+      await this.prisma.$transaction(async (prisma) => {
+        for (const insumo of insumosNormales) {
+          const cantidadRequerida = Number(insumo.cantidad_requerida);
+          const item = insumo.item;
+
+          // Crear movimiento de salida
+          const movimiento = await prisma.movimiento.create({
+            data: {
+              codigo_item: item.codigo_item,
+              tipo_movimiento: 'SALIDA',
+              cantidad: cantidadRequerida,
+              motivo: `Uso en examen: ${insumo.examen.nombre} - Cita #${codigo_cita}`,
+              stock_anterior: item.stock_actual,
+              stock_nuevo: item.stock_actual - cantidadRequerida,
+              realizado_por: userId,
+            },
+          });
+
+          // Actualizar stock del item
+          await prisma.item.update({
+            where: { codigo_item: item.codigo_item },
+            data: { stock_actual: { decrement: cantidadRequerida } },
+          });
+
+          // Descontar de lotes (FIFO - primero los mas proximos a vencer)
+          let cantidadPendiente = cantidadRequerida;
+          const lotes = await prisma.lote.findMany({
+            where: {
+              codigo_item: item.codigo_item,
+              cantidad_actual: { gt: 0 },
+            },
+            orderBy: { fecha_vencimiento: 'asc' },
+          });
+
+          for (const lote of lotes) {
+            if (cantidadPendiente <= 0) break;
+
+            const cantidadADescontar = Math.min(cantidadPendiente, lote.cantidad_actual);
+            await prisma.lote.update({
+              where: { codigo_lote: lote.codigo_lote },
+              data: { cantidad_actual: { decrement: cantidadADescontar } },
+            });
+
+            cantidadPendiente -= cantidadADescontar;
+          }
+
+          movimientos.push({
+            codigo_movimiento: movimiento.codigo_movimiento,
+            item: item.nombre,
+            tipo: 'INSUMO',
+            cantidad: cantidadRequerida,
+            stock_anterior: item.stock_actual,
+            stock_nuevo: item.stock_actual - cantidadRequerida,
+          });
+        }
+      });
+    }
 
     this.logger.log(
-      `Insumos descontados para examen ${codigo_examen}, cita ${codigo_cita}. ${movimientos.length} items afectados.`,
+      `Insumos descontados para examen ${codigo_examen}, cita ${codigo_cita}. ` +
+      `${insumosReactivos.length} reactivos, ${insumosNormales.length} insumos normales.`
     );
 
     return {
       success: true,
       movimientos,
-      mensaje: `Se descontaron ${movimientos.length} insumos del inventario`,
+      mensaje: `Se procesaron ${movimientos.length} insumos (${insumosReactivos.length} reactivos, ${insumosNormales.length} normales)`,
+      alertas_reactivos: alertasReactivos.length > 0 ? alertasReactivos : undefined,
     };
   }
 
