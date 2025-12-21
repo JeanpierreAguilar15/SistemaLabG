@@ -422,19 +422,29 @@ export default function SuppliersManagement() {
                   />
                 </div>
 
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="activo"
-                    name="activo"
-                    checked={formData.activo}
-                    onChange={handleInputChange}
-                    className="h-4 w-4 text-lab-primary-600 focus:ring-lab-primary-500 border-lab-neutral-300 rounded"
-                  />
-                  <label htmlFor="activo" className="ml-2 block text-sm text-lab-neutral-700">
-                    Proveedor activo
-                  </label>
-                </div>
+                {/* Solo mostrar checkbox de activo en modo edicion */}
+                {editingSupplier && (
+                  <div className="flex items-center p-3 bg-lab-neutral-50 rounded-lg border border-lab-neutral-200">
+                    <input
+                      type="checkbox"
+                      id="activo"
+                      name="activo"
+                      checked={formData.activo}
+                      onChange={handleInputChange}
+                      className="h-4 w-4 text-lab-primary-600 focus:ring-lab-primary-500 border-lab-neutral-300 rounded"
+                    />
+                    <label htmlFor="activo" className="ml-2 block text-sm text-lab-neutral-700">
+                      Proveedor activo
+                    </label>
+                    <span className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      formData.activo
+                        ? 'bg-lab-success-100 text-lab-success-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      Estado: {formData.activo ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-lab-neutral-200">
