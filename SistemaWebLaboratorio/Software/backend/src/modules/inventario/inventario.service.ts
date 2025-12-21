@@ -1027,11 +1027,11 @@ export class InventarioService {
       include: {
         ordenes_compra: {
           select: {
-            codigo_orden: true,
+            codigo_orden_compra: true,
             estado: true,
             total: true,
-            fecha_emision: true,
-            fecha_recepcion: true,
+            fecha_orden: true,
+            fecha_entrega_real: true,
           },
         },
       },
@@ -1049,8 +1049,8 @@ export class InventarioService {
 
       // Última orden recibida
       const ultimaOrdenRecibida = ordenesCompletadas
-        .filter((o) => o.fecha_recepcion)
-        .sort((a, b) => new Date(b.fecha_recepcion!).getTime() - new Date(a.fecha_recepcion!).getTime())[0];
+        .filter((o) => o.fecha_entrega_real)
+        .sort((a, b) => new Date(b.fecha_entrega_real!).getTime() - new Date(a.fecha_entrega_real!).getTime())[0];
 
       // Monto total de órdenes completadas
       const montoTotal = ordenesCompletadas.reduce(
@@ -1068,7 +1068,7 @@ export class InventarioService {
           ordenes_completadas: ordenesCompletadas.length,
           ordenes_pendientes: ordenesPendientes.length,
           monto_total_compras: montoTotal,
-          ultima_compra: ultimaOrdenRecibida?.fecha_recepcion || null,
+          ultima_compra: ultimaOrdenRecibida?.fecha_entrega_real || null,
           tiene_ordenes: ordenes.length > 0,
         },
       };
