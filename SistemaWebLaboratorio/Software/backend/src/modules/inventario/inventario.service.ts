@@ -1113,16 +1113,35 @@ export class InventarioService {
       }
     }
 
-    // 3. Detectar cambios para auditoría
+    // 3. Si se está desactivando, verificar órdenes pendientes
+    if (data.activo === false && supplier.activo === true) {
+      const ordenesPendientes = await this.prisma.ordenCompra.count({
+        where: {
+          codigo_proveedor,
+          estado: {
+            in: ['BORRADOR', 'EMITIDA', 'RECIBIDA_PARCIAL'],
+          },
+        },
+      });
+
+      if (ordenesPendientes > 0) {
+        throw new BadRequestException(
+          `No se puede desactivar el proveedor. Tiene ${ordenesPendientes} orden(es) de compra pendiente(s). ` +
+          `Debe completar o cancelar las ordenes antes de desactivar el proveedor.`,
+        );
+      }
+    }
+
+    // 4. Detectar cambios para auditoría
     const cambios = this.detectarCambiosProveedor(supplier, data);
 
-    // 4. Actualizar proveedor
+    // 5. Actualizar proveedor
     const proveedorActualizado = await this.prisma.proveedor.update({
       where: { codigo_proveedor },
       data,
     });
 
-    // 5. Registrar en auditoría si hubo cambios
+    // 6. Registrar en auditoría si hubo cambios
     if (cambios.length > 0) {
       await this.registrarAuditoria(
         adminId,
@@ -1164,13 +1183,30 @@ export class InventarioService {
       throw new NotFoundException('Proveedor no encontrado');
     }
 
-    // 2. Desactivar (soft delete)
+    // 2. Verificar órdenes de compra pendientes
+    const ordenesPendientes = await this.prisma.ordenCompra.count({
+      where: {
+        codigo_proveedor,
+        estado: {
+          in: ['BORRADOR', 'EMITIDA', 'RECIBIDA_PARCIAL'],
+        },
+      },
+    });
+
+    if (ordenesPendientes > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar el proveedor. Tiene ${ordenesPendientes} orden(es) de compra pendiente(s). ` +
+        `Debe completar o cancelar las ordenes antes de desactivar el proveedor.`,
+      );
+    }
+
+    // 3. Desactivar (soft delete)
     const proveedorDesactivado = await this.prisma.proveedor.update({
       where: { codigo_proveedor },
       data: { activo: false },
     });
 
-    // 3. Registrar en auditoría
+    // 4. Registrar en auditoría
     await this.registrarAuditoria(
       adminId,
       'ELIMINAR',

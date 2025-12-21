@@ -520,8 +520,10 @@ export class AdminController {
   // ==================== PROVEEDORES ====================
 
   @Get('suppliers')
-  async getAllSuppliers() {
-    return this.inventarioService.getAllSuppliers();
+  async getAllSuppliers(@Query('includeInactive') includeInactive?: string) {
+    // Convertir string a boolean (los query params llegan como strings)
+    const incluirInactivos = includeInactive === 'true';
+    return this.inventarioService.getAllSuppliers(incluirInactivos);
   }
 
   @Get('suppliers/:id')
