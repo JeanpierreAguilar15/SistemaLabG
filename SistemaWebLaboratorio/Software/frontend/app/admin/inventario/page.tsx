@@ -21,6 +21,10 @@ interface ItemInventario {
   precio_venta: string | null
   unidad_medida: string
   activo: boolean
+  // Campos para control de reactivos
+  es_reactivo?: boolean
+  vida_util_dias_abierto?: number | null
+  capacidad_pruebas?: number | null
   categoria?: {
     nombre: string
   } | null
@@ -244,6 +248,10 @@ export default function InventarioPage() {
     costo_unitario: '',
     precio_venta: '',
     activo: true,
+    // Campos para reactivos
+    es_reactivo: false,
+    vida_util_dias_abierto: '',
+    capacidad_pruebas: '',
   })
   const [codigoSugerido, setCodigoSugerido] = useState<string | null>(null)
   const [cargandoSugerencia, setCargandoSugerencia] = useState(false)
@@ -467,6 +475,9 @@ export default function InventarioPage() {
         costo_unitario: item.costo_unitario || '',
         precio_venta: item.precio_venta || '',
         activo: item.activo,
+        es_reactivo: item.es_reactivo || false,
+        vida_util_dias_abierto: item.vida_util_dias_abierto?.toString() || '',
+        capacidad_pruebas: item.capacidad_pruebas?.toString() || '',
       })
     } else {
       setEditingItem(null)
@@ -482,6 +493,9 @@ export default function InventarioPage() {
         costo_unitario: '',
         precio_venta: '',
         activo: true,
+        es_reactivo: false,
+        vida_util_dias_abierto: '',
+        capacidad_pruebas: '',
       })
     }
     setShowItemForm(true)
@@ -502,6 +516,9 @@ export default function InventarioPage() {
       costo_unitario: '',
       precio_venta: '',
       activo: true,
+      es_reactivo: false,
+      vida_util_dias_abierto: '',
+      capacidad_pruebas: '',
     })
     setCodigoSugerido(null)
     if (sugerenciaTimeoutRef.current) {
@@ -634,6 +651,21 @@ export default function InventarioPage() {
 
       if (precioVenta !== undefined) {
         payload.precio_venta = precioVenta
+      }
+
+      // Campos de reactivo
+      payload.es_reactivo = itemFormData.es_reactivo
+      if (itemFormData.es_reactivo) {
+        if (itemFormData.vida_util_dias_abierto) {
+          payload.vida_util_dias_abierto = parseInt(itemFormData.vida_util_dias_abierto)
+        }
+        if (itemFormData.capacidad_pruebas) {
+          payload.capacidad_pruebas = parseInt(itemFormData.capacidad_pruebas)
+        }
+      } else {
+        // Si no es reactivo, limpiar estos campos
+        payload.vida_util_dias_abierto = null
+        payload.capacidad_pruebas = null
       }
 
       const response = await fetch(url, {
@@ -2270,6 +2302,69 @@ export default function InventarioPage() {
                         min="0"
                         className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
                       />
+                    </div>
+
+                    {/* Seccion de Reactivo */}
+                    <div className="col-span-2 border-t border-lab-neutral-200 pt-4 mt-2">
+                      <h3 className="text-sm font-semibold text-lab-neutral-800 mb-3">Control de Reactivos</h3>
+                      <p className="text-xs text-lab-neutral-500 mb-3">
+                        Configure si este item es un reactivo que tiene vida util limitada una vez abierto
+                      </p>
+
+                      <div className="flex items-center mb-4">
+                        <input
+                          type="checkbox"
+                          id="es_reactivo"
+                          name="es_reactivo"
+                          checked={itemFormData.es_reactivo}
+                          onChange={handleItemInputChange}
+                          className="h-4 w-4 text-lab-primary-600 focus:ring-lab-primary-500 border-lab-neutral-300 rounded"
+                        />
+                        <label htmlFor="es_reactivo" className="ml-2 block text-sm text-lab-neutral-700">
+                          Es un reactivo con vida util limitada
+                        </label>
+                      </div>
+
+                      {itemFormData.es_reactivo && (
+                        <div className="grid grid-cols-2 gap-4 pl-6 border-l-2 border-lab-primary-200 bg-lab-primary-50 p-3 rounded-r-lg">
+                          <div>
+                            <label htmlFor="vida_util_dias_abierto" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                              Vida util despues de abierto (dias) *
+                            </label>
+                            <input
+                              type="number"
+                              id="vida_util_dias_abierto"
+                              name="vida_util_dias_abierto"
+                              value={itemFormData.vida_util_dias_abierto}
+                              onChange={handleItemInputChange}
+                              min="1"
+                              placeholder="Ej: 2"
+                              className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                            />
+                            <p className="text-xs text-lab-neutral-500 mt-1">
+                              Cuantos dias dura el frasco una vez abierto
+                            </p>
+                          </div>
+                          <div>
+                            <label htmlFor="capacidad_pruebas" className="block text-sm font-medium text-lab-neutral-700 mb-1">
+                              Capacidad de pruebas por frasco *
+                            </label>
+                            <input
+                              type="number"
+                              id="capacidad_pruebas"
+                              name="capacidad_pruebas"
+                              value={itemFormData.capacidad_pruebas}
+                              onChange={handleItemInputChange}
+                              min="1"
+                              placeholder="Ej: 100"
+                              className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                            />
+                            <p className="text-xs text-lab-neutral-500 mt-1">
+                              Cuantas pruebas se pueden hacer con un frasco
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center">
