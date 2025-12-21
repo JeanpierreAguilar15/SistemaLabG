@@ -258,17 +258,13 @@ export default function ReactivosPage() {
   const lotesCriticos = lotesAbiertos.filter(l => l.horas_restantes > 0 && l.horas_restantes <= 24);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="p-6 space-y-4">
+      {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FlaskConical className="h-6 w-6" />
-            Control de Reactivos
-          </h1>
-          <p className="text-muted-foreground">
-            Gestion de frascos abiertos con vida util limitada
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <FlaskConical className="h-6 w-6" />
+          Control de Reactivos
+        </h1>
         <Button onClick={fetchData} variant="outline" size="sm">
           <RefreshCw className="h-4 w-4 mr-2" />
           Actualizar
@@ -292,111 +288,58 @@ export default function ReactivosPage() {
         </div>
       )}
 
-      {/* Alerta de vencidos */}
-      {lotesVencidos.length > 0 && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Frascos vencidos</AlertTitle>
-          <AlertDescription>
-            Hay {lotesVencidos.length} frasco(s) vencido(s) que deben descartarse inmediatamente.
-          </AlertDescription>
-        </Alert>
+      {/* Alertas inline */}
+      {(lotesVencidos.length > 0 || lotesCriticos.length > 0) && (
+        <div className="flex gap-4">
+          {lotesVencidos.length > 0 && (
+            <div className="flex-1 bg-red-50 border border-red-300 rounded-lg p-3 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              <span className="text-red-700 font-medium">{lotesVencidos.length} vencido(s) - descartar</span>
+            </div>
+          )}
+          {lotesCriticos.length > 0 && (
+            <div className="flex-1 bg-orange-50 border border-orange-300 rounded-lg p-3 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-600" />
+              <span className="text-orange-700 font-medium">{lotesCriticos.length} por vencer (&lt;24h)</span>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Alerta de criticos */}
-      {lotesCriticos.length > 0 && (
-        <Alert className="border-orange-500 bg-orange-50">
-          <AlertTriangle className="h-4 w-4 text-orange-600" />
-          <AlertTitle className="text-orange-800">Frascos por vencer</AlertTitle>
-          <AlertDescription className="text-orange-700">
-            Hay {lotesCriticos.length} frasco(s) que venceran en menos de 24 horas. Uselos pronto o descartelos.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Frascos Abiertos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{lotesAbiertos.length}</div>
-            <p className="text-xs text-muted-foreground">En uso actualmente</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Criticos (menos 24h)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              {lotesCriticos.length}
-            </div>
-            <p className="text-xs text-muted-foreground">Usar pronto</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Vencidos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">
-              {lotesVencidos.length}
-            </div>
-            <p className="text-xs text-muted-foreground">Descartar</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Lotes Disponibles
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{lotesCerrados.length}</div>
-            <p className="text-xs text-muted-foreground">Para abrir</p>
-          </CardContent>
-        </Card>
+      {/* Stats compactos */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-white border rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold">{lotesAbiertos.length}</div>
+          <div className="text-xs text-muted-foreground">Abiertos</div>
+        </div>
+        <div className="bg-white border rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold text-orange-600">{lotesCriticos.length}</div>
+          <div className="text-xs text-muted-foreground">Criticos</div>
+        </div>
+        <div className="bg-white border rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold text-red-600">{lotesVencidos.length}</div>
+          <div className="text-xs text-muted-foreground">Vencidos</div>
+        </div>
+        <div className="bg-white border rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold text-green-600">{lotesCerrados.length}</div>
+          <div className="text-xs text-muted-foreground">Disponibles</div>
+        </div>
       </div>
-
-      {/* Info */}
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertTitle>Como funciona</AlertTitle>
-        <AlertDescription>
-          <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
-            <li><strong>Abrir frasco:</strong> Inicia el contador de vida util (ej: 3 dias)</li>
-            <li><strong>Registrar pruebas:</strong> Cada vez que usa el reactivo, registre cuantas pruebas hizo</li>
-            <li><strong>Descartar:</strong> Cuando vence o se dana, descarte el frasco (se resta 1 del stock)</li>
-            <li><strong>Solo 1 frasco abierto por reactivo:</strong> Debe descartar o agotar el actual antes de abrir otro</li>
-          </ul>
-        </AlertDescription>
-      </Alert>
 
       {/* Frascos Abiertos */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="py-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
             <Timer className="h-5 w-5" />
             Frascos Abiertos en Uso
           </CardTitle>
-          <CardDescription>
-            Frascos de reactivos que han sido abiertos y tienen vida util limitada
-          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Cargando...</div>
+            <div className="text-center py-4 text-muted-foreground">Cargando...</div>
           ) : lotesAbiertos.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No hay frascos abiertos actualmente
+            <div className="text-center py-4 text-muted-foreground">
+              Sin frascos abiertos
             </div>
           ) : (
             <Table>
@@ -481,21 +424,18 @@ export default function ReactivosPage() {
 
       {/* Lotes Disponibles para Abrir */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="py-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
             <Package className="h-5 w-5" />
-            Lotes Disponibles - Listos para Abrir
+            Lotes Disponibles
           </CardTitle>
-          <CardDescription>
-            Lotes de reactivos cerrados con frascos disponibles
-          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Cargando...</div>
+            <div className="text-center py-4 text-muted-foreground">Cargando...</div>
           ) : lotesCerrados.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No hay lotes de reactivos disponibles para abrir
+            <div className="text-center py-4 text-muted-foreground">
+              Sin lotes disponibles
             </div>
           ) : (
             <Table>
