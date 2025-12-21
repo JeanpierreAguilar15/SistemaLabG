@@ -275,17 +275,13 @@ export default function ExamenesInsumosPage() {
   }, [examenes]);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="p-6 space-y-4">
+      {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Link2 className="h-6 w-6" />
-            Configuracion de Insumos por Examen
-          </h1>
-          <p className="text-muted-foreground">
-            Vincule los insumos y reactivos que consume cada examen para el descuento automatico
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Link2 className="h-6 w-6" />
+          Configuracion Examen-Insumos
+        </h1>
       </div>
 
       {/* Toast message */}
@@ -305,157 +301,92 @@ export default function ExamenesInsumosPage() {
         </div>
       )}
 
-      {/* Info */}
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertTitle>Como funciona</AlertTitle>
-        <AlertDescription>
-          <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
-            <li>
-              <strong>Configure una vez:</strong> Indique que insumos y cantidades usa cada examen
-            </li>
-            <li>
-              <strong>Descuento automatico:</strong> Al validar un resultado, el sistema descontara los
-              insumos automaticamente
-            </li>
-            <li>
-              <strong>Reactivos:</strong> Si el insumo es un reactivo con vida util, se registraran las
-              pruebas del frasco abierto
-            </li>
-            <li>
-              <strong>Alertas:</strong> El sistema alertara si no hay stock suficiente antes de procesar
-            </li>
-          </ul>
-        </AlertDescription>
-      </Alert>
-
-      {/* Estadisticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Examenes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <p className="text-xs text-muted-foreground">En el catalogo</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Configurados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.configurados}</div>
-            <p className="text-xs text-muted-foreground">Con insumos asignados</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Sin Configurar</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{stats.sinConfigurar}</div>
-            <p className="text-xs text-muted-foreground">Pendientes</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Vinculos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.totalVinculos}</div>
-            <p className="text-xs text-muted-foreground">Examen-Insumo</p>
-          </CardContent>
-        </Card>
+      {/* Stats compactos */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-white border rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold">{stats.total}</div>
+          <div className="text-xs text-muted-foreground">Examenes</div>
+        </div>
+        <div className="bg-white border rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold text-green-600">{stats.configurados}</div>
+          <div className="text-xs text-muted-foreground">Configurados</div>
+        </div>
+        <div className="bg-white border rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold text-orange-600">{stats.sinConfigurar}</div>
+          <div className="text-xs text-muted-foreground">Pendientes</div>
+        </div>
+        <div className="bg-white border rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold text-blue-600">{stats.totalVinculos}</div>
+          <div className="text-xs text-muted-foreground">Vinculos</div>
+        </div>
       </div>
 
-      {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filtros
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label>Buscar Examen</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Nombre o codigo..."
-                  value={searchExamen}
-                  onChange={(e) => setSearchExamen(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Categoria</Label>
-              <Select value={filterCategoria} onValueChange={setFilterCategoria}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Todas</SelectItem>
-                  {categorias.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Estado</Label>
-              <Select
-                value={filterConfigured}
-                onValueChange={(v) => setFilterConfigured(v as typeof filterConfigured)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="configurados">Configurados</SelectItem>
-                  <SelectItem value="sin_configurar">Sin configurar</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearchExamen('');
-                  setFilterCategoria('__all__');
-                  setFilterConfigured('todos');
-                }}
-              >
-                Limpiar filtros
-              </Button>
-            </div>
+      {/* Filtros inline */}
+      <div className="flex gap-3 items-end">
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar examen..."
+              value={searchExamen}
+              onChange={(e) => setSearchExamen(e.target.value)}
+              className="pl-9"
+            />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+        <Select value={filterCategoria} onValueChange={setFilterCategoria}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Categoria" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todas</SelectItem>
+            {categorias.map((cat) => (
+              <SelectItem key={cat} value={cat}>
+                {cat}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={filterConfigured}
+          onValueChange={(v) => setFilterConfigured(v as typeof filterConfigured)}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos</SelectItem>
+            <SelectItem value="configurados">Configurados</SelectItem>
+            <SelectItem value="sin_configurar">Sin configurar</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setSearchExamen('');
+            setFilterCategoria('__all__');
+            setFilterConfigured('todos');
+          }}
+        >
+          Limpiar
+        </Button>
+      </div>
 
       {/* Lista de Examenes */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="py-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
             <FlaskConical className="h-5 w-5" />
             Examenes ({examenesFiltrados.length})
           </CardTitle>
-          <CardDescription>
-            Haga clic en un examen para configurar sus insumos
-          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Cargando...</div>
+            <div className="text-center py-4 text-muted-foreground">Cargando...</div>
           ) : examenesFiltrados.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No se encontraron examenes con los filtros aplicados
+            <div className="text-center py-4 text-muted-foreground">
+              Sin examenes
             </div>
           ) : (
             <Table>
