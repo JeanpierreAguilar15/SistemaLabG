@@ -1017,12 +1017,61 @@ export class InventarioService {
   // ==================== PROVEEDORES ====================
 
   async getAllSuppliers(includeInactive: boolean = false) {
-    return this.prisma.proveedor.findMany({
+    // Obtener proveedores con estadísticas de órdenes
+    const proveedores = await this.prisma.proveedor.findMany({
       where: includeInactive ? {} : { activo: true },
       orderBy: [
         { activo: 'desc' }, // Activos primero
         { razon_social: 'asc' },
       ],
+      include: {
+        ordenes_compra: {
+          select: {
+            codigo_orden: true,
+            estado: true,
+            total: true,
+            fecha_emision: true,
+            fecha_recepcion: true,
+          },
+        },
+      },
+    });
+
+    // Calcular estadísticas para cada proveedor
+    return proveedores.map((proveedor) => {
+      const ordenes = proveedor.ordenes_compra || [];
+      const ordenesCompletadas = ordenes.filter(
+        (o) => o.estado === 'RECIBIDA_COMPLETA' || o.estado === 'RECIBIDA_PARCIAL',
+      );
+      const ordenesPendientes = ordenes.filter(
+        (o) => o.estado === 'BORRADOR' || o.estado === 'EMITIDA',
+      );
+
+      // Última orden recibida
+      const ultimaOrdenRecibida = ordenesCompletadas
+        .filter((o) => o.fecha_recepcion)
+        .sort((a, b) => new Date(b.fecha_recepcion!).getTime() - new Date(a.fecha_recepcion!).getTime())[0];
+
+      // Monto total de órdenes completadas
+      const montoTotal = ordenesCompletadas.reduce(
+        (sum, o) => sum + (o.total ? parseFloat(o.total.toString()) : 0),
+        0,
+      );
+
+      // Eliminar ordenes_compra del objeto retornado y agregar estadísticas
+      const { ordenes_compra, ...proveedorSinOrdenes } = proveedor;
+
+      return {
+        ...proveedorSinOrdenes,
+        estadisticas: {
+          total_ordenes: ordenes.length,
+          ordenes_completadas: ordenesCompletadas.length,
+          ordenes_pendientes: ordenesPendientes.length,
+          monto_total_compras: montoTotal,
+          ultima_compra: ultimaOrdenRecibida?.fecha_recepcion || null,
+          tiene_ordenes: ordenes.length > 0,
+        },
+      };
     });
   }
 
@@ -1089,8 +1138,20 @@ export class InventarioService {
       throw new NotFoundException('Proveedor no encontrado');
     }
 
-    // 2. Si se está cambiando el RUC, validar formato y unicidad
+    // 2. Si se está cambiando el RUC, validar formato, unicidad y que no tenga órdenes
     if (data.ruc && data.ruc !== supplier.ruc) {
+      // Verificar que no tenga órdenes de compra (integridad de datos)
+      const ordenesExistentes = await this.prisma.ordenCompra.count({
+        where: { codigo_proveedor },
+      });
+
+      if (ordenesExistentes > 0) {
+        throw new BadRequestException(
+          `No se puede modificar el RUC del proveedor porque tiene ${ordenesExistentes} orden(es) de compra asociada(s). ` +
+          `El RUC es un identificador fiscal que debe mantenerse consistente con el historial de compras.`,
+        );
+      }
+
       // Validar formato
       if (!ValidateRucEcuador(data.ruc)) {
         throw new BadRequestException(
