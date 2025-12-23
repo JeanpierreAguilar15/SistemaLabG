@@ -204,9 +204,9 @@ export default function CotizacionesPage() {
     if (examenesSeleccionados.size === 0) return
 
     try {
-      const detalles = Array.from(examenesSeleccionados.values()).map((item) => ({
+      const examenes = Array.from(examenesSeleccionados.values()).map((item) => ({
         codigo_examen: item.codigo_examen,
-        cantidad: 1, // Siempre 1 ahora
+        cantidad: 1,
       }))
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cotizaciones`, {
@@ -215,7 +215,7 @@ export default function CotizacionesPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ detalles }),
+        body: JSON.stringify({ examenes }),
       })
 
       if (response.ok) {
