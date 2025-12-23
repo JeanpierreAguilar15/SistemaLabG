@@ -78,7 +78,7 @@ interface LoteCerrado {
 }
 
 export default function ReactivosPage() {
-  const { token } = useAuthStore();
+  const { accessToken: token } = useAuthStore();
   const [lotesAbiertos, setLotesAbiertos] = useState<LoteAbierto[]>([]);
   const [lotesCerrados, setLotesCerrados] = useState<LoteCerrado[]>([]);
   const [loading, setLoading] = useState(true);

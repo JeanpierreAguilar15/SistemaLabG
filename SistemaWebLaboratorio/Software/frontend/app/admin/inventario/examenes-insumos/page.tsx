@@ -100,7 +100,7 @@ interface ItemDisponible {
 }
 
 export default function ExamenesInsumosPage() {
-  const { token } = useAuthStore();
+  const { accessToken: token } = useAuthStore();
   const [examenes, setExamenes] = useState<ExamenConInsumos[]>([]);
   const [itemsDisponibles, setItemsDisponibles] = useState<ItemDisponible[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,6 +124,11 @@ export default function ExamenesInsumosPage() {
   };
 
   const fetchData = async () => {
+    if (!token) {
+      console.log('Token no disponible aun');
+      return;
+    }
+
     setLoading(true);
     try {
       // Obtener examenes con insumos
@@ -136,7 +141,9 @@ export default function ExamenesInsumosPage() {
         setExamenes(data || []);
       } else {
         console.error('Error al cargar examenes:', resExamenes.status, resExamenes.statusText);
-        showMessage('error', `Error al cargar examenes: ${resExamenes.status}`);
+        if (resExamenes.status !== 401) {
+          showMessage('error', `Error al cargar examenes: ${resExamenes.status}`);
+        }
       }
 
       // Obtener items disponibles (para agregar como insumos)
