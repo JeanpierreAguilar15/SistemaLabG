@@ -9,6 +9,25 @@ import { Label } from '@/components/ui/label'
 import { formatDate, validateTimeRange } from '@/lib/utils'
 import { systemConfigService } from '@/lib/services/system-config.service'
 
+// Helper para formatear hora desde ISO date string
+const formatTime = (isoString: string): string => {
+  if (!isoString) return ''
+  try {
+    if (isoString.includes('T')) {
+      const date = new Date(isoString)
+      return date.toLocaleTimeString('es-EC', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'UTC'
+      })
+    }
+    return isoString.substring(0, 5)
+  } catch {
+    return isoString
+  }
+}
+
 interface Cita {
   codigo_cita: number
   codigo_paciente: number
@@ -379,7 +398,7 @@ export default function CitasAdminPage() {
                     <td className="p-4">
                       <div className="font-medium text-lab-neutral-900">{formatDate(new Date(cita.slot.fecha))}</div>
                       <div className="text-sm text-lab-neutral-600">
-                        {cita.slot.hora_inicio} - {cita.slot.hora_fin}
+                        {formatTime(cita.slot.hora_inicio)} - {formatTime(cita.slot.hora_fin)}
                       </div>
                     </td>
                     <td className="p-4 text-sm text-lab-neutral-700">{cita.slot.servicio.nombre}</td>

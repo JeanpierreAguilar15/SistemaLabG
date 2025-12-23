@@ -8,11 +8,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatDate } from '@/lib/utils'
 
+interface Examen {
+  codigo_examen: number
+  nombre: string
+  codigo_interno: string
+}
+
 interface Resultado {
   codigo_resultado: number
   codigo_muestra: number
   id_muestra: string
-  examen: string
+  examen: Examen | string // Puede venir como objeto o string
   categoria: string
   fecha_resultado: string
   estado: string
@@ -25,6 +31,12 @@ interface Resultado {
   valor_referencia_max?: number
   url_pdf?: string
   codigo_verificacion?: string
+}
+
+// Helper para obtener el nombre del examen
+const getExamenNombre = (examen: Examen | string): string => {
+  if (typeof examen === 'string') return examen
+  return examen?.nombre || 'Sin nombre'
 }
 
 export default function ResultadosPage() {
@@ -79,7 +91,7 @@ export default function ResultadosPage() {
     if (searchTerm) {
       filtered = filtered.filter(
         (r) =>
-          r.examen.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          getExamenNombre(r.examen).toLowerCase().includes(searchTerm.toLowerCase()) ||
           r.id_muestra.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
@@ -120,7 +132,7 @@ export default function ResultadosPage() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `resultado_${resultado.id_muestra}_${resultado.examen}.pdf`
+        a.download = `resultado_${resultado.id_muestra}_${getExamenNombre(resultado.examen)}.pdf`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
@@ -384,7 +396,7 @@ export default function ResultadosPage() {
                     <div className="flex-1">
                       <div className="flex items-start justify-between">
                         <div>
-                          <h4 className="font-semibold text-lab-neutral-900">{resultado.examen}</h4>
+                          <h4 className="font-semibold text-lab-neutral-900">{getExamenNombre(resultado.examen)}</h4>
                           <p className="text-sm text-lab-neutral-600 mt-1">
                             Muestra: {resultado.id_muestra} • {resultado.categoria}
                           </p>
@@ -470,7 +482,7 @@ export default function ResultadosPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-lab-neutral-600">Examen</p>
-                    <p className="font-semibold text-lab-neutral-900">{selectedResultado.examen}</p>
+                    <p className="font-semibold text-lab-neutral-900">{getExamenNombre(selectedResultado.examen)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-lab-neutral-600">Categoría</p>

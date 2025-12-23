@@ -373,17 +373,11 @@ export default function CitasPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-lab-neutral-900">Mis Citas</h1>
-          <p className="text-lab-neutral-600 mt-2">Gestiona tus citas de laboratorio</p>
-        </div>
-        <Button onClick={() => setShowAgendarModal(true)}>
-          <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Agendar Cita
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold text-lab-neutral-900">Mis Citas</h1>
+        <p className="text-lab-neutral-600 mt-2">
+          Consulta y gestiona tus citas de laboratorio. Para agendar una nueva cita, primero genera una cotización.
+        </p>
       </div>
 
       {/* Mensaje */}
