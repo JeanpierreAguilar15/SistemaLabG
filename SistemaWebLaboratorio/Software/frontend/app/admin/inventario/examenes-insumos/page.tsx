@@ -603,19 +603,37 @@ export default function ExamenesInsumosPage() {
 
             {/* Cantidad */}
             <div className="space-y-2">
-              <Label htmlFor="cantidad">Cantidad Requerida por Examen</Label>
-              <Input
-                id="cantidad"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={cantidadRequerida}
-                onChange={(e) => setCantidadRequerida(e.target.value)}
-                placeholder="1"
-              />
-              <p className="text-xs text-muted-foreground">
-                Cuanto de este insumo se consume por cada examen realizado
-              </p>
+              {(() => {
+                const itemSelec = itemsDisponibles.find(
+                  (i) => i.codigo_item.toString() === insumoSeleccionado
+                );
+                const unidad = itemSelec?.unidad_medida || 'unidad(es)';
+                return (
+                  <>
+                    <Label htmlFor="cantidad">
+                      Cantidad Requerida por Examen ({unidad})
+                    </Label>
+                    <Input
+                      id="cantidad"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={cantidadRequerida}
+                      onChange={(e) => setCantidadRequerida(e.target.value)}
+                      placeholder="1"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {itemSelec ? (
+                        <>
+                          Cuantos <strong>{unidad}</strong> de {itemSelec.nombre} se consumen por cada examen realizado
+                        </>
+                      ) : (
+                        'Seleccione un insumo para ver la unidad de medida'
+                      )}
+                    </p>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
