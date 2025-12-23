@@ -268,7 +268,7 @@ export default function ReactivosPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Panel de monitoreo de presentaciones activas. Para gestionar lotes, ir a{' '}
-            <a href="/admin/inventario/lotes" className="text-blue-600 hover:underline">Inventario → Lotes</a>
+            <a href="/admin/inventario" className="text-blue-600 hover:underline">Inventario</a>
           </p>
         </div>
         <Button onClick={fetchData} variant="outline" size="sm">
@@ -436,8 +436,8 @@ export default function ReactivosPage() {
               <Package className="h-5 w-5" />
               Lotes en Reserva
             </CardTitle>
-            <a href="/admin/inventario/lotes" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-              Gestionar en Inventario →
+            <a href="/admin/inventario" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+              Ir a Inventario →
             </a>
           </div>
           <CardDescription>
@@ -454,8 +454,8 @@ export default function ReactivosPage() {
               <p className="text-sm text-amber-600 mt-1">
                 No hay lotes cerrados de reactivos disponibles.
               </p>
-              <a href="/admin/inventario/lotes" className="text-sm text-blue-600 hover:underline mt-2 inline-block">
-                Ir a crear lotes →
+              <a href="/admin/inventario" className="text-sm text-blue-600 hover:underline mt-2 inline-block">
+                Ir a Inventario →
               </a>
             </div>
           ) : (
