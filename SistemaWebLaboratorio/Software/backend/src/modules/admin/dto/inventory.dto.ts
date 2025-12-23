@@ -65,6 +65,21 @@ export class CreateInventoryItemDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  // Campos para control de reactivos
+  @IsOptional()
+  @IsBoolean()
+  es_reactivo?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1, { message: 'La vida util debe ser al menos 1 dia' })
+  vida_util_dias_abierto?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1, { message: 'La capacidad de pruebas debe ser al menos 1' })
+  capacidad_pruebas?: number;
 }
 
 export class UpdateInventoryItemDto {
@@ -122,4 +137,19 @@ export class UpdateInventoryItemDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  // Campos para control de reactivos
+  @IsOptional()
+  @IsBoolean()
+  es_reactivo?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  vida_util_dias_abierto?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  capacidad_pruebas?: number;
 }
