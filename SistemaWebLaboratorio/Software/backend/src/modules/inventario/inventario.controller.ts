@@ -1102,6 +1102,18 @@ export class InventarioController {
     return this.inventarioService.quitarInsumoExamen(codigoExamen, codigoItem);
   }
 
+  @Put('inventory/examenes/:codigoExamen/insumos/:codigoItem')
+  @ApiOperation({
+    summary: 'Actualizar cantidad de insumo de un examen',
+  })
+  async actualizarInsumoExamen(
+    @Param('codigoExamen', ParseIntPipe) codigoExamen: number,
+    @Param('codigoItem', ParseIntPipe) codigoItem: number,
+    @Body() data: { cantidad_requerida: number },
+  ) {
+    return this.inventarioService.actualizarInsumoExamen(codigoExamen, codigoItem, data.cantidad_requerida);
+  }
+
   @Get('inventory/examenes-con-insumos')
   @ApiOperation({
     summary: 'Listar todos los exámenes con sus insumos configurados',

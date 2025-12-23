@@ -3670,6 +3670,24 @@ export class InventarioService {
   }
 
   /**
+   * Actualiza la cantidad requerida de un insumo para un examen
+   */
+  async actualizarInsumoExamen(codigoExamen: number, codigoItem: number, cantidadRequerida: number) {
+    const insumo = await this.prisma.examenInsumo.findFirst({
+      where: { codigo_examen: codigoExamen, codigo_item: codigoItem, activo: true },
+    });
+
+    if (!insumo) {
+      throw new NotFoundException('Relación examen-insumo no encontrada');
+    }
+
+    return this.prisma.examenInsumo.update({
+      where: { codigo_examen_insumo: insumo.codigo_examen_insumo },
+      data: { cantidad_requerida: cantidadRequerida },
+    });
+  }
+
+  /**
    * Obtiene todos los exámenes con sus insumos configurados
    */
   async getExamenesConInsumos() {

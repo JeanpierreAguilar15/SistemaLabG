@@ -49,6 +49,7 @@ import {
   Link2,
   Unlink,
   Settings,
+  Pencil,
 } from 'lucide-react';
 
 interface Insumo {
@@ -110,8 +111,16 @@ export default function ExamenesInsumosPage() {
 
   // Dialog states
   const [dialogAgregar, setDialogAgregar] = useState(false);
+  const [dialogEditar, setDialogEditar] = useState(false);
   const [examenSeleccionado, setExamenSeleccionado] = useState<ExamenConInsumos | null>(null);
   const [insumoSeleccionado, setInsumoSeleccionado] = useState<string>('');
+  const [insumoEditando, setInsumoEditando] = useState<{
+    codigo_examen: number;
+    codigo_item: number;
+    nombre: string;
+    unidad_medida: string;
+    cantidad_actual: number;
+  } | null>(null);
   const [cantidadRequerida, setCantidadRequerida] = useState('1');
   const [searchItem, setSearchItem] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
@@ -266,6 +275,42 @@ export default function ExamenesInsumosPage() {
       } else {
         const data = await res.json();
         showMessage('error', data.message || 'Error al quitar insumo');
+      }
+    } catch (error) {
+      showMessage('error', 'Error de conexion');
+    }
+  };
+
+  const handleEditarInsumo = async () => {
+    if (!insumoEditando || !cantidadRequerida) {
+      showMessage('error', 'Especifique la cantidad');
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${API_URL}/admin/inventory/examenes/${insumoEditando.codigo_examen}/insumos/${insumoEditando.codigo_item}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            cantidad_requerida: parseFloat(cantidadRequerida),
+          }),
+        }
+      );
+
+      if (res.ok) {
+        showMessage('success', 'Cantidad actualizada correctamente');
+        setDialogEditar(false);
+        setInsumoEditando(null);
+        setCantidadRequerida('1');
+        fetchData();
+      } else {
+        const data = await res.json();
+        showMessage('error', data.message || 'Error al actualizar');
       }
     } catch (error) {
       showMessage('error', 'Error de conexion');
@@ -453,7 +498,27 @@ export default function ExamenesInsumosPage() {
                                 <Button
                                   size="sm"
                                   variant="ghost"
+                                  className="h-6 w-6 p-0 text-blue-500 hover:text-blue-700"
+                                  title="Editar cantidad"
+                                  onClick={() => {
+                                    setInsumoEditando({
+                                      codigo_examen: examen.codigo_examen,
+                                      codigo_item: ins.codigo_item,
+                                      nombre: ins.nombre,
+                                      unidad_medida: ins.unidad_medida,
+                                      cantidad_actual: ins.cantidad_requerida,
+                                    });
+                                    setCantidadRequerida(ins.cantidad_requerida.toString());
+                                    setDialogEditar(true);
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
                                   className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                  title="Desvincular insumo"
                                   onClick={() =>
                                     handleQuitarInsumo(examen.codigo_examen, ins.codigo_item, ins.nombre)
                                   }
@@ -689,6 +754,82 @@ export default function ExamenesInsumosPage() {
             >
               <Plus className="h-4 w-4 mr-1" />
               Agregar Insumo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Editar Cantidad */}
+      <Dialog open={dialogEditar} onOpenChange={setDialogEditar}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Editar Cantidad
+            </DialogTitle>
+            <DialogDescription>
+              {insumoEditando && (
+                <>
+                  Insumo: <strong>{insumoEditando.nombre}</strong>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {insumoEditando && (
+              <>
+                <div className="bg-muted p-3 rounded-lg text-sm">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-muted-foreground">Cantidad actual:</span>{' '}
+                      <strong>{insumoEditando.cantidad_actual} {insumoEditando.unidad_medida}</strong>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Unidad:</span>{' '}
+                      <strong>{insumoEditando.unidad_medida}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="cantidad-editar">
+                    Nueva Cantidad ({insumoEditando.unidad_medida})
+                  </Label>
+                  <Input
+                    id="cantidad-editar"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={cantidadRequerida}
+                    onChange={(e) => setCantidadRequerida(e.target.value)}
+                    placeholder="1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Cuantos {insumoEditando.unidad_medida} de {insumoEditando.nombre} se consumen por cada examen
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDialogEditar(false);
+                setInsumoEditando(null);
+                setCantidadRequerida('1');
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleEditarInsumo}
+              disabled={!cantidadRequerida || parseFloat(cantidadRequerida) <= 0}
+            >
+              <CheckCircle className="h-4 w-4 mr-1" />
+              Guardar Cambios
             </Button>
           </DialogFooter>
         </DialogContent>
