@@ -86,7 +86,12 @@ export default function CitasPage() {
     try {
       if (isoString.includes('T')) {
         const date = new Date(isoString);
-        return date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hour12: false });
+        return date.toLocaleTimeString('es-EC', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone: 'UTC' // Usar UTC porque la fecha base es 1970-01-01
+        });
       }
       return isoString.substring(0, 5);
     } catch (e) {

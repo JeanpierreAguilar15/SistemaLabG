@@ -51,6 +51,42 @@ interface Cotizacion {
   cita?: any
 }
 
+interface Slot {
+  codigo_slot: number
+  hora_inicio: string
+  hora_fin: string
+  cupos_disponibles: number
+  servicio?: { nombre: string }
+  sede?: { nombre: string }
+}
+
+// Helper para formatear hora desde ISO date string
+const formatSlotTime = (isoString: string): string => {
+  if (!isoString) return ''
+  try {
+    // Si viene como ISO string completo (ej: "1970-01-01T08:00:00.000Z")
+    if (isoString.includes('T')) {
+      const date = new Date(isoString)
+      return date.toLocaleTimeString('es-EC', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'UTC' // Usar UTC porque la fecha base es 1970-01-01
+      })
+    }
+    // Si ya viene como hora simple (ej: "08:00:00")
+    return isoString.substring(0, 5)
+  } catch {
+    return isoString
+  }
+}
+
+// Helper para obtener hora como número (para agrupar)
+const getHourNumber = (isoString: string): number => {
+  const timeStr = formatSlotTime(isoString)
+  return parseInt(timeStr.split(':')[0], 10)
+}
+
 export default function CotizacionesPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const router = useRouter()
@@ -722,7 +758,7 @@ export default function CotizacionesPage() {
       {/* Modal Agendar Cita */}
       {showAgendarCitaModal && selectedCotizacion && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-lab-neutral-200">
               <h2 className="text-xl font-bold text-lab-neutral-900">
                 Agendar Cita para {selectedCotizacion.numero_cotizacion}
@@ -733,38 +769,109 @@ export default function CotizacionesPage() {
                 </p>
               )}
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="space-y-2">
-                <Label>Fecha</Label>
+                <Label>Fecha de la Cita</Label>
                 <Input
                   type="date"
                   value={fechaCita}
-                  onChange={(e) => setFechaCita(e.target.value)}
+                  onChange={(e) => {
+                    setFechaCita(e.target.value)
+                    setSelectedSlot(null) // Reset slot al cambiar fecha
+                  }}
                   min={new Date().toISOString().split('T')[0]}
                 />
+                {fechaCita && (
+                  <p className="text-xs text-lab-neutral-500">
+                    {new Date(fechaCita + 'T12:00:00').toLocaleDateString('es-EC', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                )}
               </div>
 
               {fechaCita && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label>Horarios Disponibles</Label>
                   {loadingSlots ? (
-                    <div className="text-center py-4">Cargando horarios...</div>
+                    <div className="text-center py-6">
+                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600 mx-auto"></div>
+                      <p className="text-sm text-lab-neutral-500 mt-2">Cargando horarios...</p>
+                    </div>
                   ) : availableSlots.length === 0 ? (
-                    <div className="text-center py-4 text-lab-neutral-500">No hay horarios disponibles para esta fecha</div>
+                    <div className="text-center py-6 bg-lab-neutral-50 rounded-lg">
+                      <svg className="w-12 h-12 text-lab-neutral-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-lab-neutral-500">No hay horarios disponibles</p>
+                      <p className="text-xs text-lab-neutral-400 mt-1">Intenta seleccionar otra fecha</p>
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
-                      {availableSlots.map((slot) => (
-                        <button
-                          key={slot.codigo_slot}
-                          onClick={() => setSelectedSlot(slot.codigo_slot)}
-                          className={`p-2 text-sm rounded border ${selectedSlot === slot.codigo_slot
-                            ? 'bg-lab-primary-600 text-white border-lab-primary-600'
-                            : 'bg-white text-lab-neutral-700 border-lab-neutral-300 hover:border-lab-primary-500'
-                            }`}
-                        >
-                          {slot.hora_inicio.substring(0, 5)}
-                        </button>
-                      ))}
+                    <div className="space-y-4">
+                      {/* Mañana (antes de 12:00) */}
+                      {availableSlots.some(s => getHourNumber(s.hora_inicio) < 12) && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                            <span className="text-sm font-medium text-lab-neutral-700">Mañana</span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {availableSlots
+                              .filter(s => getHourNumber(s.hora_inicio) < 12)
+                              .map((slot) => (
+                                <button
+                                  key={slot.codigo_slot}
+                                  onClick={() => setSelectedSlot(slot.codigo_slot)}
+                                  className={`py-2 px-3 text-sm font-medium rounded-lg border-2 transition-all ${
+                                    selectedSlot === slot.codigo_slot
+                                      ? 'bg-lab-primary-600 text-white border-lab-primary-600 shadow-md'
+                                      : 'bg-white text-lab-neutral-700 border-lab-neutral-200 hover:border-lab-primary-400 hover:bg-lab-primary-50'
+                                  }`}
+                                >
+                                  {formatSlotTime(slot.hora_inicio)}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tarde (12:00 o después) */}
+                      {availableSlots.some(s => getHourNumber(s.hora_inicio) >= 12) && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                            </svg>
+                            <span className="text-sm font-medium text-lab-neutral-700">Tarde</span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {availableSlots
+                              .filter(s => getHourNumber(s.hora_inicio) >= 12)
+                              .map((slot) => (
+                                <button
+                                  key={slot.codigo_slot}
+                                  onClick={() => setSelectedSlot(slot.codigo_slot)}
+                                  className={`py-2 px-3 text-sm font-medium rounded-lg border-2 transition-all ${
+                                    selectedSlot === slot.codigo_slot
+                                      ? 'bg-lab-primary-600 text-white border-lab-primary-600 shadow-md'
+                                      : 'bg-white text-lab-neutral-700 border-lab-neutral-200 hover:border-lab-primary-400 hover:bg-lab-primary-50'
+                                  }`}
+                                >
+                                  {formatSlotTime(slot.hora_inicio)}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-lab-neutral-500 text-center">
+                        {availableSlots.length} horario{availableSlots.length !== 1 ? 's' : ''} disponible{availableSlots.length !== 1 ? 's' : ''}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -772,20 +879,46 @@ export default function CotizacionesPage() {
 
               <div className="space-y-2">
                 <Label>Observaciones (Opcional)</Label>
-                <Input
+                <textarea
                   value={observacionesCita}
                   onChange={(e) => setObservacionesCita(e.target.value)}
-                  placeholder="Alguna indicación especial..."
+                  placeholder="Alguna indicación especial que debamos conocer..."
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-lab-neutral-300 focus:outline-none focus:ring-2 focus:ring-lab-primary-500 resize-none"
                 />
               </div>
+
+              {/* Resumen de selección */}
+              {selectedSlot && (
+                <div className="bg-lab-primary-50 border border-lab-primary-200 rounded-lg p-3">
+                  <p className="text-sm font-medium text-lab-primary-900">Horario seleccionado:</p>
+                  <p className="text-lg font-bold text-lab-primary-700">
+                    {formatSlotTime(availableSlots.find(s => s.codigo_slot === selectedSlot)?.hora_inicio || '')}
+                    {' - '}
+                    {new Date(fechaCita + 'T12:00:00').toLocaleDateString('es-EC', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long'
+                    })}
+                  </p>
+                </div>
+              )}
             </div>
-            <div className="p-6 border-t border-lab-neutral-200 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowAgendarCitaModal(false)}>
+            <div className="p-6 border-t border-lab-neutral-200 flex justify-end gap-3 bg-lab-neutral-50">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAgendarCitaModal(false)
+                  setFechaCita('')
+                  setSelectedSlot(null)
+                  setObservacionesCita('')
+                }}
+              >
                 Cancelar
               </Button>
               <Button
                 onClick={handleConfirmarCita}
-                disabled={!selectedSlot}
+                disabled={!selectedSlot || !fechaCita}
               >
                 Confirmar Cita
               </Button>
