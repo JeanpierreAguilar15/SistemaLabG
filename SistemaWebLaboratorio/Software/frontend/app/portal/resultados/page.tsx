@@ -45,8 +45,6 @@ export default function ResultadosPage() {
   const [loading, setLoading] = useState(false)
   const [resultados, setResultados] = useState<Resultado[]>([])
   const [filteredResultados, setFilteredResultados] = useState<Resultado[]>([])
-  const [selectedResultado, setSelectedResultado] = useState<Resultado | null>(null)
-  const [showDetalleModal, setShowDetalleModal] = useState(false)
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('')
@@ -383,71 +381,55 @@ export default function ResultadosPage() {
               No se encontraron resultados
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {filteredResultados.map((resultado) => (
                 <div
                   key={resultado.codigo_resultado}
-                  className="flex items-start justify-between p-4 rounded-lg border border-lab-neutral-200 hover:border-lab-primary-300 transition-colors"
+                  className="p-4 rounded-lg border border-lab-neutral-200 hover:border-lab-primary-300 hover:shadow-sm transition-all"
                 >
-                  <div className="flex items-start space-x-4 flex-1">
-                    <div className="flex-shrink-0">
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0 mt-1">
                       {getNivelIcon(resultado.nivel)}
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-semibold text-lab-neutral-900">{getExamenNombre(resultado.examen)}</h4>
-                          <p className="text-sm text-lab-neutral-600 mt-1">
-                            Muestra: {resultado.id_muestra} • {resultado.categoria}
-                          </p>
-                          <p className="text-sm text-lab-neutral-500">
-                            {formatDate(new Date(resultado.fecha_resultado))}
-                          </p>
-                        </div>
-                        <span className={getEstadoBadge(resultado.estado)}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="font-semibold text-lab-neutral-900 truncate">{getExamenNombre(resultado.examen)}</h4>
+                        <span className={`flex-shrink-0 ${getEstadoBadge(resultado.estado)}`}>
                           {getEstadoText(resultado.estado)}
                         </span>
                       </div>
+                      <p className="text-sm text-lab-neutral-600 mt-1">
+                        {resultado.categoria}
+                      </p>
+                      <p className="text-xs text-lab-neutral-500 mt-0.5">
+                        {formatDate(new Date(resultado.fecha_resultado))} • Muestra: {resultado.id_muestra}
+                      </p>
 
                       {['LISTO', 'ENTREGADO', 'VALIDADO'].includes(resultado.estado) && (
-                        <div className="mt-3 flex items-center space-x-2">
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
                           {resultado.nivel && (
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getNivelBadge(resultado.nivel)}`}>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getNivelBadge(resultado.nivel)}`}>
                               {resultado.nivel}
                             </span>
                           )}
                           {resultado.valor_numerico !== null && resultado.valor_numerico !== undefined && (
                             <span className="text-sm text-lab-neutral-700">
-                              Valor: <strong>{resultado.valor_numerico}</strong> {resultado.unidad_medida}
+                              <strong>{resultado.valor_numerico}</strong> {resultado.unidad_medida}
                             </span>
                           )}
                         </div>
                       )}
 
-                      <div className="flex space-x-2 mt-3">
-                        {['LISTO', 'ENTREGADO', 'VALIDADO'].includes(resultado.estado) && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedResultado(resultado)
-                                setShowDetalleModal(true)
-                              }}
-                            >
-                              Ver Detalle
-                            </Button>
-                            {resultado.url_pdf && (
-                              <Button size="sm" onClick={() => handleDescargarPDF(resultado)}>
-                                <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                Descargar PDF
-                              </Button>
-                            )}
-                          </>
-                        )}
-                      </div>
+                      {['LISTO', 'ENTREGADO', 'VALIDADO'].includes(resultado.estado) && resultado.url_pdf && (
+                        <div className="mt-3">
+                          <Button size="sm" onClick={() => handleDescargarPDF(resultado)} className="w-full sm:w-auto">
+                            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Descargar PDF
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -457,116 +439,6 @@ export default function ResultadosPage() {
         </CardContent>
       </Card>
 
-      {/* Modal Detalle */}
-      {showDetalleModal && selectedResultado && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-lab-neutral-900">Detalle del Resultado</h2>
-                <button
-                  onClick={() => {
-                    setShowDetalleModal(false)
-                    setSelectedResultado(null)
-                  }}
-                  className="text-lab-neutral-400 hover:text-lab-neutral-600"
-                >
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                {/* Info General */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-lab-neutral-600">Examen</p>
-                    <p className="font-semibold text-lab-neutral-900">{getExamenNombre(selectedResultado.examen)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-lab-neutral-600">Categoría</p>
-                    <p className="font-semibold text-lab-neutral-900">{selectedResultado.categoria}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-lab-neutral-600">ID Muestra</p>
-                    <p className="font-semibold text-lab-neutral-900">{selectedResultado.id_muestra}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-lab-neutral-600">Fecha</p>
-                    <p className="font-semibold text-lab-neutral-900">
-                      {formatDate(new Date(selectedResultado.fecha_resultado))}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Resultado */}
-                <div className="p-4 bg-lab-neutral-50 rounded-lg">
-                  <h3 className="font-semibold text-lab-neutral-900 mb-3">Resultado</h3>
-                  <div className="space-y-2">
-                    {selectedResultado.valor_numerico !== null && selectedResultado.valor_numerico !== undefined ? (
-                      <div>
-                        <p className="text-sm text-lab-neutral-600">Valor</p>
-                        <p className="text-2xl font-bold text-lab-neutral-900">
-                          {selectedResultado.valor_numerico} {selectedResultado.unidad_medida}
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-sm text-lab-neutral-600">Resultado</p>
-                        <p className="text-lg font-semibold text-lab-neutral-900">{selectedResultado.valor_texto}</p>
-                      </div>
-                    )}
-
-                    {selectedResultado.nivel && (
-                      <div className="flex items-center space-x-2 mt-2">
-                        {getNivelIcon(selectedResultado.nivel)}
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getNivelBadge(selectedResultado.nivel)}`}>
-                          {selectedResultado.nivel}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Valores de Referencia */}
-                {(selectedResultado.valor_referencia_min !== null || selectedResultado.valor_referencia_max !== null) && (
-                  <div className="p-4 bg-lab-primary-50 rounded-lg">
-                    <h3 className="font-semibold text-lab-neutral-900 mb-2">Valores de Referencia</h3>
-                    <p className="text-sm text-lab-neutral-700">
-                      {selectedResultado.valor_referencia_min} - {selectedResultado.valor_referencia_max} {selectedResultado.unidad_medida}
-                    </p>
-                  </div>
-                )}
-
-                {selectedResultado.codigo_verificacion && (
-                  <div className="p-4 bg-lab-neutral-100 rounded-lg">
-                    <p className="text-xs text-lab-neutral-600">Código de Verificación</p>
-                    <p className="font-mono text-sm text-lab-neutral-900 mt-1">{selectedResultado.codigo_verificacion}</p>
-                  </div>
-                )}
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowDetalleModal(false)
-                      setSelectedResultado(null)
-                    }}
-                  >
-                    Cerrar
-                  </Button>
-                  {selectedResultado.url_pdf && (
-                    <Button onClick={() => handleDescargarPDF(selectedResultado)}>
-                      Descargar PDF
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
