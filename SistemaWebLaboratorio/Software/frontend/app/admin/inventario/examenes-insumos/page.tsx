@@ -553,47 +553,81 @@ export default function ExamenesInsumosPage() {
 
             {/* Info del item seleccionado */}
             {insumoSeleccionado && (
-              <div className="bg-muted p-3 rounded-lg text-sm space-y-2">
+              <div className="bg-muted p-3 rounded-lg text-sm space-y-3">
                 {(() => {
                   const item = itemsDisponibles.find(
                     (i) => i.codigo_item.toString() === insumoSeleccionado
                   );
                   if (!item) return null;
+
+                  const cantidadNum = parseFloat(cantidadRequerida) || 0;
+                  const examenesDisponibles = cantidadNum > 0
+                    ? Math.floor(item.stock_actual / cantidadNum)
+                    : 0;
+
                   return (
                     <>
-                      <div className="font-medium">{item.nombre}</div>
+                      <div className="font-medium text-base">{item.nombre}</div>
+
+                      {/* Info básica */}
                       <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                         <div>
-                          Stock actual: <span className="text-foreground">{item.stock_actual}</span>
+                          Stock actual: <span className="text-foreground font-medium">{item.stock_actual} {item.unidad_medida}</span>
                         </div>
                         <div>
-                          Unidad: <span className="text-foreground">{item.unidad_medida}</span>
+                          Unidad de medida: <span className="text-foreground font-medium">{item.unidad_medida}</span>
                         </div>
-                        {item.es_reactivo && (
-                          <>
-                            <div>
-                              Vida util abierto:{' '}
-                              <span className="text-foreground">
-                                {item.vida_util_dias_abierto || 'Sin limite'} dias
-                              </span>
-                            </div>
-                            <div>
-                              Pruebas/frasco:{' '}
-                              <span className="text-foreground">
-                                {item.capacidad_pruebas || 'N/A'}
-                              </span>
-                            </div>
-                          </>
-                        )}
                       </div>
+
+                      {/* Info para Reactivos */}
                       {item.es_reactivo && (
-                        <Alert className="mt-2">
-                          <FlaskConical className="h-4 w-4" />
-                          <AlertDescription>
-                            Este es un reactivo. Al procesar resultados, se registraran las pruebas del
-                            frasco abierto automaticamente.
-                          </AlertDescription>
-                        </Alert>
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2 text-blue-800 font-medium">
+                            <FlaskConical className="h-4 w-4" />
+                            Reactivo con control de presentaciones
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-sm text-blue-700">
+                            <div>
+                              Vida util al abrir: <strong>{item.vida_util_dias_abierto || 'Sin limite'} dias</strong>
+                            </div>
+                            <div>
+                              Capacidad: <strong>{item.capacidad_pruebas || 'N/A'} pruebas/presentacion</strong>
+                            </div>
+                          </div>
+                          <p className="text-xs text-blue-600">
+                            Para reactivos, ingrese <strong>1</strong> si cada examen consume 1 prueba de la presentacion abierta.
+                            El sistema registra automaticamente las pruebas usadas.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Info para Insumos Normales */}
+                      {!item.es_reactivo && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2 text-green-800 font-medium">
+                            <Package className="h-4 w-4" />
+                            Insumo con descuento directo de stock
+                          </div>
+                          <p className="text-xs text-green-600">
+                            Ingrese cuantos <strong>{item.unidad_medida}</strong> se consumen por cada examen.
+                            El stock se descontara automaticamente al completar la cita.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Calculadora de rendimiento */}
+                      {cantidadNum > 0 && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                          <div className="flex items-center gap-2 text-amber-800 font-medium">
+                            <Info className="h-4 w-4" />
+                            Rendimiento estimado
+                          </div>
+                          <p className="text-sm text-amber-700 mt-1">
+                            Con el stock actual ({item.stock_actual} {item.unidad_medida}) y consumiendo{' '}
+                            <strong>{cantidadRequerida} {item.unidad_medida}</strong> por examen,
+                            puedes realizar aproximadamente <strong className="text-lg">{examenesDisponibles}</strong> examenes.
+                          </p>
+                        </div>
                       )}
                     </>
                   );
