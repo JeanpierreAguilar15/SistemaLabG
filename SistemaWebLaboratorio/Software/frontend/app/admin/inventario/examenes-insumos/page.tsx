@@ -132,7 +132,11 @@ export default function ExamenesInsumosPage() {
       });
       if (resExamenes.ok) {
         const data = await resExamenes.json();
-        setExamenes(data);
+        console.log('Examenes cargados:', data);
+        setExamenes(data || []);
+      } else {
+        console.error('Error al cargar examenes:', resExamenes.status, resExamenes.statusText);
+        showMessage('error', `Error al cargar examenes: ${resExamenes.status}`);
       }
 
       // Obtener items disponibles (para agregar como insumos)
