@@ -152,12 +152,12 @@ export default function ReactivosPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        showMessage('success', data.mensaje || 'Frasco abierto exitosamente');
+        showMessage('success', data.mensaje || 'Presentacion abierta exitosamente');
         setDialogAbrirLote(false);
         setLoteSeleccionado(null);
         fetchData();
       } else {
-        showMessage('error', data.message || 'Error al abrir frasco');
+        showMessage('error', data.message || 'Error al abrir presentacion');
       }
     } catch (error) {
       showMessage('error', 'Error de conexion');
@@ -227,7 +227,7 @@ export default function ReactivosPage() {
         setObservacion('');
         fetchData();
       } else {
-        showMessage('error', data.message || 'Error al descartar frasco');
+        showMessage('error', data.message || 'Error al descartar presentacion');
       }
     } catch (error) {
       showMessage('error', 'Error de conexion');
@@ -261,10 +261,16 @@ export default function ReactivosPage() {
     <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <FlaskConical className="h-6 w-6" />
-          Control de Reactivos
-        </h1>
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <FlaskConical className="h-6 w-6" />
+            Control de Reactivos
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Panel de monitoreo de presentaciones activas. Para gestionar lotes, ir a{' '}
+            <a href="/admin/inventario/lotes" className="text-blue-600 hover:underline">Inventario → Lotes</a>
+          </p>
+        </div>
         <Button onClick={fetchData} variant="outline" size="sm">
           <RefreshCw className="h-4 w-4 mr-2" />
           Actualizar
@@ -326,12 +332,12 @@ export default function ReactivosPage() {
         </div>
       </div>
 
-      {/* Frascos Abiertos */}
+      {/* Presentaciones Activas */}
       <Card>
         <CardHeader className="py-3">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Timer className="h-5 w-5" />
-            Frascos Abiertos en Uso
+            Presentaciones Activas en Uso
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -339,7 +345,7 @@ export default function ReactivosPage() {
             <div className="text-center py-4 text-muted-foreground">Cargando...</div>
           ) : lotesAbiertos.length === 0 ? (
             <div className="text-center py-4 text-muted-foreground">
-              Sin frascos abiertos
+              Sin presentaciones activas
             </div>
           ) : (
             <Table>
@@ -350,7 +356,7 @@ export default function ReactivosPage() {
                   <TableHead>Apertura</TableHead>
                   <TableHead>Tiempo Restante</TableHead>
                   <TableHead>Pruebas Usadas</TableHead>
-                  <TableHead>Frascos en Lote</TableHead>
+                  <TableHead>Unidades en Lote</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Acciones</TableHead>
                 </TableRow>
@@ -404,7 +410,7 @@ export default function ReactivosPage() {
                         <Button
                           size="sm"
                           variant="destructive"
-                          title="Descartar frasco"
+                          title="Descartar presentacion"
                           onClick={() => {
                             setLoteSeleccionado(lote);
                             setDialogDescartar(true);
@@ -422,96 +428,92 @@ export default function ReactivosPage() {
         </CardContent>
       </Card>
 
-      {/* Lotes Disponibles para Abrir */}
+      {/* Resumen de Lotes en Reserva */}
       <Card>
         <CardHeader className="py-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Package className="h-5 w-5" />
-            Lotes Disponibles
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Package className="h-5 w-5" />
+              Lotes en Reserva
+            </CardTitle>
+            <a href="/admin/inventario/lotes" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+              Gestionar en Inventario →
+            </a>
+          </div>
+          <CardDescription>
+            Lotes cerrados disponibles para abrir cuando se agote la presentacion actual
+          </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
             <div className="text-center py-4 text-muted-foreground">Cargando...</div>
           ) : lotesCerrados.length === 0 ? (
-            <div className="text-center py-4 text-muted-foreground">
-              Sin lotes disponibles
+            <div className="text-center py-6 bg-amber-50 border border-amber-200 rounded-lg">
+              <Package className="h-8 w-8 text-amber-500 mx-auto mb-2" />
+              <p className="text-amber-700 font-medium">Sin lotes en reserva</p>
+              <p className="text-sm text-amber-600 mt-1">
+                No hay lotes cerrados de reactivos disponibles.
+              </p>
+              <a href="/admin/inventario/lotes" className="text-sm text-blue-600 hover:underline mt-2 inline-block">
+                Ir a crear lotes →
+              </a>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Reactivo</TableHead>
-                  <TableHead>Lote</TableHead>
-                  <TableHead>Vencimiento Lote</TableHead>
-                  <TableHead>Vida Util al Abrir</TableHead>
-                  <TableHead>Frascos Disponibles</TableHead>
-                  <TableHead>Pruebas/Frasco</TableHead>
-                  <TableHead>Accion</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lotesCerrados.map((lote) => {
-                  // Verificar si ya hay un lote abierto de este item
-                  const tieneAbierto = lotesAbiertos.some(la => la.codigo_item === lote.item?.codigo_item);
+            <div className="space-y-2">
+              {/* Agrupar por reactivo */}
+              {Array.from(new Set(lotesCerrados.map(l => l.item?.codigo_item))).map(codigoItem => {
+                const lotesDelItem = lotesCerrados.filter(l => l.item?.codigo_item === codigoItem);
+                const primerLote = lotesDelItem[0];
+                const totalUnidades = lotesDelItem.reduce((sum, l) => sum + l.cantidad_actual, 0);
+                const tieneAbierto = lotesAbiertos.some(la => la.codigo_item === codigoItem);
 
-                  return (
-                    <TableRow key={lote.codigo_lote}>
-                      <TableCell className="font-medium">{lote.item?.nombre}</TableCell>
-                      <TableCell>{lote.numero_lote}</TableCell>
-                      <TableCell>
-                        {lote.fecha_vencimiento
-                          ? new Date(lote.fecha_vencimiento).toLocaleDateString('es-EC')
-                          : 'N/A'}
-                      </TableCell>
-                      <TableCell>
-                        {lote.item?.vida_util_dias_abierto
-                          ? `${lote.item.vida_util_dias_abierto} dias`
-                          : 'Sin limite'}
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">{lote.cantidad_actual}</span>
-                        <span className="text-muted-foreground">/{lote.cantidad_inicial}</span>
-                      </TableCell>
-                      <TableCell>
-                        {lote.item?.capacidad_pruebas
-                          ? `${lote.item.capacidad_pruebas} pruebas`
-                          : 'N/A'}
-                      </TableCell>
-                      <TableCell>
-                        {tieneAbierto ? (
-                          <span className="text-sm text-muted-foreground">
-                            Ya hay uno abierto
-                          </span>
-                        ) : (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setLoteSeleccionado(lote);
-                              setDialogAbrirLote(true);
-                            }}
-                          >
-                            <Play className="h-4 w-4 mr-1" />
-                            Abrir Frasco
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                return (
+                  <div key={codigoItem} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-green-100 p-2 rounded-lg">
+                        <FlaskConical className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{primerLote?.item?.nombre}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {lotesDelItem.length} lote{lotesDelItem.length !== 1 ? 's' : ''} • {totalUnidades} unidad{totalUnidades !== 1 ? 'es' : ''} disponible{totalUnidades !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {tieneAbierto ? (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                          Tiene activo
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setLoteSeleccionado(primerLote);
+                            setDialogAbrirLote(true);
+                          }}
+                        >
+                          <Play className="h-3 w-3 mr-1" />
+                          Abrir
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Dialog Abrir Frasco */}
+      {/* Dialog Abrir Presentacion */}
       <Dialog open={dialogAbrirLote} onOpenChange={setDialogAbrirLote}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Abrir Frasco de Reactivo</DialogTitle>
+            <DialogTitle>Abrir Presentacion de Reactivo</DialogTitle>
             <DialogDescription>
-              Al abrir el frasco, comenzara el contador de vida util. Esta accion no se puede deshacer.
+              Al abrir la presentacion, comenzara el contador de vida util. Esta accion no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           {loteSeleccionado && 'item' in loteSeleccionado && (
@@ -540,15 +542,15 @@ export default function ReactivosPage() {
                   </p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Frascos disponibles:</span>
+                  <span className="text-muted-foreground">Unidades disponibles:</span>
                   <p className="font-medium">{(loteSeleccionado as LoteCerrado).cantidad_actual}</p>
                 </div>
               </div>
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  Al abrir, el frasco tendra {(loteSeleccionado as LoteCerrado).item?.vida_util_dias_abierto || 'ilimitados'} dias de vida util.
-                  Despues debera descartarlo aunque no haya usado todas las pruebas.
+                  Al abrir, la presentacion tendra {(loteSeleccionado as LoteCerrado).item?.vida_util_dias_abierto || 'ilimitados'} dias de vida util.
+                  Despues debera descartarla aunque no haya usado todas las pruebas.
                 </AlertDescription>
               </Alert>
             </div>
@@ -570,7 +572,7 @@ export default function ReactivosPage() {
           <DialogHeader>
             <DialogTitle>Registrar Pruebas Realizadas</DialogTitle>
             <DialogDescription>
-              Ingrese la cantidad de pruebas que se realizaron con este frasco
+              Ingrese la cantidad de pruebas que se realizaron con esta presentacion
             </DialogDescription>
           </DialogHeader>
           {loteSeleccionado && 'pruebas_restantes' in loteSeleccionado && (
@@ -625,7 +627,7 @@ export default function ReactivosPage() {
                 <Alert>
                   <Info className="h-4 w-4" />
                   <AlertDescription>
-                    Al registrar estas pruebas, el frasco quedara agotado y se restara 1 del stock.
+                    Al registrar estas pruebas, la presentacion quedara agotada y se restara 1 del stock.
                   </AlertDescription>
                 </Alert>
               )}
@@ -642,13 +644,13 @@ export default function ReactivosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Descartar Frasco */}
+      {/* Dialog Descartar Presentacion */}
       <Dialog open={dialogDescartar} onOpenChange={setDialogDescartar}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Descartar Frasco</DialogTitle>
+            <DialogTitle>Descartar Presentacion</DialogTitle>
             <DialogDescription>
-              Esta accion descartara el frasco actual y restara 1 del stock
+              Esta accion descartara la presentacion actual y restara 1 del stock
             </DialogDescription>
           </DialogHeader>
           {loteSeleccionado && 'pruebas_restantes' in loteSeleccionado && (
@@ -702,7 +704,7 @@ export default function ReactivosPage() {
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  Se restara 1 frasco del stock. Frascos restantes en lote: {(loteSeleccionado as LoteAbierto).frascos_restantes - 1}
+                  Se restara 1 unidad del stock. Unidades restantes en lote: {(loteSeleccionado as LoteAbierto).frascos_restantes - 1}
                 </AlertDescription>
               </Alert>
             </div>
@@ -712,7 +714,7 @@ export default function ReactivosPage() {
               Cancelar
             </Button>
             <Button variant="destructive" onClick={handleDescartarLote} disabled={!motivoDescarte}>
-              Descartar Frasco
+              Descartar Presentacion
             </Button>
           </DialogFooter>
         </DialogContent>
