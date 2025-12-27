@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { encryptedStorage } from './security/encryption'
 
 interface User {
   codigo_usuario: number
@@ -36,7 +37,8 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      storage: createJSONStorage(() => localStorage),
+      // SC-28: Uso de storage cifrado para proteger datos en reposo
+      storage: createJSONStorage(() => encryptedStorage),
     }
   )
 )
