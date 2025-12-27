@@ -33,12 +33,37 @@ export default function DevToolsProtection({
     const disableContextMenu = (e: MouseEvent) => {
       e.preventDefault()
       if (showAlerts) {
-        console.warn('⚠️ Función deshabilitada por seguridad')
+        console.warn('⚠️ Clic derecho deshabilitado por seguridad')
       }
       return false
     }
 
-    // 2. Deshabilitar selección de texto
+    // 2. Deshabilitar clic izquierdo en elementos no interactivos
+    const disableLeftClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+
+      // Permitir clic en elementos interactivos (botones, enlaces, inputs, etc.)
+      const interactiveElements = ['BUTTON', 'A', 'INPUT', 'TEXTAREA', 'SELECT', 'LABEL']
+
+      // Permitir si el elemento o su padre es interactivo
+      if (
+        interactiveElements.includes(target.tagName) ||
+        target.closest('button, a, input, textarea, select, label, [role="button"]')
+      ) {
+        return true // Permitir el click
+      }
+
+      // Bloquear clic izquierdo en otros elementos (texto, imágenes, divs, etc.)
+      if (e.button === 0) { // 0 = clic izquierdo
+        e.preventDefault()
+        if (showAlerts && Math.random() < 0.1) { // Alertar solo 10% de las veces para no saturar
+          console.warn('⚠️ Selección deshabilitada por seguridad')
+        }
+        return false
+      }
+    }
+
+    // 3. Deshabilitar selección de texto
     const disableSelection = (e: Event) => {
       e.preventDefault()
       return false
@@ -164,6 +189,7 @@ export default function DevToolsProtection({
 
     // Registrar event listeners
     document.addEventListener('contextmenu', disableContextMenu)
+    document.addEventListener('mousedown', disableLeftClick) // Bloquear clic izquierdo
     document.addEventListener('selectstart', disableSelection)
     document.addEventListener('keydown', disableDevKeys)
 
@@ -189,6 +215,7 @@ export default function DevToolsProtection({
     // Limpieza
     return () => {
       document.removeEventListener('contextmenu', disableContextMenu)
+      document.removeEventListener('mousedown', disableLeftClick)
       document.removeEventListener('selectstart', disableSelection)
       document.removeEventListener('keydown', disableDevKeys)
       document.removeEventListener('copy', disableCopy)

@@ -198,11 +198,50 @@ Dificultar la ingeniería inversa y el análisis del código fuente mediante mú
 ```typescript
 const disableContextMenu = (e: MouseEvent) => {
   e.preventDefault()
-  console.warn('⚠️ Función deshabilitada por seguridad')
+  console.warn('⚠️ Clic derecho deshabilitado por seguridad')
   return false
 }
 document.addEventListener('contextmenu', disableContextMenu)
 ```
+
+##### ✅ Deshabilitar Clic Izquierdo en Elementos No Interactivos
+**Nota**: Requerimiento adicional del instructor
+
+```typescript
+const disableLeftClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+
+  // Permitir clic en elementos interactivos (botones, enlaces, inputs, etc.)
+  const interactiveElements = ['BUTTON', 'A', 'INPUT', 'TEXTAREA', 'SELECT', 'LABEL']
+
+  if (
+    interactiveElements.includes(target.tagName) ||
+    target.closest('button, a, input, textarea, select, label, [role="button"]')
+  ) {
+    return true // Permitir el click
+  }
+
+  // Bloquear clic izquierdo en otros elementos (texto, imágenes, divs, etc.)
+  if (e.button === 0) { // 0 = clic izquierdo
+    e.preventDefault()
+    return false
+  }
+}
+document.addEventListener('mousedown', disableLeftClick)
+```
+
+**Elementos donde SÍ funciona el clic**:
+- Botones (`<button>`)
+- Enlaces (`<a>`)
+- Campos de formulario (`<input>`, `<textarea>`, `<select>`)
+- Elementos con `role="button"`
+- Labels de formulario
+
+**Elementos donde NO funciona el clic**:
+- Texto plano
+- Imágenes
+- Contenedores (`<div>`, `<span>`)
+- Tablas y listas
 
 ##### ✅ Deshabilitar Selección de Texto
 ```typescript
@@ -341,9 +380,11 @@ async headers() {
 
 #### 3.3.1 Protección en Desarrollo:
 1. Clic derecho → Bloqueado
-2. F12 → Alert de advertencia
-3. Ctrl+U → Bloqueado
-4. Intentar copiar texto → Limitado
+2. Clic izquierdo en texto → Limitado (permite en botones/inputs)
+3. F12 → Alert de advertencia
+4. Ctrl+U → Bloqueado
+5. Intentar seleccionar texto → Bloqueado
+6. Intentar copiar texto → Limitado
 
 #### 3.3.2 Ofuscación en Producción:
 ```bash
