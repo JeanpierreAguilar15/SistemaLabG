@@ -6,6 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { useSession } from '@/contexts/SessionContext'
+import { useSecurity } from '@/contexts/SecurityProvider'
+import { isDataEncrypted, logStorageStatus } from '@/lib/secure-storage'
+import { Shield, Lock, Clock, Eye, CheckCircle, XCircle } from 'lucide-react'
 
 interface LoginStats {
   total_intentos: number
@@ -56,12 +61,26 @@ interface AuditHistorial {
   usuario_bd: string
 }
 
-type TabType = 'dashboard' | 'alertas' | 'historial'
+type TabType = 'dashboard' | 'alertas' | 'historial' | 'configuracion'
 
 export default function SeguridadPage() {
   const { accessToken } = useAuthStore()
   const [activeTab, setActiveTab] = useState<TabType>('dashboard')
   const [loading, setLoading] = useState(true)
+
+  // Hooks de seguridad
+  const { sessionTimeout, setSessionTimeout } = useSession()
+  const { securityEnabled, setSecurityEnabled, inspectionAttempts, devToolsDetected } = useSecurity()
+  const [newTimeout, setNewTimeout] = useState(sessionTimeout.toString())
+  const [storageEncrypted, setStorageEncrypted] = useState(false)
+
+  // Verificar cifrado al montar
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const { encrypted } = isDataEncrypted('auth-storage')
+      setStorageEncrypted(encrypted)
+    }
+  }, [])
 
   // Dashboard data
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
@@ -216,6 +235,7 @@ export default function SeguridadPage() {
             { id: 'dashboard', label: 'Dashboard', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
             { id: 'alertas', label: 'Alertas', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
             { id: 'historial', label: 'Historial Cambios', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+            { id: 'configuracion', label: 'Configuracion', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -521,6 +541,247 @@ export default function SeguridadPage() {
                   No se encontraron registros para esta tabla
                 </p>
               )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Configuracion Tab */}
+      {activeTab === 'configuracion' && (
+        <div className="space-y-6">
+          {/* Estado de Controles de Seguridad */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Estado de Controles de Seguridad
+              </CardTitle>
+              <CardDescription>
+                Controles implementados segun ISO/IEC 27002:2022 y NIST SP 800-53
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Cifrado de Storage */}
+                <div className={`p-4 rounded-lg border-2 ${storageEncrypted ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Lock className={`h-5 w-5 ${storageEncrypted ? 'text-green-600' : 'text-red-600'}`} />
+                    <span className="font-medium">Cifrado de Storage</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {storageEncrypted ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-600" />
+                    )}
+                    <span className="text-sm">
+                      {storageEncrypted ? 'AES-256-GCM Activo' : 'No cifrado'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    ISO 8.24 / NIST SC-28
+                  </p>
+                </div>
+
+                {/* Sesion Temporizada */}
+                <div className="p-4 rounded-lg border-2 border-green-200 bg-green-50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Clock className="h-5 w-5 text-green-600" />
+                    <span className="font-medium">Sesion Temporizada</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span className="text-sm">{sessionTimeout} min de inactividad</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    ISO 8.1 / NIST AC-12
+                  </p>
+                </div>
+
+                {/* Proteccion Anti-Debugging */}
+                <div className={`p-4 rounded-lg border-2 ${securityEnabled ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Eye className={`h-5 w-5 ${securityEnabled ? 'text-green-600' : 'text-yellow-600'}`} />
+                    <span className="font-medium">Anti-Debugging</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {securityEnabled ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-yellow-600" />
+                    )}
+                    <span className="text-sm">
+                      {securityEnabled ? 'Protecciones activas' : 'Deshabilitado'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    ISO 8.28 / NIST SA-15
+                  </p>
+                </div>
+              </div>
+
+              {/* Estadisticas de intentos */}
+              {inspectionAttempts > 0 && (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-800">
+                    <strong>Intentos de inspeccion detectados:</strong> {inspectionAttempts}
+                  </p>
+                </div>
+              )}
+
+              {devToolsDetected && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800">
+                    <strong>DevTools detectado actualmente</strong>
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Configuracion de Sesion */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Configuracion de Sesion Temporizada
+              </CardTitle>
+              <CardDescription>
+                Define el tiempo de inactividad antes de cerrar la sesion automaticamente
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="timeout">Tiempo de inactividad (minutos)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="timeout"
+                      type="number"
+                      min="1"
+                      max="60"
+                      value={newTimeout}
+                      onChange={(e) => setNewTimeout(e.target.value)}
+                      className="w-32"
+                    />
+                    <Button
+                      onClick={() => {
+                        const mins = parseInt(newTimeout)
+                        if (mins >= 1 && mins <= 60) {
+                          setSessionTimeout(mins)
+                          alert(`Tiempo de sesion configurado: ${mins} minutos`)
+                        }
+                      }}
+                    >
+                      Guardar
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Valores recomendados: 5-15 minutos para entornos de alta seguridad
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Configuracion actual</Label>
+                  <div className="p-3 bg-muted rounded-lg text-sm">
+                    <p><strong>Timeout:</strong> {sessionTimeout} minutos</p>
+                    <p><strong>Advertencia:</strong> 1 minuto antes de expirar</p>
+                    <p><strong>Eventos monitoreados:</strong> click, scroll, teclas, touch</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Protecciones Anti-Debugging */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Protecciones Anti-Debugging
+              </CardTitle>
+              <CardDescription>
+                Controles contra ingenieria inversa y analisis de codigo
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Habilitar protecciones</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Bloquea F12, clic derecho, Ctrl+Shift+I, etc.
+                  </p>
+                </div>
+                <Switch
+                  checked={securityEnabled}
+                  onCheckedChange={setSecurityEnabled}
+                />
+              </div>
+
+              <div className="border-t pt-4">
+                <p className="font-medium mb-2">Protecciones incluidas:</p>
+                <ul className="text-sm space-y-1 text-muted-foreground">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-3 w-3 text-green-600" /> Bloqueo de clic derecho (contextmenu)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-3 w-3 text-green-600" /> Bloqueo de F12 (DevTools)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-3 w-3 text-green-600" /> Bloqueo de Ctrl+Shift+I/J/C
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-3 w-3 text-green-600" /> Bloqueo de Ctrl+U (ver fuente)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-3 w-3 text-green-600" /> Deteccion de DevTools por viewport
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-3 w-3 text-green-600" /> Registro de intentos de inspeccion
+                  </li>
+                </ul>
+              </div>
+
+              <div className="border-t pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    logStorageStatus()
+                    alert('Revisa la consola del navegador (F12) para ver el estado del cifrado')
+                  }}
+                >
+                  Ver estado de cifrado en consola
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Instrucciones para demostracion */}
+          <Card className="border-blue-200 bg-blue-50">
+            <CardHeader>
+              <CardTitle className="text-blue-800">Como demostrar los controles</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-blue-700 space-y-2">
+              <p><strong>1. Cifrado de Storage (SC-28):</strong></p>
+              <ul className="list-disc list-inside ml-4 space-y-1">
+                <li>Abre DevTools {'>'} Application {'>'} Local Storage</li>
+                <li>Busca la clave "auth-storage"</li>
+                <li>Veras que los datos empiezan con "ENC:" seguido de texto cifrado en Base64</li>
+                <li>El cifrado usa AES-256-GCM con PBKDF2</li>
+              </ul>
+              <p className="mt-3"><strong>2. Sesion Temporizada (AC-12):</strong></p>
+              <ul className="list-disc list-inside ml-4 space-y-1">
+                <li>Deja de interactuar con la aplicacion</li>
+                <li>1 minuto antes de expirar aparecera un modal de advertencia</li>
+                <li>Si no respondes, la sesion se cierra automaticamente</li>
+              </ul>
+              <p className="mt-3"><strong>3. Anti-Debugging (SA-15):</strong></p>
+              <ul className="list-disc list-inside ml-4 space-y-1">
+                <li>Intenta presionar F12 - se bloqueara</li>
+                <li>Intenta clic derecho - se bloqueara</li>
+                <li>Intenta Ctrl+Shift+I - se bloqueara</li>
+                <li>Aparecera un modal de advertencia y se registrara el intento</li>
+              </ul>
             </CardContent>
           </Card>
         </div>
