@@ -1,7 +1,9 @@
 import { Controller, Post, Body, Get, Put, UseGuards, Req, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ChatbotService } from '../services/chatbot.service';
+import { LabResultsInterpreterService } from '../services/lab-results-interpreter.service';
 import { CreateMessageDto, UpdateChatbotConfigDto } from '../dto/chatbot.dto';
+import { InterpretResultsDto, InterpretResultsResponseDto } from '../dto/interpret-results.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -11,7 +13,10 @@ import { v4 as uuidv4 } from 'uuid';
 @ApiTags('Chatbot')
 @Controller('chatbot')
 export class ChatbotController {
-    constructor(private readonly chatbotService: ChatbotService) { }
+    constructor(
+        private readonly chatbotService: ChatbotService,
+        private readonly labResultsInterpreter: LabResultsInterpreterService,
+    ) { }
 
     @Public()
     @Post('message')
@@ -91,5 +96,59 @@ export class ChatbotController {
             throw new UnauthorizedException('Invalid API Key');
         }
         return this.chatbotService.consultarServicios();
+    }
+
+    // =====================================================
+    // INTERPRETACIÓN DE RESULTADOS CON GEMINI
+    // =====================================================
+
+    @Public()
+    @Post('interpret-results')
+    @ApiOperation({
+        summary: 'Interpretar resultados de laboratorio desde PDF',
+        description: 'Recibe un PDF en base64 y usa Gemini 2.5 para interpretar los resultados',
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Interpretación de los resultados',
+        type: InterpretResultsResponseDto,
+    })
+    async interpretResults(@Body() dto: InterpretResultsDto): Promise<InterpretResultsResponseDto> {
+        const mimeType = dto.mimeType || 'application/pdf';
+
+        // Interpretar con Gemini
+        const interpretation = await this.labResultsInterpreter.interpretLabResults(
+            dto.file,
+            mimeType,
+        );
+
+        // Generar mensaje para el chat
+        const chatMessage = await this.labResultsInterpreter.generateChatResponse(interpretation);
+
+        return {
+            success: interpretation.success,
+            chatMessage,
+            data: interpretation.success ? {
+                paciente: interpretation.paciente,
+                fecha_examen: interpretation.fecha_examen,
+                laboratorio: interpretation.laboratorio,
+                resultados: interpretation.resultados,
+                resumen_general: interpretation.resumen_general,
+                recomendaciones: interpretation.recomendaciones,
+                advertencias: interpretation.advertencias,
+            } : undefined,
+            error: interpretation.error,
+        };
+    }
+
+    @Get('interpret-results/status')
+    @ApiOperation({ summary: 'Verificar si el servicio de interpretación está disponible' })
+    async getInterpreterStatus() {
+        return {
+            available: this.labResultsInterpreter.isConfigured(),
+            message: this.labResultsInterpreter.isConfigured()
+                ? 'Servicio de interpretación disponible'
+                : 'GEMINI_API_KEY no configurada',
+        };
     }
 }

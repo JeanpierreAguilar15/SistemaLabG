@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { MessageCircle, X, Send, Bot, Clock, MapPin, DollarSign, FlaskConical, RefreshCw, User, Phone, CalendarPlus, Calendar, LogIn } from 'lucide-react';
+import { MessageCircle, X, Send, Bot, Clock, MapPin, DollarSign, FlaskConical, RefreshCw, User, Phone, CalendarPlus, Calendar, LogIn, Paperclip, FileText, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
 interface Message {
@@ -51,6 +51,10 @@ export default function PublicChatWidget() {
     // Estado para mostrar información de contacto
     const [showContactInfo, setShowContactInfo] = useState(false);
 
+    // Estado para subir archivos PDF
+    const [isUploadingFile, setIsUploadingFile] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     // Información del laboratorio
     const LAB_PHONE = '(+591) 3-3456789';
     const LAB_WHATSAPP = '+591 70012345';
@@ -60,7 +64,7 @@ export default function PublicChatWidget() {
         { icon: <CalendarPlus size={16} />, label: 'Agendar Cita', message: 'Quiero agendar una cita' },
         { icon: <Calendar size={16} />, label: 'Mis Citas', message: 'Ver mis citas' },
         { icon: <DollarSign size={16} />, label: 'Precios', message: '¿Cuáles son los precios de los exámenes?' },
-        { icon: <Clock size={16} />, label: 'Horarios', message: '¿Cuál es el horario de atención?' },
+        { icon: <FileText size={16} />, label: 'Interpretar Resultados', message: '__UPLOAD_PDF__' },
     ];
 
     // Initialize session ID
@@ -296,7 +300,120 @@ export default function PublicChatWidget() {
     };
 
     const handleQuickAction = (action: QuickAction) => {
+        if (action.message === '__UPLOAD_PDF__') {
+            // Trigger file input
+            fileInputRef.current?.click();
+            return;
+        }
         sendMessage(action.message);
+    };
+
+    // Función para manejar la subida de archivos PDF
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validar tipo de archivo
+        if (file.type !== 'application/pdf') {
+            addMessage({
+                id: Date.now().toString(),
+                content: '❌ Por favor, sube un archivo PDF con tus resultados de laboratorio.',
+                sender: 'bot',
+                timestamp: new Date(),
+            });
+            return;
+        }
+
+        // Validar tamaño (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            addMessage({
+                id: Date.now().toString(),
+                content: '❌ El archivo es muy grande. El tamaño máximo es 10MB.',
+                sender: 'bot',
+                timestamp: new Date(),
+            });
+            return;
+        }
+
+        setShowQuickActions(false);
+        setIsUploadingFile(true);
+
+        // Mostrar mensaje de usuario
+        addMessage({
+            id: Date.now().toString(),
+            content: `📄 Subiendo: ${file.name}`,
+            sender: 'user',
+            timestamp: new Date(),
+        });
+
+        try {
+            // Convertir a base64
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const result = reader.result as string;
+                    // Remover el prefijo data:application/pdf;base64,
+                    const base64Data = result.split(',')[1];
+                    resolve(base64Data);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+
+            // Mostrar mensaje de procesando
+            addMessage({
+                id: (Date.now() + 1).toString(),
+                content: '🔍 Analizando tus resultados con inteligencia artificial...',
+                sender: 'bot',
+                timestamp: new Date(),
+            });
+
+            // Enviar al backend
+            const response = await fetch(`${API_URL}/chatbot/interpret-results`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    file: base64,
+                    mimeType: 'application/pdf',
+                    sessionId,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                addMessage({
+                    id: (Date.now() + 2).toString(),
+                    content: data.chatMessage,
+                    sender: 'bot',
+                    timestamp: new Date(),
+                });
+            } else {
+                addMessage({
+                    id: (Date.now() + 2).toString(),
+                    content: `❌ ${data.error || 'No pude analizar el documento. Asegúrate de que sea un PDF legible con resultados de laboratorio.'}`,
+                    sender: 'bot',
+                    timestamp: new Date(),
+                });
+            }
+
+        } catch (error) {
+            console.error('Error uploading file:', error);
+            addMessage({
+                id: (Date.now() + 2).toString(),
+                content: '❌ Hubo un error al procesar el archivo. Por favor intenta de nuevo.',
+                sender: 'bot',
+                timestamp: new Date(),
+            });
+        } finally {
+            setIsUploadingFile(false);
+            // Reset file input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
     };
 
     const requestHumanAgent = () => {
@@ -493,6 +610,15 @@ export default function PublicChatWidget() {
 
                         {/* Input Area */}
                         <div className="p-4 bg-white border-t border-gray-100">
+                            {/* Hidden file input */}
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileUpload}
+                                accept="application/pdf"
+                                className="hidden"
+                            />
+
                             {/* Login Prompt (HU-26) */}
                             {showLoginPrompt && !isAuthenticated && (
                                 <button
@@ -527,22 +653,36 @@ export default function PublicChatWidget() {
                             )}
 
                             <div className="flex items-center gap-2">
+                                {/* Botón de adjuntar archivo */}
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploadingFile || isTyping || chatMode === 'WAITING'}
+                                    className="text-gray-500 hover:text-blue-600 p-2 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Subir PDF de resultados"
+                                >
+                                    {isUploadingFile ? (
+                                        <Loader2 size={20} className="animate-spin" />
+                                    ) : (
+                                        <Paperclip size={20} />
+                                    )}
+                                </button>
                                 <input
                                     type="text"
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                     onKeyPress={handleKeyPress}
                                     placeholder={
+                                        isUploadingFile ? 'Analizando PDF...' :
                                         chatMode === 'WAITING' ? 'Esperando operador...' :
                                         chatMode === 'HUMAN' ? 'Escribe al operador...' :
                                         'Escribe tu consulta...'
                                     }
                                     className="flex-1 bg-gray-100 border-0 rounded-full px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-400"
-                                    disabled={isTyping || chatMode === 'WAITING'}
+                                    disabled={isTyping || isUploadingFile || chatMode === 'WAITING'}
                                 />
                                 <button
                                     onClick={handleSend}
-                                    disabled={!inputValue.trim() || isTyping || chatMode === 'WAITING'}
+                                    disabled={!inputValue.trim() || isTyping || isUploadingFile || chatMode === 'WAITING'}
                                     className="bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Send size={18} />
@@ -550,7 +690,7 @@ export default function PublicChatWidget() {
                             </div>
                             <div className="text-center mt-2">
                                 <p className="text-[10px] text-gray-400">
-                                    Laboratorio Clínico Franz - {chatMode === 'HUMAN' ? 'Chat en Vivo' : 'Asistente Virtual'}
+                                    Laboratorio Clínico Franz - {chatMode === 'HUMAN' ? 'Chat en Vivo' : 'Asistente Virtual con IA'}
                                 </p>
                             </div>
                         </div>
