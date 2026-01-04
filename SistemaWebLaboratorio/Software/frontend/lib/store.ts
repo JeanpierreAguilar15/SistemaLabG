@@ -39,6 +39,9 @@ const encryptedStorage: StateStorage = {
   },
 }
 
+// TEMPORAL: Cambiar a true para ver datos SIN cifrar (para documentacion)
+const USE_ENCRYPTION = false
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -54,7 +57,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      storage: createJSONStorage(() => encryptedStorage),
+      storage: USE_ENCRYPTION ? createJSONStorage(() => encryptedStorage) : createJSONStorage(() => localStorage),
     }
   )
 )
