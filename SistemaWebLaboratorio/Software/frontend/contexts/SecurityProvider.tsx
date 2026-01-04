@@ -52,6 +52,7 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
   const [securityEnabled, setSecurityEnabled] = useState(true);
   const [inspectionAttempts, setInspectionAttempts] = useState(0);
   const [showWarningModal, setShowWarningModal] = useState(false);
+  const [lastBlockedAction, setLastBlockedAction] = useState('');
 
   const devToolsCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastWindowSize = useRef({ width: 0, height: 0 });
@@ -63,9 +64,24 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
     }
   }, []);
 
+  // Obtener mensaje descriptivo para cada tipo de bloqueo
+  const getBlockedActionMessage = (type: string): string => {
+    const messages: Record<string, string> = {
+      'Clic derecho bloqueado': 'Clic derecho deshabilitado',
+      'Tecla F12 bloqueada': 'Tecla F12 (DevTools) bloqueada',
+      'Ctrl+Shift+I bloqueado': 'Combinacion Ctrl+Shift+I (Inspector) bloqueada',
+      'Ctrl+Shift+J bloqueado': 'Combinacion Ctrl+Shift+J (Consola) bloqueada',
+      'Ctrl+Shift+C bloqueado': 'Combinacion Ctrl+Shift+C (Selector) bloqueada',
+      'Ctrl+U bloqueado': 'Combinacion Ctrl+U (Ver codigo fuente) bloqueada',
+      'Ctrl+S bloqueado': 'Combinacion Ctrl+S (Guardar pagina) bloqueada',
+    };
+    return messages[type] || type;
+  };
+
   // Registrar intento de inspeccion
   const logInspectionAttempt = useCallback((type: string) => {
     setInspectionAttempts(prev => prev + 1);
+    setLastBlockedAction(getBlockedActionMessage(type));
     console.warn(`[SecurityProvider] Intento de inspeccion detectado: ${type}`);
     console.warn(`[SecurityProvider] Total de intentos: ${inspectionAttempts + 1}`);
 
@@ -324,15 +340,17 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
               Accion no permitida
             </DialogTitle>
             <DialogDescription className="pt-2 text-red-700">
-              Esta accion ha sido bloqueada por motivos de seguridad.
-              El intento ha sido registrado.
+              Esta funcionalidad ha sido restringida por motivos de seguridad.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex items-center justify-center py-4">
-            <Shield className="h-16 w-16 text-red-400" />
+          <div className="flex flex-col items-center justify-center py-4 space-y-3">
+            <Shield className="h-12 w-12 text-red-400" />
+            <div className="bg-red-100 border border-red-300 rounded-lg px-4 py-2 text-center">
+              <p className="text-sm font-medium text-red-800">{lastBlockedAction}</p>
+            </div>
           </div>
-          <p className="text-center text-sm text-red-600">
-            Intentos de inspeccion: {inspectionAttempts}
+          <p className="text-center text-xs text-red-600">
+            Intento #{inspectionAttempts} registrado en el sistema
           </p>
         </DialogContent>
       </Dialog>
