@@ -39,8 +39,8 @@ const encryptedStorage: StateStorage = {
   },
 }
 
-// TEMPORAL: Cambiar a true para ver datos SIN cifrar (para documentacion)
-const USE_ENCRYPTION = false
+// TEMPORAL: Cambiar a false para ver datos SIN cifrar (para documentacion)
+const USE_ENCRYPTION = true
 
 export const useAuthStore = create<AuthState>()(
   persist(
