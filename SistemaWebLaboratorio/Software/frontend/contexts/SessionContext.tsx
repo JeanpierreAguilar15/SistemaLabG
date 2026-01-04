@@ -28,8 +28,9 @@ import { Button } from '@/components/ui/button';
 import { AlertTriangle, Clock } from 'lucide-react';
 
 // Configuracion por defecto (en minutos)
-const DEFAULT_SESSION_TIMEOUT = 15; // 15 minutos de inactividad
-const WARNING_BEFORE_TIMEOUT = 1; // Mostrar advertencia 1 minuto antes
+// NOTA: Para pruebas usar 0.5 (30 seg), en produccion usar 15 minutos
+const DEFAULT_SESSION_TIMEOUT = 0.5; // 30 segundos para pruebas (cambiar a 15 en produccion)
+const WARNING_BEFORE_TIMEOUT = 0.25; // Mostrar advertencia 15 segundos antes
 
 interface SessionContextType {
   sessionTimeout: number;
