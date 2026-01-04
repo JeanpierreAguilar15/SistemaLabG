@@ -54,7 +54,14 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
   const [showWarningModal, setShowWarningModal] = useState(false);
 
   const devToolsCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const lastWindowSize = useRef({ width: window.innerWidth, height: window.innerHeight });
+  const lastWindowSize = useRef({ width: 0, height: 0 });
+
+  // Inicializar tamaño de ventana solo en cliente
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      lastWindowSize.current = { width: window.innerWidth, height: window.innerHeight };
+    }
+  }, []);
 
   // Registrar intento de inspeccion
   const logInspectionAttempt = useCallback((type: string) => {
