@@ -214,11 +214,19 @@ export function SessionProvider({ children }: SessionProviderProps) {
         extendSession,
       }}
     >
+      {/* Overlay de blur cuando el modal está abierto */}
+      {isWarningOpen && (
+        <div
+          className="fixed inset-0 z-40 backdrop-blur-md bg-black/50 transition-all duration-300"
+          style={{ backdropFilter: 'blur(8px)' }}
+        />
+      )}
+
       {children}
 
       {/* Modal de advertencia de sesion */}
       <Dialog open={isWarningOpen} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+        <DialogContent className="sm:max-w-md z-50 border-2 border-amber-500 shadow-2xl" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
               <AlertTriangle className="h-5 w-5" />
