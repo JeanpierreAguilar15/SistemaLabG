@@ -75,6 +75,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
+  const isWarningOpenRef = useRef<boolean>(false);
 
   // Rutas publicas que no requieren monitoreo de sesion
   const publicRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password'];
@@ -85,22 +86,25 @@ export function SessionProvider({ children }: SessionProviderProps) {
   // Funcion para cerrar sesion
   const logout = useCallback(() => {
     console.log('[SessionManager] Sesion cerrada por inactividad');
-    clearAuth();
-    setIsWarningOpen(false);
 
-    // Limpiar timers
+    // Limpiar timers primero
     if (mainTimerRef.current) clearTimeout(mainTimerRef.current);
     if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
 
-    // Redirigir a login con mensaje
+    // Resetear estado
+    isWarningOpenRef.current = false;
+    setIsWarningOpen(false);
+
+    // Limpiar auth y redirigir
+    clearAuth();
     router.push('/auth/login?expired=true');
   }, [clearAuth, router]);
 
   // Funcion para reiniciar el temporizador
   const resetTimer = useCallback(() => {
     if (!isAuthenticated || isPublicRoute) return;
-    if (isWarningOpen) return; // No reiniciar si el modal esta abierto
+    if (isWarningOpenRef.current) return; // No reiniciar si el modal esta abierto (usar ref)
 
     const timeout = getTimeoutDuration();
     const warningTime = WARNING_BEFORE_TIMEOUT * 60 * 1000;
@@ -117,6 +121,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
     // Timer para mostrar advertencia
     warningTimerRef.current = setTimeout(() => {
       console.log('[SessionManager] Mostrando advertencia de sesion');
+      isWarningOpenRef.current = true;
       setIsWarningOpen(true);
 
       // Iniciar countdown
@@ -134,18 +139,21 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
     // Timer principal para cerrar sesion
     mainTimerRef.current = setTimeout(() => {
+      console.log('[SessionManager] Ejecutando logout automatico');
       logout();
     }, timeout);
 
     console.log(`[SessionManager] Timer reiniciado: ${timeout / 1000 / 60} minutos`);
-  }, [isAuthenticated, isPublicRoute, isWarningOpen, getTimeoutDuration, logout]);
+  }, [isAuthenticated, isPublicRoute, getTimeoutDuration, logout]);
 
   // Funcion para extender la sesion (desde el modal de advertencia)
   const extendSession = useCallback(() => {
     console.log('[SessionManager] Sesion extendida por el usuario');
+    isWarningOpenRef.current = false;
     setIsWarningOpen(false);
     if (countdownRef.current) clearInterval(countdownRef.current);
-    resetTimer();
+    // Usar setTimeout para asegurar que el ref se actualice antes de resetTimer
+    setTimeout(() => resetTimer(), 0);
   }, [resetTimer]);
 
   // Configurar timeout
@@ -158,41 +166,49 @@ export function SessionProvider({ children }: SessionProviderProps) {
     resetTimer();
   }, [resetTimer]);
 
-  // Manejar actividad del usuario con throttle
-  const handleUserActivity = useCallback(() => {
-    const now = Date.now();
-    // Throttle: solo procesar cada 1 segundo maximo
-    if (now - lastActivityRef.current > 1000) {
-      lastActivityRef.current = now;
-      resetTimer();
-    }
-  }, [resetTimer]);
-
-  // Configurar event listeners
+  // Configurar event listeners (solo una vez al montar)
   useEffect(() => {
     if (!isAuthenticated || isPublicRoute) return;
-
-    // Iniciar timer al montar
-    resetTimer();
 
     // Eventos de actividad del usuario
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
 
+    const activityHandler = () => {
+      const now = Date.now();
+      if (now - lastActivityRef.current > 1000 && !isWarningOpenRef.current) {
+        lastActivityRef.current = now;
+        // Solo reiniciar si NO estamos en warning
+        if (!isWarningOpenRef.current) {
+          resetTimer();
+        }
+      }
+    };
+
     events.forEach(event => {
-      document.addEventListener(event, handleUserActivity, { passive: true });
+      document.addEventListener(event, activityHandler, { passive: true });
     });
 
     console.log('[SessionManager] Monitor de inactividad activado');
 
     return () => {
       events.forEach(event => {
-        document.removeEventListener(event, handleUserActivity);
+        document.removeEventListener(event, activityHandler);
       });
-      if (mainTimerRef.current) clearTimeout(mainTimerRef.current);
-      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
-      if (countdownRef.current) clearInterval(countdownRef.current);
+      // Solo limpiar timers si NO estamos en warning (desmontaje real)
+      if (!isWarningOpenRef.current) {
+        if (mainTimerRef.current) clearTimeout(mainTimerRef.current);
+        if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+        if (countdownRef.current) clearInterval(countdownRef.current);
+      }
     };
-  }, [isAuthenticated, isPublicRoute, handleUserActivity, resetTimer]);
+  }, [isAuthenticated, isPublicRoute, resetTimer]);
+
+  // Iniciar timer cuando cambie autenticacion
+  useEffect(() => {
+    if (isAuthenticated && !isPublicRoute && !isWarningOpenRef.current) {
+      resetTimer();
+    }
+  }, [isAuthenticated, isPublicRoute, resetTimer]);
 
   // Cargar configuracion inicial
   useEffect(() => {
