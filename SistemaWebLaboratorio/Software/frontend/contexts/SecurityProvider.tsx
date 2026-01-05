@@ -329,6 +329,32 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
         inspectionAttempts,
       }}
     >
+      {/* Overlay de blur cuando DevTools está detectado */}
+      {devToolsDetected && securityEnabled && (
+        <div
+          className="fixed inset-0 z-[100] backdrop-blur-lg bg-black/70 flex items-center justify-center transition-all duration-300"
+          style={{ backdropFilter: 'blur(20px)' }}
+        >
+          <div className="bg-white/90 rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl border-2 border-red-500">
+            <AlertOctagon className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-red-600 mb-2">
+              Herramientas de desarrollo detectadas
+            </h2>
+            <p className="text-gray-700 mb-4">
+              Por seguridad, el contenido ha sido ocultado mientras las herramientas de desarrollo estén abiertas.
+            </p>
+            <p className="text-sm text-gray-500">
+              Cierra las DevTools (F12) para continuar usando la aplicación.
+            </p>
+            <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">
+              <p className="text-xs text-red-600 font-medium">
+                🔒 Control ISO 8.28 / NIST SA-15 - Protección de código
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {children}
 
       {/* Modal de advertencia de seguridad */}
@@ -355,8 +381,8 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Indicador de DevTools detectado */}
-      {devToolsDetected && (
+      {/* Indicador de DevTools detectado (solo si security está deshabilitado) */}
+      {devToolsDetected && !securityEnabled && (
         <div className="fixed bottom-4 right-4 z-50 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
           <AlertOctagon className="h-4 w-4" />
           <span className="text-sm font-medium">DevTools detectado</span>
