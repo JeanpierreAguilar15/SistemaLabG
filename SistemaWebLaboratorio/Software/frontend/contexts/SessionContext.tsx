@@ -77,9 +77,10 @@ export function SessionProvider({ children }: SessionProviderProps) {
   const lastActivityRef = useRef<number>(Date.now());
 
   // Rutas publicas que no requieren monitoreo de sesion
-  const publicRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password', '/'];
+  const publicRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password'];
 
-  const isPublicRoute = publicRoutes.some(route => pathname?.startsWith(route));
+  // Verificar si es ruta publica (exacta para '/' o startsWith para otras)
+  const isPublicRoute = pathname === '/' || publicRoutes.some(route => pathname?.startsWith(route));
 
   // Funcion para cerrar sesion
   const logout = useCallback(() => {
@@ -271,8 +272,8 @@ export function useSessionGuard() {
   const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
-    const publicRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password', '/'];
-    const isPublicRoute = publicRoutes.some(route => pathname?.startsWith(route));
+    const publicRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password'];
+    const isPublicRoute = pathname === '/' || publicRoutes.some(route => pathname?.startsWith(route));
 
     if (!isAuthenticated && !isPublicRoute) {
       router.push('/auth/login');

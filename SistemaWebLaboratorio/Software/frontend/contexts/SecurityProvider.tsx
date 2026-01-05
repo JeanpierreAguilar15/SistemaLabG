@@ -172,43 +172,49 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
     if (!securityEnabled) return;
 
     // F12
-    if (e.key === 'F12') {
+    if (e.key === 'F12' || e.code === 'F12') {
       e.preventDefault();
+      e.stopPropagation();
       logInspectionAttempt('Tecla F12 bloqueada');
       return false;
     }
 
-    // Ctrl+Shift+I (Inspeccionar)
-    if (e.ctrlKey && e.shiftKey && e.key === 'I') {
+    // Ctrl+Shift+I (Inspeccionar) - usar e.code para mayor fiabilidad
+    if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.code === 'KeyI')) {
       e.preventDefault();
+      e.stopPropagation();
       logInspectionAttempt('Ctrl+Shift+I bloqueado');
       return false;
     }
 
     // Ctrl+Shift+J (Consola)
-    if (e.ctrlKey && e.shiftKey && e.key === 'J') {
+    if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j' || e.code === 'KeyJ')) {
       e.preventDefault();
+      e.stopPropagation();
       logInspectionAttempt('Ctrl+Shift+J bloqueado');
       return false;
     }
 
     // Ctrl+Shift+C (Selector de elementos)
-    if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+    if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c' || e.code === 'KeyC')) {
       e.preventDefault();
+      e.stopPropagation();
       logInspectionAttempt('Ctrl+Shift+C bloqueado');
       return false;
     }
 
     // Ctrl+U (Ver codigo fuente)
-    if (e.ctrlKey && e.key === 'u') {
+    if (e.ctrlKey && (e.key === 'u' || e.key === 'U' || e.code === 'KeyU')) {
       e.preventDefault();
+      e.stopPropagation();
       logInspectionAttempt('Ctrl+U bloqueado');
       return false;
     }
 
     // Ctrl+S (Guardar pagina)
-    if (e.ctrlKey && e.key === 's') {
+    if (e.ctrlKey && (e.key === 's' || e.key === 'S' || e.code === 'KeyS')) {
       e.preventDefault();
+      e.stopPropagation();
       logInspectionAttempt('Ctrl+S bloqueado');
       return false;
     }
@@ -238,9 +244,9 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
   useEffect(() => {
     if (!securityEnabled || typeof window === 'undefined') return;
 
-    // Event listeners
-    document.addEventListener('contextmenu', handleContextMenu);
-    document.addEventListener('keydown', handleKeyDown);
+    // Event listeners con capture: true para interceptar antes que el navegador
+    document.addEventListener('contextmenu', handleContextMenu, { capture: true });
+    document.addEventListener('keydown', handleKeyDown, { capture: true });
 
     // Deteccion periodica de DevTools
     devToolsCheckIntervalRef.current = setInterval(() => {
@@ -258,8 +264,8 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
     console.log('[SecurityProvider] - Ctrl+U (ver fuente): BLOQUEADO');
 
     return () => {
-      document.removeEventListener('contextmenu', handleContextMenu);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('contextmenu', handleContextMenu, { capture: true });
+      document.removeEventListener('keydown', handleKeyDown, { capture: true });
       window.removeEventListener('resize', detectDevToolsBySize);
 
       if (devToolsCheckIntervalRef.current) {
@@ -341,16 +347,11 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
               Herramientas de desarrollo detectadas
             </h2>
             <p className="text-gray-700 mb-4">
-              Por seguridad, el contenido ha sido ocultado mientras las herramientas de desarrollo estén abiertas.
+              Por seguridad, el contenido ha sido ocultado mientras las herramientas de desarrollo esten abiertas.
             </p>
             <p className="text-sm text-gray-500">
-              Cierra las DevTools (F12) para continuar usando la aplicación.
+              Cierra las DevTools para continuar usando la aplicacion.
             </p>
-            <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">
-              <p className="text-xs text-red-600 font-medium">
-                🔒 Control ISO 8.28 / NIST SA-15 - Protección de código
-              </p>
-            </div>
           </div>
         </div>
       )}
