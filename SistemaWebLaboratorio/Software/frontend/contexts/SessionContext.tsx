@@ -240,9 +240,8 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
           <div className="flex flex-col items-center py-6">
             <div className="flex items-center gap-2 text-4xl font-bold text-amber-600">
-              <Clock className="h-8 w-8" />
-              <span>{Math.max(0, Math.floor(remainingTime))}</span>
-              <span className="text-lg font-normal">segundos</span>
+              <Clock className="h-8 w-8 animate-pulse" />
+              <span>La sesion expira en breve</span>
             </div>
             <p className="text-sm text-muted-foreground mt-2">
               Haz clic en "Seguir conectado" para continuar trabajando
