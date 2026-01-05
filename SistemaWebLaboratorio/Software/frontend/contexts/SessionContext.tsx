@@ -227,32 +227,32 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
       {/* Modal de advertencia de sesion */}
       <Dialog open={isWarningOpen} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md z-50 border-2 border-amber-500 shadow-2xl" onPointerDownOutside={(e) => e.preventDefault()}>
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-600">
-              <AlertTriangle className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
               Sesion a punto de expirar
             </DialogTitle>
-            <DialogDescription className="pt-2">
+            <DialogDescription>
               Tu sesion se cerrara automaticamente por inactividad para proteger tus datos.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col items-center py-6">
-            <div className="flex items-center gap-2 text-4xl font-bold text-amber-600">
-              <Clock className="h-8 w-8 animate-pulse" />
-              <span>La sesion expira en breve</span>
+          <div className="py-4 space-y-3">
+            <div className="flex items-center justify-center gap-3 py-4 bg-amber-50 rounded-lg border border-amber-200">
+              <Clock className="h-6 w-6 text-amber-600 animate-pulse" />
+              <span className="text-lg font-medium text-amber-700">La sesion expira en breve</span>
             </div>
-            <p className="text-sm text-muted-foreground mt-2">
+            <p className="text-sm text-muted-foreground text-center">
               Haz clic en "Seguir conectado" para continuar trabajando
             </p>
           </div>
 
-          <DialogFooter className="flex gap-2 sm:gap-0">
+          <DialogFooter>
             <Button variant="outline" onClick={logout}>
               Cerrar sesion
             </Button>
-            <Button onClick={extendSession} className="bg-amber-600 hover:bg-amber-700">
+            <Button onClick={extendSession}>
               Seguir conectado
             </Button>
           </DialogFooter>
