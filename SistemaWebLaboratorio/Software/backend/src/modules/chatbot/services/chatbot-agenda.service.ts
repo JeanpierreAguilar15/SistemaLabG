@@ -529,7 +529,7 @@ export class ChatbotAgendaService {
             };
         }
 
-        const listaCitas = citas.map((cita, idx) => {
+        const listaCitas = citas.map((cita) => {
             const fecha = new Date(cita.slot.fecha).toLocaleDateString('es-EC', {
                 weekday: 'short',
                 day: '2-digit',
@@ -540,14 +540,19 @@ export class ChatbotAgendaService {
             const horas = horaDate.getUTCHours().toString().padStart(2, '0');
             const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
             const hora = `${horas}:${minutos}`;
-            return `${idx + 1}. #${cita.codigo_cita} - ${cita.slot.servicio.nombre}\n   Fecha: ${fecha}, Hora: ${hora}\n   Sede: ${cita.slot.sede?.nombre || 'Sede'} | Estado: ${cita.estado}`;
+            const cancelable = (cita.estado === 'AGENDADA' || cita.estado === 'PENDIENTE') ? ' [Cancelable]' : '';
+            return `Cita #${cita.codigo_cita} - ${cita.slot.servicio.nombre}\nFecha: ${fecha}, Hora: ${hora}\nSede: ${cita.slot.sede?.nombre || 'Sede'} | Estado: ${cita.estado}${cancelable}`;
         }).join('\n\n');
 
         // Solo mostrar opcion de cancelar si hay citas que se pueden cancelar (AGENDADA o PENDIENTE)
         const citasCancelables = citas.filter(c => c.estado === 'AGENDADA' || c.estado === 'PENDIENTE');
-        const mensajeCancelar = citasCancelables.length > 0
-            ? '\n\nPara cancelar una cita, escribe "cancelar cita #numero"'
-            : '\n\nNota: Las citas confirmadas no pueden ser canceladas desde el chat.';
+        let mensajeCancelar = '';
+        if (citasCancelables.length > 0) {
+            const codigosCancelables = citasCancelables.map(c => `#${c.codigo_cita}`).join(', ');
+            mensajeCancelar = `\n\nPuedes cancelar: ${codigosCancelables}\nEscribe: "cancelar cita" seguido del numero (ej: "cancelar cita ${citasCancelables[0].codigo_cita}")`;
+        } else {
+            mensajeCancelar = '\n\nNota: Las citas confirmadas no pueden ser canceladas desde el chat.';
+        }
 
         return {
             mensaje: `Tus proximas citas:\n\n${listaCitas}${mensajeCancelar}`,
