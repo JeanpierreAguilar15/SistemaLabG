@@ -129,7 +129,19 @@ export class ChatbotService implements OnModuleInit {
             ],
             handler: 'handleOperadorIntent',
         },
+        {
+            intent: 'ver_categorias',
+            patterns: [
+                /^categor[ií]as?$/i,
+                /ver categor[ií]as/i,
+                /otras categor[ií]as/i,
+            ],
+            handler: 'handleCategoriasIntent',
+        },
     ];
+
+    // Estado del flujo de precios para cada sesión
+    private preciosFlowStates = new Map<string, { step: 'CATEGORIAS' | 'EXAMENES'; lastCategory?: string }>();
 
     // Estado de flujo de agendamiento para cada sesión
     private agendaFlowStates = new Map<string, boolean>();
@@ -285,6 +297,23 @@ export class ChatbotService implements OnModuleInit {
             };
         }
 
+        // Verificar si estamos en flujo de precios (selección de categoría)
+        const preciosState = this.preciosFlowStates.get(sessionId);
+        if (preciosState && preciosState.step === 'CATEGORIAS') {
+            // El usuario está seleccionando una categoría
+            const responseText = await this.handlePreciosPorCategoria(text);
+            this.preciosFlowStates.delete(sessionId); // Limpiar estado
+            await this.logMessage(sessionId, text, 'USER', userId);
+            await this.logMessage(sessionId, responseText, 'BOT', null, 'precios_categoria', 0.9);
+
+            return {
+                text: responseText,
+                source: 'local',
+                intent: 'precios_categoria',
+                confidence: 0.9,
+            };
+        }
+
         // Detectar intent usando patrones locales
         let detectedIntent: string | null = null;
         let extractedEntity: string | null = null;
@@ -319,7 +348,10 @@ export class ChatbotService implements OnModuleInit {
                 responseText = await this.handleSaludoIntent();
                 break;
             case 'consultar_precios':
+            case 'ver_categorias':
                 responseText = await this.handlePreciosIntent(extractedEntity);
+                // Guardar estado para que el siguiente mensaje sea la selección de categoría
+                this.preciosFlowStates.set(sessionId, { step: 'CATEGORIAS' });
                 break;
             case 'consultar_sedes':
                 responseText = (await this.consultarSedes()).mensaje;
@@ -443,7 +475,7 @@ export class ChatbotService implements OnModuleInit {
     }
 
     /**
-     * Maneja consultas de precios
+     * Maneja consultas de precios - Muestra categorías primero
      */
     private async handlePreciosIntent(examenNombre: string | null): Promise<string> {
         if (examenNombre) {
@@ -451,11 +483,71 @@ export class ChatbotService implements OnModuleInit {
             return precioInfo.mensaje;
         }
 
-        // Listar exámenes populares con precios
-        const examenes = await this.prisma.examen.findMany({
+        // Obtener categorías con conteo de exámenes
+        const categorias = await this.prisma.categoriaExamen.findMany({
             where: { activo: true },
             select: {
+                codigo_categoria: true,
                 nombre: true,
+                _count: {
+                    select: { examenes: { where: { activo: true } } }
+                }
+            },
+            orderBy: { nombre: 'asc' },
+        });
+
+        if (categorias.length === 0) {
+            return 'Por el momento no tengo información de precios disponible. Por favor llámanos para más detalles.';
+        }
+
+        const listaCategorias = categorias
+            .filter(c => c._count.examenes > 0)
+            .map((c, idx) => `${idx + 1}. ${c.nombre} (${c._count.examenes} examenes)`)
+            .join('\n');
+
+        return `Para ver los precios, selecciona una categoria:\n\n${listaCategorias}\n\nEscribe el numero o nombre de la categoria.\nEj: "1" o "Hematologia"`;
+    }
+
+    /**
+     * Maneja consultas de precios por categoría
+     */
+    private async handlePreciosPorCategoria(categoriaInput: string): Promise<string> {
+        const categorias = await this.prisma.categoriaExamen.findMany({
+            where: { activo: true },
+            orderBy: { nombre: 'asc' },
+        });
+
+        let categoriaSeleccionada: typeof categorias[0] | undefined;
+
+        // Intentar por número
+        const numero = parseInt(categoriaInput);
+        const categoriasConExamenes = categorias.filter(async c => {
+            const count = await this.prisma.examen.count({ where: { codigo_categoria: c.codigo_categoria, activo: true } });
+            return count > 0;
+        });
+
+        if (!isNaN(numero) && numero > 0 && numero <= categorias.length) {
+            categoriaSeleccionada = categorias[numero - 1];
+        } else {
+            // Intentar por nombre
+            categoriaSeleccionada = categorias.find(c =>
+                c.nombre.toLowerCase().includes(categoriaInput.toLowerCase())
+            );
+        }
+
+        if (!categoriaSeleccionada) {
+            return 'No encontre esa categoria. Por favor, escribe el numero o nombre exacto de la categoria.';
+        }
+
+        // Obtener exámenes de la categoría con precios
+        const examenes = await this.prisma.examen.findMany({
+            where: {
+                codigo_categoria: categoriaSeleccionada.codigo_categoria,
+                activo: true,
+            },
+            select: {
+                nombre: true,
+                descripcion: true,
                 precios: {
                     where: { activo: true },
                     orderBy: { fecha_inicio: 'desc' },
@@ -463,20 +555,19 @@ export class ChatbotService implements OnModuleInit {
                     select: { precio: true }
                 }
             },
-            take: 5,
             orderBy: { nombre: 'asc' },
         });
 
         if (examenes.length === 0) {
-            return 'Por el momento no tengo información de precios disponible. Por favor llámanos para más detalles.';
+            return `No hay examenes disponibles en la categoria ${categoriaSeleccionada.nombre}.`;
         }
 
-        const lista = examenes.map(e => {
+        const listaExamenes = examenes.map(e => {
             const precio = e.precios[0]?.precio;
             return `- ${e.nombre}: ${precio ? '$' + precio : 'Consultar'}`;
         }).join('\n');
 
-        return `Estos son algunos de nuestros examenes:\n\n${lista}\n\nTe gustaria saber el precio de algun examen especifico?`;
+        return `Examenes de ${categoriaSeleccionada.nombre}:\n\n${listaExamenes}\n\nPuedes preguntar por un examen especifico para mas detalles, o escribir "categorias" para ver otras opciones.`;
     }
 
     /**

@@ -39,11 +39,13 @@ export class LabResultsInterpreterService {
   private readonly apiKey: string;
   private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-  // Modelos en orden de preferencia
+  // Modelos en orden de preferencia (más modelos para fallback cuando se agotan cuotas)
   private readonly models = [
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
     'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-8b',
+    'gemini-1.5-pro',
   ];
 
   private readonly maxRetries = 2;
@@ -287,11 +289,30 @@ IMPORTANTE EN EL RESUMEN:
       let cleanText = responseText.trim();
 
       // Remover bloques de código markdown si existen
-      if (cleanText.startsWith('```json')) {
-        cleanText = cleanText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-      } else if (cleanText.startsWith('```')) {
-        cleanText = cleanText.replace(/^```\n?/, '').replace(/\n?```$/, '');
+      if (cleanText.includes('```json')) {
+        const match = cleanText.match(/```json\s*([\s\S]*?)\s*```/);
+        if (match) {
+          cleanText = match[1];
+        }
+      } else if (cleanText.includes('```')) {
+        const match = cleanText.match(/```\s*([\s\S]*?)\s*```/);
+        if (match) {
+          cleanText = match[1];
+        }
       }
+
+      // Intentar encontrar el objeto JSON completo si hay texto extra
+      const jsonStart = cleanText.indexOf('{');
+      const jsonEnd = cleanText.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
+      }
+
+      // Limpiar caracteres problemáticos que a veces agrega Gemini
+      cleanText = cleanText
+        .replace(/[\x00-\x1F\x7F]/g, ' ') // Caracteres de control
+        .replace(/,\s*}/g, '}') // Comas trailing antes de }
+        .replace(/,\s*]/g, ']'); // Comas trailing antes de ]
 
       const parsed = JSON.parse(cleanText);
 
@@ -306,10 +327,15 @@ IMPORTANTE EN EL RESUMEN:
       };
     } catch (error) {
       this.logger.warn(`Error parseando respuesta JSON: ${error.message}`);
+
+      // Intentar extraer información básica del texto si el JSON falla
+      const resumenMatch = responseText.match(/resumen[_\s]?general["']?\s*:\s*["']([^"']+)["']/i);
+      const resumen = resumenMatch ? resumenMatch[1] : 'No se pudo procesar la respuesta de manera estructurada. Por favor, intenta de nuevo.';
+
       return {
         resultados: [],
-        resumen_general: 'Error al procesar la respuesta.',
-        recomendaciones: [],
+        resumen_general: resumen,
+        recomendaciones: ['Consulta con tu medico para una interpretacion profesional de tus resultados.'],
         advertencias: [],
       };
     }
