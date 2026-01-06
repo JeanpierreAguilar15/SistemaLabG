@@ -263,12 +263,11 @@ export class ChatbotAgendaService {
         this.conversationStates.set(sessionId, state);
 
         const listaHorarios = slots.slice(0, 10).map((slot, idx) => {
-            const horaInicio = new Date(slot.hora_inicio).toLocaleTimeString('es-EC', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-                timeZone: 'America/Guayaquil'
-            });
+            // Extraer hora sin conversion de timezone (la BD guarda hora local)
+            const horaDate = new Date(slot.hora_inicio);
+            const horas = horaDate.getUTCHours().toString().padStart(2, '0');
+            const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+            const horaInicio = `${horas}:${minutos}`;
             return `${idx + 1}. ${horaInicio} - ${slot.sede?.nombre || 'Sede Principal'} (${slot.cupos_disponibles} cupos)`;
         }).join('\n');
 
@@ -330,12 +329,11 @@ export class ChatbotAgendaService {
         }
 
         const slotSeleccionado = slots[numero - 1];
-        const horaFormateada = new Date(slotSeleccionado.hora_inicio).toLocaleTimeString('es-EC', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-            timeZone: 'America/Guayaquil'
-        });
+        // Extraer hora sin conversion de timezone (la BD guarda hora local)
+        const horaDate = new Date(slotSeleccionado.hora_inicio);
+        const horasStr = horaDate.getUTCHours().toString().padStart(2, '0');
+        const minutosStr = horaDate.getUTCMinutes().toString().padStart(2, '0');
+        const horaFormateada = `${horasStr}:${minutosStr}`;
 
         // Actualizar estado
         state.step = 'CONFIRMAR';
@@ -537,19 +535,22 @@ export class ChatbotAgendaService {
                 day: '2-digit',
                 month: '2-digit'
             });
-            // Extraer hora directamente del campo hora_inicio (formato HH:MM:SS en la BD)
+            // Extraer hora directamente sin conversion de timezone (la BD guarda hora local)
             const horaDate = new Date(cita.slot.hora_inicio);
-            const hora = horaDate.toLocaleTimeString('es-EC', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-                timeZone: 'America/Guayaquil'
-            });
+            const horas = horaDate.getUTCHours().toString().padStart(2, '0');
+            const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+            const hora = `${horas}:${minutos}`;
             return `${idx + 1}. #${cita.codigo_cita} - ${cita.slot.servicio.nombre}\n   Fecha: ${fecha}, Hora: ${hora}\n   Sede: ${cita.slot.sede?.nombre || 'Sede'} | Estado: ${cita.estado}`;
         }).join('\n\n');
 
+        // Solo mostrar opcion de cancelar si hay citas que se pueden cancelar (AGENDADA o PENDIENTE)
+        const citasCancelables = citas.filter(c => c.estado === 'AGENDADA' || c.estado === 'PENDIENTE');
+        const mensajeCancelar = citasCancelables.length > 0
+            ? '\n\nPara cancelar una cita, escribe "cancelar cita #numero"'
+            : '\n\nNota: Las citas confirmadas no pueden ser canceladas desde el chat.';
+
         return {
-            mensaje: `Tus proximas citas:\n\n${listaCitas}\n\nPara cancelar una cita, escribe "cancelar cita #numero"`,
+            mensaje: `Tus proximas citas:\n\n${listaCitas}${mensajeCancelar}`,
             citas,
             accion: 'LISTAR_CITAS',
         };
@@ -592,6 +593,13 @@ export class ChatbotAgendaService {
             return {
                 mensaje: 'Esta cita ya fue cancelada anteriormente.',
                 accion: 'YA_CANCELADA',
+            };
+        }
+
+        if (cita.estado === 'CONFIRMADA') {
+            return {
+                mensaje: 'Las citas confirmadas no pueden ser canceladas desde el chat. Por favor, comunicate directamente con el laboratorio.',
+                accion: 'CITA_CONFIRMADA',
             };
         }
 
