@@ -439,17 +439,7 @@ export class ChatbotService implements OnModuleInit {
         else if (hora < 18) saludo = 'Buenas tardes';
         else saludo = 'Buenas noches';
 
-        return `${saludo}! Soy el asistente virtual de Laboratorio Clínico Franz. Puedo ayudarte con:\n\n` +
-            `📅 **Gestión de citas:**\n` +
-            `- Agendar una cita\n` +
-            `- Ver mis citas\n` +
-            `- Cancelar una cita\n\n` +
-            `📋 **Información:**\n` +
-            `- Precios de exámenes\n` +
-            `- Ubicación de sedes\n` +
-            `- Horarios de atención\n` +
-            `- Preparación para exámenes\n\n` +
-            `¿En qué puedo ayudarte?`;
+        return `${saludo}! Soy el asistente virtual de Laboratorio Clinico Franz. Puedo ayudarte con:\n\nGestion de citas:\n- Agendar una cita\n- Ver mis citas\n- Cancelar una cita\n\nInformacion:\n- Precios de examenes\n- Ubicacion de sedes\n- Horarios de atencion\n- Preparacion para examenes\n\nEn que puedo ayudarte?`;
     }
 
     /**
@@ -483,10 +473,10 @@ export class ChatbotService implements OnModuleInit {
 
         const lista = examenes.map(e => {
             const precio = e.precios[0]?.precio;
-            return `- ${e.nombre}: ${precio ? 'S/. ' + precio : 'Consultar'}`;
+            return `- ${e.nombre}: ${precio ? '$' + precio : 'Consultar'}`;
         }).join('\n');
 
-        return `Estos son algunos de nuestros exámenes:\n\n${lista}\n\n¿Te gustaría saber el precio de algún examen específico?`;
+        return `Estos son algunos de nuestros examenes:\n\n${lista}\n\nTe gustaria saber el precio de algun examen especifico?`;
     }
 
     /**
@@ -685,9 +675,9 @@ export class ChatbotService implements OnModuleInit {
             };
         }
 
-        const categoriaNombre = examen.categoria?.nombre || 'análisis';
+        const categoriaNombre = examen.categoria?.nombre || 'analisis';
         const precioActual = examen.precios[0]?.precio;
-        const precio = precioActual ? `S/. ${precioActual}` : 'consultar';
+        const precio = precioActual ? `$${precioActual}` : 'consultar';
         const mensaje = `El examen de ${examen.nombre} cuesta ${precio}. ${examen.descripcion || 'Estudio de ' + categoriaNombre}.`.trim();
 
         return {

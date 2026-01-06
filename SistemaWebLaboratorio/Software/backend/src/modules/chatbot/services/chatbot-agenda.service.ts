@@ -68,9 +68,7 @@ export class ChatbotAgendaService {
         ).join('\n');
 
         return {
-            mensaje: `¡Perfecto! Vamos a agendar tu cita. 📅\n\n` +
-                `Por favor, selecciona el servicio que necesitas:\n\n${listaServicios}\n\n` +
-                `Escribe el número del servicio o su nombre.`,
+            mensaje: `Vamos a agendar tu cita.\n\nPor favor, selecciona el servicio que necesitas:\n\n${listaServicios}\n\nEscribe el numero del servicio o su nombre.`,
             opciones: servicios.map(s => ({ id: s.codigo_servicio, nombre: s.nombre })),
             accion: 'SELECCIONAR_SERVICIO',
         };
@@ -144,9 +142,7 @@ export class ChatbotAgendaService {
             state.step = 'INICIAL';
             this.conversationStates.set(sessionId, state);
             return {
-                mensaje: `Lo sentimos, no hay disponibilidad para ${servicioSeleccionado.nombre} en los próximos 14 días. 😔\n\n` +
-                    `Te recomendamos:\n- Llamar a nuestras sedes para consultar disponibilidad\n- Intentar con otro servicio\n\n` +
-                    `¿Deseas agendar otro servicio?`,
+                mensaje: `Lo sentimos, no hay disponibilidad para ${servicioSeleccionado.nombre} en los proximos 14 dias.\n\nTe recomendamos:\n- Llamar a nuestras sedes para consultar disponibilidad\n- Intentar con otro servicio\n\nDeseas agendar otro servicio?`,
                 accion: 'NO_DISPONIBILIDAD',
             };
         }
@@ -166,9 +162,7 @@ export class ChatbotAgendaService {
         }).join('\n');
 
         return {
-            mensaje: `Has seleccionado: **${servicioSeleccionado.nombre}** ✅\n\n` +
-                `Fechas disponibles:\n\n${listaFechas}\n\n` +
-                `Escribe el número de la fecha o el día (ej: "1" o "lunes")`,
+            mensaje: `Has seleccionado: ${servicioSeleccionado.nombre}\n\nFechas disponibles:\n\n${listaFechas}\n\nEscribe el numero de la fecha o el dia (ej: "1" o "lunes")`,
             opciones: slotsDisponibles.slice(0, 7).map(s => ({
                 fecha: new Date(s.fecha).toISOString().split('T')[0],
                 disponibles: s._count.codigo_slot,
@@ -269,20 +263,23 @@ export class ChatbotAgendaService {
         this.conversationStates.set(sessionId, state);
 
         const listaHorarios = slots.slice(0, 10).map((slot, idx) => {
-            const horaInicio = new Date(slot.hora_inicio).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+            const horaInicio = new Date(slot.hora_inicio).toLocaleTimeString('es-EC', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZone: 'America/Guayaquil'
+            });
             return `${idx + 1}. ${horaInicio} - ${slot.sede?.nombre || 'Sede Principal'} (${slot.cupos_disponibles} cupos)`;
         }).join('\n');
 
-        const fechaFormateada = new Date(fechaSeleccionada).toLocaleDateString('es', {
+        const fechaFormateada = new Date(fechaSeleccionada).toLocaleDateString('es-EC', {
             weekday: 'long',
             day: 'numeric',
             month: 'long'
         });
 
         return {
-            mensaje: `Fecha seleccionada: **${fechaFormateada}** ✅\n\n` +
-                `Horarios disponibles:\n\n${listaHorarios}\n\n` +
-                `Escribe el número del horario que prefieras.`,
+            mensaje: `Fecha seleccionada: ${fechaFormateada}\n\nHorarios disponibles:\n\n${listaHorarios}\n\nEscribe el numero del horario que prefieras.`,
             opciones: slots.slice(0, 10).map(s => ({
                 id: s.codigo_slot,
                 hora: new Date(s.hora_inicio).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }),
@@ -333,9 +330,11 @@ export class ChatbotAgendaService {
         }
 
         const slotSeleccionado = slots[numero - 1];
-        const horaFormateada = new Date(slotSeleccionado.hora_inicio).toLocaleTimeString('es', {
+        const horaFormateada = new Date(slotSeleccionado.hora_inicio).toLocaleTimeString('es-EC', {
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            hour12: false,
+            timeZone: 'America/Guayaquil'
         });
 
         // Actualizar estado
@@ -354,13 +353,7 @@ export class ChatbotAgendaService {
         // Verificar si el usuario está autenticado
         if (!userId) {
             return {
-                mensaje: `📋 **Resumen de tu cita:**\n\n` +
-                    `🔬 Servicio: ${state.servicioNombre}\n` +
-                    `📅 Fecha: ${fechaFormateada}\n` +
-                    `🕐 Hora: ${horaFormateada}\n` +
-                    `📍 Sede: ${state.sedeNombre}\n\n` +
-                    `⚠️ **Para confirmar tu cita, necesitas iniciar sesión.**\n\n` +
-                    `Por favor, inicia sesión en tu cuenta y vuelve a este chat para confirmar.`,
+                mensaje: `Resumen de tu cita:\n\nServicio: ${state.servicioNombre}\nFecha: ${fechaFormateada}\nHora: ${horaFormateada}\nSede: ${state.sedeNombre}\n\nPara confirmar tu cita, necesitas iniciar sesion.\n\nPor favor, inicia sesion en tu cuenta y vuelve a este chat para confirmar.`,
                 accion: 'REQUIERE_AUTENTICACION',
                 requiresAuth: true,
                 citaResumen: {
@@ -374,13 +367,7 @@ export class ChatbotAgendaService {
         }
 
         return {
-            mensaje: `📋 **Resumen de tu cita:**\n\n` +
-                `🔬 Servicio: ${state.servicioNombre}\n` +
-                `📅 Fecha: ${fechaFormateada}\n` +
-                `🕐 Hora: ${horaFormateada}\n` +
-                `📍 Sede: ${state.sedeNombre}\n\n` +
-                `¿Deseas confirmar esta cita?\n` +
-                `Responde **"Sí"** para confirmar o **"No"** para cancelar.`,
+            mensaje: `Resumen de tu cita:\n\nServicio: ${state.servicioNombre}\nFecha: ${fechaFormateada}\nHora: ${horaFormateada}\nSede: ${state.sedeNombre}\n\nDeseas confirmar esta cita?\nResponde "Si" para confirmar o "No" para cancelar.`,
             accion: 'CONFIRMAR',
             citaResumen: {
                 servicio: state.servicioNombre!,
@@ -426,8 +413,7 @@ export class ChatbotAgendaService {
             if (!slot || !slot.activo || slot.cupos_disponibles <= 0) {
                 this.conversationStates.delete(sessionId);
                 return {
-                    mensaje: '😔 Lo sentimos, este horario ya no está disponible. Alguien lo reservó mientras decidías.\n\n' +
-                        '¿Deseas buscar otro horario? Escribe "agendar cita" para comenzar de nuevo.',
+                    mensaje: 'Lo sentimos, este horario ya no esta disponible. Alguien lo reservo mientras decidias.\n\nDeseas buscar otro horario? Escribe "agendar cita" para comenzar de nuevo.',
                     accion: 'SLOT_NO_DISPONIBLE',
                 };
             }
@@ -488,15 +474,7 @@ export class ChatbotAgendaService {
             });
 
             return {
-                mensaje: `✅ **¡Tu cita ha sido agendada exitosamente!**\n\n` +
-                    `📋 **Código de cita:** #${cita.codigo_cita}\n` +
-                    `🔬 Servicio: ${slot.servicio.nombre}\n` +
-                    `📅 Fecha: ${fechaFormateada}\n` +
-                    `🕐 Hora: ${state.slotHora}\n` +
-                    `📍 Sede: ${slot.sede?.nombre || 'Sede Principal'}\n\n` +
-                    `📧 Recibirás un correo de confirmación.\n` +
-                    `💡 Recuerda llegar 15 minutos antes de tu cita.\n\n` +
-                    `¿Hay algo más en lo que pueda ayudarte?`,
+                mensaje: `Tu cita ha sido agendada exitosamente.\n\nCodigo de cita: #${cita.codigo_cita}\nServicio: ${slot.servicio.nombre}\nFecha: ${fechaFormateada}\nHora: ${state.slotHora}\nSede: ${slot.sede?.nombre || 'Sede Principal'}\n\nRecibiras un correo de confirmacion.\nRecuerda llegar 15 minutos antes de tu cita.\n\nHay algo mas en lo que pueda ayudarte?`,
                 accion: 'CITA_CREADA',
                 cita,
             };
@@ -554,21 +532,24 @@ export class ChatbotAgendaService {
         }
 
         const listaCitas = citas.map((cita, idx) => {
-            const fecha = new Date(cita.slot.fecha).toLocaleDateString('es', {
+            const fecha = new Date(cita.slot.fecha).toLocaleDateString('es-EC', {
                 weekday: 'short',
                 day: '2-digit',
                 month: '2-digit'
             });
-            const hora = new Date(cita.slot.hora_inicio).toLocaleTimeString('es', {
+            // Extraer hora directamente del campo hora_inicio (formato HH:MM:SS en la BD)
+            const horaDate = new Date(cita.slot.hora_inicio);
+            const hora = horaDate.toLocaleTimeString('es-EC', {
                 hour: '2-digit',
-                minute: '2-digit'
+                minute: '2-digit',
+                hour12: false,
+                timeZone: 'America/Guayaquil'
             });
-            return `${idx + 1}. #${cita.codigo_cita} - ${cita.slot.servicio.nombre}\n   📅 ${fecha} 🕐 ${hora}\n   📍 ${cita.slot.sede?.nombre || 'Sede'} | Estado: ${cita.estado}`;
+            return `${idx + 1}. #${cita.codigo_cita} - ${cita.slot.servicio.nombre}\n   Fecha: ${fecha}, Hora: ${hora}\n   Sede: ${cita.slot.sede?.nombre || 'Sede'} | Estado: ${cita.estado}`;
         }).join('\n\n');
 
         return {
-            mensaje: `📋 **Tus próximas citas:**\n\n${listaCitas}\n\n` +
-                `Para cancelar una cita, escribe "cancelar cita #número"`,
+            mensaje: `Tus proximas citas:\n\n${listaCitas}\n\nPara cancelar una cita, escribe "cancelar cita #numero"`,
             citas,
             accion: 'LISTAR_CITAS',
         };
@@ -642,8 +623,7 @@ export class ChatbotAgendaService {
         this.logger.log(`Cita ${codigoCita} cancelada vía chatbot por usuario ${userId}`);
 
         return {
-            mensaje: `✅ Tu cita #${codigoCita} (${cita.slot.servicio.nombre}) ha sido cancelada exitosamente.\n\n` +
-                `¿Deseas agendar una nueva cita? Escribe "agendar cita".`,
+            mensaje: `Tu cita #${codigoCita} (${cita.slot.servicio.nombre}) ha sido cancelada exitosamente.\n\nDeseas agendar una nueva cita? Escribe "agendar cita".`,
             accion: 'CITA_CANCELADA',
         };
     }
@@ -711,16 +691,16 @@ export class ChatbotAgendaService {
             return acc;
         }, {} as Record<string, { fecha: string; horarios: number }[]>);
 
-        let mensaje = '📅 **Disponibilidad para los próximos 7 días:**\n\n';
+        let mensaje = 'Disponibilidad para los proximos 7 dias:\n\n';
         for (const [servicio, fechas] of Object.entries(disponibilidadPorServicio)) {
-            mensaje += `🔬 **${servicio}:**\n`;
+            mensaje += `${servicio}:\n`;
             fechas.slice(0, 3).forEach(f => {
-                mensaje += `   ${f.fecha} - ${f.horarios} horarios disponibles\n`;
+                mensaje += `  ${f.fecha} - ${f.horarios} horarios disponibles\n`;
             });
             mensaje += '\n';
         }
 
-        mensaje += '\n¿Deseas agendar una cita? Escribe "agendar cita".';
+        mensaje += 'Deseas agendar una cita? Escribe "agendar cita".';
 
         return {
             mensaje,

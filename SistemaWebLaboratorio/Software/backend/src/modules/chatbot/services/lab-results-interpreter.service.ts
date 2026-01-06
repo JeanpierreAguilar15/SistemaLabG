@@ -236,7 +236,7 @@ IMPORTANTE EN EL RESUMEN:
     }
 
     let response = 'INTERPRETACION DE TUS RESULTADOS DE LABORATORIO\n';
-    response += '═══════════════════════════════════════\n\n';
+    response += '----------------------------------------\n\n';
 
     // Resumen general
     response += `RESUMEN:\n${interpretation.resumen_general}\n\n`;
@@ -273,7 +273,7 @@ IMPORTANTE EN EL RESUMEN:
       });
     }
 
-    response += '\n───────────────────────────────────────\n';
+    response += '\n----------------------------------------\n';
     response += 'Nota: Esta interpretacion es educativa. Consulta siempre con tu medico para un diagnostico profesional.';
 
     return response;

@@ -668,17 +668,20 @@ export default function PublicChatWidget() {
                             )}
 
                             <div className="flex items-center gap-2">
-                                {/* Botón de adjuntar archivo */}
+                                {/* Botón de adjuntar archivo - más visible */}
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={isUploadingFile || isTyping || chatMode === 'WAITING'}
-                                    className="text-gray-500 hover:text-blue-600 p-2 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-1 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-blue-200"
                                     title="Subir PDF de resultados"
                                 >
                                     {isUploadingFile ? (
-                                        <Loader2 size={20} className="animate-spin" />
+                                        <Loader2 size={18} className="animate-spin" />
                                     ) : (
-                                        <Paperclip size={20} />
+                                        <>
+                                            <FileText size={18} />
+                                            <span className="text-xs font-medium hidden sm:inline">PDF</span>
+                                        </>
                                     )}
                                 </button>
                                 <input
