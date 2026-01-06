@@ -2,12 +2,24 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 /**
+ * Examen seleccionado para cotización
+ */
+interface ExamenSeleccionado {
+    codigo: number;
+    nombre: string;
+    precio: number;
+}
+
+/**
  * Estado de la conversación de agendamiento
  */
 interface AgendaConversationState {
-    step: 'INICIAL' | 'SELECCIONAR_SERVICIO' | 'SELECCIONAR_FECHA' | 'SELECCIONAR_TURNO' | 'SELECCIONAR_SLOT' | 'CONFIRMAR' | 'COMPLETADO';
+    step: 'INICIAL' | 'SELECCIONAR_SERVICIO' | 'SELECCIONAR_CATEGORIA' | 'SELECCIONAR_EXAMENES' | 'SELECCIONAR_FECHA' | 'SELECCIONAR_TURNO' | 'SELECCIONAR_SLOT' | 'CONFIRMAR' | 'COMPLETADO';
     servicioId?: number;
     servicioNombre?: string;
+    requiereExamenes?: boolean;
+    categoriaId?: number;
+    examenesSeleccionados?: ExamenSeleccionado[];
     fecha?: string;
     turno?: 'MANANA' | 'TARDE';
     slotId?: number;
@@ -109,9 +121,25 @@ export class ChatbotAgendaService {
 
         if (!servicioSeleccionado) {
             return {
-                mensaje: `No encontré ese servicio. Por favor, selecciona un número del 1 al ${servicios.length} o escribe el nombre del servicio.`,
+                mensaje: `No encontre ese servicio. Por favor, selecciona un numero del 1 al ${servicios.length} o escribe el nombre del servicio.`,
                 accion: 'SELECCIONAR_SERVICIO_RETRY',
             };
+        }
+
+        // Verificar si es Toma de Muestras (requiere selección de exámenes)
+        const esTomaMuestras = servicioSeleccionado.nombre.toLowerCase().includes('toma de muestra') ||
+                              servicioSeleccionado.nombre.toLowerCase().includes('laboratorio');
+
+        if (esTomaMuestras) {
+            // Guardar estado y pedir exámenes
+            state.step = 'SELECCIONAR_CATEGORIA';
+            state.servicioId = servicioSeleccionado.codigo_servicio;
+            state.servicioNombre = servicioSeleccionado.nombre;
+            state.requiereExamenes = true;
+            state.examenesSeleccionados = [];
+            this.conversationStates.set(sessionId, state);
+
+            return this.mostrarCategoriasExamenes(sessionId);
         }
 
         // Buscar fechas disponibles (próximos 14 días)
@@ -391,6 +419,328 @@ export class ChatbotAgendaService {
     }
 
     /**
+     * Muestra las categorías de exámenes disponibles
+     */
+    async mostrarCategoriasExamenes(sessionId: string): Promise<{
+        mensaje: string;
+        opciones?: any[];
+        accion: string;
+    }> {
+        const categorias = await this.prisma.categoriaExamen.findMany({
+            where: { activo: true },
+            select: {
+                codigo_categoria: true,
+                nombre: true,
+                _count: {
+                    select: { examenes: { where: { activo: true } } }
+                }
+            },
+            orderBy: { nombre: 'asc' },
+        });
+
+        const categoriasConExamenes = categorias.filter(c => c._count.examenes > 0);
+
+        if (categoriasConExamenes.length === 0) {
+            return {
+                mensaje: 'No hay categorias de examenes disponibles.',
+                accion: 'ERROR',
+            };
+        }
+
+        const state = this.conversationStates.get(sessionId);
+        const examenesYaSeleccionados = state?.examenesSeleccionados || [];
+        let mensajeExamenes = '';
+
+        if (examenesYaSeleccionados.length > 0) {
+            const total = examenesYaSeleccionados.reduce((sum, e) => sum + e.precio, 0);
+            mensajeExamenes = `\nExamenes seleccionados (${examenesYaSeleccionados.length}):\n${examenesYaSeleccionados.map(e => `  - ${e.nombre}: $${e.precio}`).join('\n')}\n  Total: $${total}\n`;
+        }
+
+        const listaCategorias = categoriasConExamenes
+            .map((c, idx) => `${idx + 1}. ${c.nombre} (${c._count.examenes} examenes)`)
+            .join('\n');
+
+        const opcionContinuar = examenesYaSeleccionados.length > 0
+            ? '\n\nEscribe "continuar" para pasar a seleccionar fecha y hora.'
+            : '';
+
+        return {
+            mensaje: `Para tu cita de Toma de Muestras, selecciona los examenes que necesitas.${mensajeExamenes}\n\nCategorias disponibles:\n\n${listaCategorias}${opcionContinuar}\n\nEscribe el numero de la categoria para ver los examenes.`,
+            opciones: categoriasConExamenes.map(c => ({ id: c.codigo_categoria, nombre: c.nombre })),
+            accion: 'SELECCIONAR_CATEGORIA',
+        };
+    }
+
+    /**
+     * Procesa la selección de categoría y muestra exámenes
+     */
+    async seleccionarCategoriaExamen(sessionId: string, input: string): Promise<{
+        mensaje: string;
+        opciones?: any[];
+        accion: string;
+    }> {
+        const state = this.conversationStates.get(sessionId);
+        if (!state || state.step !== 'SELECCIONAR_CATEGORIA') {
+            return { mensaje: 'Por favor, inicia el proceso de agendamiento escribiendo "agendar cita".', accion: 'REINICIAR' };
+        }
+
+        // Verificar si quiere continuar
+        if (/^(continuar|siguiente|listo|ok)$/i.test(input.trim())) {
+            if (!state.examenesSeleccionados || state.examenesSeleccionados.length === 0) {
+                return {
+                    mensaje: 'Debes seleccionar al menos un examen para continuar. Escribe el numero de una categoria.',
+                    accion: 'SELECCIONAR_CATEGORIA_RETRY',
+                };
+            }
+            // Pasar a selección de fecha
+            return this.continuarAFechas(sessionId);
+        }
+
+        const categorias = await this.prisma.categoriaExamen.findMany({
+            where: { activo: true },
+            orderBy: { nombre: 'asc' },
+        });
+
+        const categoriasConExamenes = categorias.filter(async c => {
+            const count = await this.prisma.examen.count({ where: { codigo_categoria: c.codigo_categoria, activo: true } });
+            return count > 0;
+        });
+
+        let categoriaSeleccionada: typeof categorias[0] | undefined;
+
+        const numero = parseInt(input);
+        if (!isNaN(numero) && numero > 0 && numero <= categorias.length) {
+            categoriaSeleccionada = categorias[numero - 1];
+        } else {
+            categoriaSeleccionada = categorias.find(c =>
+                c.nombre.toLowerCase().includes(input.toLowerCase())
+            );
+        }
+
+        if (!categoriaSeleccionada) {
+            return {
+                mensaje: 'No encontre esa categoria. Escribe el numero o nombre de la categoria.',
+                accion: 'SELECCIONAR_CATEGORIA_RETRY',
+            };
+        }
+
+        // Guardar categoría seleccionada y mostrar exámenes
+        state.categoriaId = categoriaSeleccionada.codigo_categoria;
+        state.step = 'SELECCIONAR_EXAMENES';
+        this.conversationStates.set(sessionId, state);
+
+        return this.mostrarExamenesCategoria(sessionId, categoriaSeleccionada.codigo_categoria);
+    }
+
+    /**
+     * Muestra los exámenes de una categoría
+     */
+    async mostrarExamenesCategoria(sessionId: string, categoriaId: number): Promise<{
+        mensaje: string;
+        opciones?: any[];
+        accion: string;
+    }> {
+        const categoria = await this.prisma.categoriaExamen.findUnique({
+            where: { codigo_categoria: categoriaId },
+        });
+
+        const examenes = await this.prisma.examen.findMany({
+            where: {
+                codigo_categoria: categoriaId,
+                activo: true,
+            },
+            select: {
+                codigo_examen: true,
+                nombre: true,
+                precios: {
+                    where: { activo: true },
+                    orderBy: { fecha_inicio: 'desc' },
+                    take: 1,
+                    select: { precio: true }
+                }
+            },
+            orderBy: { nombre: 'asc' },
+        });
+
+        const state = this.conversationStates.get(sessionId);
+        const examenesYaSeleccionados = state?.examenesSeleccionados || [];
+        const codigosSeleccionados = examenesYaSeleccionados.map(e => e.codigo);
+
+        const listaExamenes = examenes.map((e, idx) => {
+            const precio = e.precios[0]?.precio || 0;
+            const yaSeleccionado = codigosSeleccionados.includes(e.codigo_examen);
+            const marca = yaSeleccionado ? ' [X]' : '';
+            return `${idx + 1}. ${e.nombre}: $${precio}${marca}`;
+        }).join('\n');
+
+        let mensajeSeleccionados = '';
+        if (examenesYaSeleccionados.length > 0) {
+            const total = examenesYaSeleccionados.reduce((sum, e) => sum + e.precio, 0);
+            mensajeSeleccionados = `\n\nSeleccionados: ${examenesYaSeleccionados.length} examenes - Total: $${total}`;
+        }
+
+        return {
+            mensaje: `Examenes de ${categoria?.nombre}:\n\n${listaExamenes}${mensajeSeleccionados}\n\nEscribe el numero para agregar/quitar un examen.\nEscribe "volver" para ver otras categorias.\nEscribe "continuar" cuando termines de seleccionar.`,
+            opciones: examenes.map(e => ({
+                id: e.codigo_examen,
+                nombre: e.nombre,
+                precio: e.precios[0]?.precio || 0
+            })),
+            accion: 'SELECCIONAR_EXAMENES',
+        };
+    }
+
+    /**
+     * Procesa la selección de exámenes
+     */
+    async seleccionarExamenes(sessionId: string, input: string): Promise<{
+        mensaje: string;
+        opciones?: any[];
+        accion: string;
+    }> {
+        const state = this.conversationStates.get(sessionId);
+        if (!state || state.step !== 'SELECCIONAR_EXAMENES') {
+            return { mensaje: 'Por favor, inicia el proceso de agendamiento escribiendo "agendar cita".', accion: 'REINICIAR' };
+        }
+
+        // Verificar si quiere volver a categorías
+        if (/^(volver|atras|categorias?)$/i.test(input.trim())) {
+            state.step = 'SELECCIONAR_CATEGORIA';
+            this.conversationStates.set(sessionId, state);
+            return this.mostrarCategoriasExamenes(sessionId);
+        }
+
+        // Verificar si quiere continuar
+        if (/^(continuar|siguiente|listo|ok)$/i.test(input.trim())) {
+            if (!state.examenesSeleccionados || state.examenesSeleccionados.length === 0) {
+                return {
+                    mensaje: 'Debes seleccionar al menos un examen. Escribe el numero del examen que deseas.',
+                    accion: 'SELECCIONAR_EXAMENES_RETRY',
+                };
+            }
+            return this.continuarAFechas(sessionId);
+        }
+
+        // Seleccionar/deseleccionar examen
+        const examenes = await this.prisma.examen.findMany({
+            where: {
+                codigo_categoria: state.categoriaId,
+                activo: true,
+            },
+            select: {
+                codigo_examen: true,
+                nombre: true,
+                precios: {
+                    where: { activo: true },
+                    orderBy: { fecha_inicio: 'desc' },
+                    take: 1,
+                    select: { precio: true }
+                }
+            },
+            orderBy: { nombre: 'asc' },
+        });
+
+        const numero = parseInt(input);
+        if (isNaN(numero) || numero < 1 || numero > examenes.length) {
+            return {
+                mensaje: `Escribe un numero del 1 al ${examenes.length}, "volver" para otras categorias, o "continuar" para finalizar seleccion.`,
+                accion: 'SELECCIONAR_EXAMENES_RETRY',
+            };
+        }
+
+        const examenSeleccionado = examenes[numero - 1];
+        const precio = examenSeleccionado.precios[0]?.precio || 0;
+
+        if (!state.examenesSeleccionados) {
+            state.examenesSeleccionados = [];
+        }
+
+        // Toggle: si ya está, quitar; si no, agregar
+        const idx = state.examenesSeleccionados.findIndex(e => e.codigo === examenSeleccionado.codigo_examen);
+        let accionRealizada: string;
+
+        if (idx >= 0) {
+            state.examenesSeleccionados.splice(idx, 1);
+            accionRealizada = `Quitado: ${examenSeleccionado.nombre}`;
+        } else {
+            state.examenesSeleccionados.push({
+                codigo: examenSeleccionado.codigo_examen,
+                nombre: examenSeleccionado.nombre,
+                precio: precio,
+            });
+            accionRealizada = `Agregado: ${examenSeleccionado.nombre} - $${precio}`;
+        }
+
+        this.conversationStates.set(sessionId, state);
+
+        // Mostrar lista actualizada
+        const resultado = await this.mostrarExamenesCategoria(sessionId, state.categoriaId!);
+        resultado.mensaje = `${accionRealizada}\n\n${resultado.mensaje}`;
+        return resultado;
+    }
+
+    /**
+     * Continúa el flujo a selección de fechas después de elegir exámenes
+     */
+    async continuarAFechas(sessionId: string): Promise<{
+        mensaje: string;
+        opciones?: any[];
+        accion: string;
+    }> {
+        const state = this.conversationStates.get(sessionId);
+        if (!state) {
+            return { mensaje: 'Por favor, inicia el proceso de agendamiento escribiendo "agendar cita".', accion: 'REINICIAR' };
+        }
+
+        // Buscar fechas disponibles
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        const en14Dias = new Date(hoy);
+        en14Dias.setDate(en14Dias.getDate() + 14);
+
+        const slotsDisponibles = await this.prisma.slot.groupBy({
+            by: ['fecha'],
+            where: {
+                codigo_servicio: state.servicioId,
+                activo: true,
+                cupos_disponibles: { gt: 0 },
+                fecha: { gte: hoy, lte: en14Dias },
+            },
+            _count: { codigo_slot: true },
+            orderBy: { fecha: 'asc' },
+        });
+
+        if (slotsDisponibles.length === 0) {
+            return {
+                mensaje: 'Lo sentimos, no hay disponibilidad en los proximos 14 dias. Por favor, contacta a nuestras sedes.',
+                accion: 'NO_DISPONIBILIDAD',
+            };
+        }
+
+        state.step = 'SELECCIONAR_FECHA';
+        this.conversationStates.set(sessionId, state);
+
+        const total = state.examenesSeleccionados?.reduce((sum, e) => sum + e.precio, 0) || 0;
+        const resumenExamenes = state.examenesSeleccionados?.map(e => `  - ${e.nombre}`).join('\n') || '';
+
+        const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+        const listaFechas = slotsDisponibles.slice(0, 7).map((slot, idx) => {
+            const fecha = new Date(slot.fecha);
+            const diaSemana = diasSemana[fecha.getDay()];
+            const fechaStr = fecha.toLocaleDateString('es', { day: '2-digit', month: '2-digit' });
+            return `${idx + 1}. ${diaSemana} ${fechaStr}`;
+        }).join('\n');
+
+        return {
+            mensaje: `Examenes seleccionados:\n${resumenExamenes}\nTotal: $${total}\n\nFechas disponibles:\n\n${listaFechas}\n\nEscribe el numero de la fecha.`,
+            opciones: slotsDisponibles.slice(0, 7).map(s => ({
+                fecha: new Date(s.fecha).toISOString().split('T')[0],
+            })),
+            accion: 'SELECCIONAR_FECHA',
+        };
+    }
+
+    /**
      * Procesa la selección del slot
      */
     async seleccionarSlot(sessionId: string, input: string, userId?: number): Promise<{
@@ -545,8 +895,8 @@ export class ChatbotAgendaService {
                 };
             }
 
-            // Crear cita en transacción
-            const cita = await this.prisma.$transaction(async (prisma) => {
+            // Crear cita y cotización en transacción
+            const resultado = await this.prisma.$transaction(async (prisma) => {
                 // Decrementar cupos
                 await prisma.slot.update({
                     where: { codigo_slot: state.slotId },
@@ -554,12 +904,14 @@ export class ChatbotAgendaService {
                 });
 
                 // Crear cita
-                return prisma.cita.create({
+                const cita = await prisma.cita.create({
                     data: {
                         codigo_paciente: userId,
                         codigo_slot: state.slotId!,
                         estado: 'AGENDADA',
-                        observaciones: 'Cita agendada vía chatbot',
+                        observaciones: state.requiereExamenes
+                            ? `Cita de Toma de Muestras agendada vía chatbot - ${state.examenesSeleccionados?.length || 0} exámenes`
+                            : 'Cita agendada vía chatbot',
                     },
                     include: {
                         slot: {
@@ -570,12 +922,42 @@ export class ChatbotAgendaService {
                         },
                     },
                 });
+
+                // Si hay exámenes seleccionados, crear cotización
+                let cotizacion = null;
+                if (state.requiereExamenes && state.examenesSeleccionados && state.examenesSeleccionados.length > 0) {
+                    const total = state.examenesSeleccionados.reduce((sum, e) => sum + e.precio, 0);
+
+                    cotizacion = await prisma.cotizacion.create({
+                        data: {
+                            codigo_paciente: userId,
+                            codigo_cita: cita.codigo_cita,
+                            estado: 'PENDIENTE',
+                            subtotal: total,
+                            descuento: 0,
+                            total: total,
+                            observaciones: 'Cotización generada vía chatbot',
+                            detalles: {
+                                create: state.examenesSeleccionados.map(e => ({
+                                    codigo_examen: e.codigo,
+                                    cantidad: 1,
+                                    precio_unitario: e.precio,
+                                    subtotal: e.precio,
+                                })),
+                            },
+                        },
+                    });
+                }
+
+                return { cita, cotizacion };
             });
+
+            const { cita, cotizacion } = resultado;
 
             // Limpiar estado
             this.conversationStates.delete(sessionId);
 
-            this.logger.log(`Cita ${cita.codigo_cita} creada vía chatbot para usuario ${userId}`);
+            this.logger.log(`Cita ${cita.codigo_cita} creada vía chatbot para usuario ${userId}${cotizacion ? ` con cotización #${cotizacion.codigo_cotizacion}` : ''}`);
 
             const fechaFormateada = new Date(slot.fecha).toLocaleDateString('es', {
                 weekday: 'long',
@@ -583,8 +965,18 @@ export class ChatbotAgendaService {
                 month: 'long'
             });
 
+            // Construir mensaje de confirmación
+            let mensajeConfirmacion = `Tu cita ha sido agendada exitosamente.\n\nCodigo de cita: #${cita.codigo_cita}\nServicio: ${slot.servicio.nombre}\nFecha: ${fechaFormateada}\nHora: ${state.slotHora}\nSede: ${slot.sede?.nombre || 'Sede Principal'}`;
+
+            if (cotizacion && state.examenesSeleccionados) {
+                const total = state.examenesSeleccionados.reduce((sum, e) => sum + e.precio, 0);
+                mensajeConfirmacion += `\n\nExamenes solicitados (${state.examenesSeleccionados.length}):\n${state.examenesSeleccionados.map(e => `  - ${e.nombre}: $${e.precio}`).join('\n')}\nTotal a pagar: $${total}\nCotizacion: #${cotizacion.codigo_cotizacion}`;
+            }
+
+            mensajeConfirmacion += '\n\nRecibiras un correo de confirmacion.\nRecuerda llegar 15 minutos antes de tu cita.\n\nHay algo mas en lo que pueda ayudarte?';
+
             return {
-                mensaje: `Tu cita ha sido agendada exitosamente.\n\nCodigo de cita: #${cita.codigo_cita}\nServicio: ${slot.servicio.nombre}\nFecha: ${fechaFormateada}\nHora: ${state.slotHora}\nSede: ${slot.sede?.nombre || 'Sede Principal'}\n\nRecibiras un correo de confirmacion.\nRecuerda llegar 15 minutos antes de tu cita.\n\nHay algo mas en lo que pueda ayudarte?`,
+                mensaje: mensajeConfirmacion,
                 accion: 'CITA_CREADA',
                 cita,
             };
@@ -852,6 +1244,12 @@ export class ChatbotAgendaService {
         switch (state.step) {
             case 'SELECCIONAR_SERVICIO':
                 return this.seleccionarServicio(sessionId, input);
+
+            case 'SELECCIONAR_CATEGORIA':
+                return this.seleccionarCategoriaExamen(sessionId, input);
+
+            case 'SELECCIONAR_EXAMENES':
+                return this.seleccionarExamenes(sessionId, input);
 
             case 'SELECCIONAR_FECHA':
                 return this.seleccionarFecha(sessionId, input);
