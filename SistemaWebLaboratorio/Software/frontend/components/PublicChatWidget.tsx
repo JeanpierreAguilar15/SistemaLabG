@@ -532,51 +532,51 @@ export default function PublicChatWidget() {
                         </div>
 
                         {/* Messages Area */}
-                        <div className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-4">
-                            {messages.length === 0 && (
-                                <div className="text-center text-gray-500 mt-4">
-                                    <Bot size={48} className="mx-auto mb-3 text-blue-400" />
-                                    <p className="text-sm font-medium mb-1">Hola! Soy el asistente virtual</p>
-                                    <p className="text-xs text-gray-400 mb-4">
-                                        Puedo ayudarte con información sobre nuestros servicios
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Quick Actions - Siempre visible en modo BOT */}
+                        <div className="flex-1 overflow-y-auto bg-gray-50 flex flex-col">
+                            {/* Quick Actions - Sticky en la parte superior */}
                             {chatMode === 'BOT' && (
-                                <div className="space-y-3 mt-2">
+                                <div className="sticky top-0 z-10 bg-gray-50 p-3 border-b border-gray-200">
                                     {/* Botón destacado para subir resultados - solo al inicio */}
                                     {messages.length === 0 && (
                                         <button
                                             onClick={() => fileInputRef.current?.click()}
-                                            className="w-full flex items-center justify-center gap-3 p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl shadow-md hover:shadow-lg hover:from-blue-700 hover:to-blue-800 transition-all"
+                                            className="w-full flex items-center justify-center gap-3 p-3 mb-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl shadow-md hover:shadow-lg hover:from-blue-700 hover:to-blue-800 transition-all"
                                         >
-                                            <FileText size={22} />
+                                            <FileText size={20} />
                                             <div className="text-left">
-                                                <p className="font-semibold">Interpretar mis Resultados</p>
+                                                <p className="font-semibold text-sm">Interpretar mis Resultados</p>
                                                 <p className="text-xs opacity-80">Sube tu PDF y te lo explico</p>
                                             </div>
                                         </button>
                                     )}
 
-                                    {/* Acciones rápidas - siempre visibles pero más compactas durante conversación */}
-                                    <div className={`grid ${messages.length === 0 ? 'grid-cols-2 gap-2' : 'grid-cols-3 gap-1'}`}>
+                                    {/* Acciones rápidas - siempre visibles */}
+                                    <div className="grid grid-cols-3 gap-1">
                                         {quickActions.filter(a => a.message !== '__UPLOAD_PDF__').map((action, index) => (
                                             <button
                                                 key={index}
                                                 onClick={() => handleQuickAction(action)}
-                                                className={`flex items-center gap-2 bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-gray-700 hover:text-blue-600 ${
-                                                    messages.length === 0 ? 'p-3 text-sm' : 'p-2 text-xs'
-                                                }`}
+                                                className="flex items-center justify-center gap-1 p-2 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-xs text-gray-700 hover:text-blue-600"
                                             >
                                                 <span className="text-blue-500">{action.icon}</span>
-                                                <span className={messages.length > 0 ? 'hidden sm:inline' : ''}>{action.label}</span>
+                                                <span>{action.label}</span>
                                             </button>
                                         ))}
                                     </div>
                                 </div>
                             )}
+
+                            {/* Contenido de mensajes */}
+                            <div className="flex-1 p-4 space-y-4">
+                                {messages.length === 0 && (
+                                    <div className="text-center text-gray-500 mt-4">
+                                        <Bot size={48} className="mx-auto mb-3 text-blue-400" />
+                                        <p className="text-sm font-medium mb-1">Hola! Soy el asistente virtual</p>
+                                        <p className="text-xs text-gray-400 mb-4">
+                                            Puedo ayudarte con información sobre nuestros servicios
+                                        </p>
+                                    </div>
+                                )}
 
                             {messages.map((msg) => (
                                 <div
@@ -626,6 +626,7 @@ export default function PublicChatWidget() {
                             )}
                             <div ref={messagesEndRef} />
                         </div>
+                    </div>
 
                         {/* Input Area */}
                         <div className="p-4 bg-white border-t border-gray-100">

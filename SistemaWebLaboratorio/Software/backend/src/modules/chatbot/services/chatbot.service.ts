@@ -509,13 +509,20 @@ export class ChatbotService implements OnModuleInit {
             return acc;
         }, {} as Record<string, typeof horarios>);
 
-        let mensaje = '🕐 Horarios de atención:\n\n';
+        let mensaje = 'Horarios de atencion:\n\n';
         for (const [sede, hrs] of Object.entries(horariosPorSede)) {
-            mensaje += `📍 ${sede}:\n`;
+            mensaje += `${sede}:\n`;
             hrs.forEach(h => {
                 const dia = diasSemana[h.dia_semana];
-                const inicio = new Date(h.hora_inicio).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
-                const fin = new Date(h.hora_fin).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+                // Extraer hora sin conversion de timezone (la BD guarda hora local)
+                const inicioDate = new Date(h.hora_inicio);
+                const finDate = new Date(h.hora_fin);
+                const inicioHoras = inicioDate.getUTCHours().toString().padStart(2, '0');
+                const inicioMinutos = inicioDate.getUTCMinutes().toString().padStart(2, '0');
+                const finHoras = finDate.getUTCHours().toString().padStart(2, '0');
+                const finMinutos = finDate.getUTCMinutes().toString().padStart(2, '0');
+                const inicio = `${inicioHoras}:${inicioMinutos}`;
+                const fin = `${finHoras}:${finMinutos}`;
                 mensaje += `  ${dia}: ${inicio} - ${fin}\n`;
             });
             mensaje += '\n';

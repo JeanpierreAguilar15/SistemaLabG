@@ -279,11 +279,17 @@ export class ChatbotAgendaService {
 
         return {
             mensaje: `Fecha seleccionada: ${fechaFormateada}\n\nHorarios disponibles:\n\n${listaHorarios}\n\nEscribe el numero del horario que prefieras.`,
-            opciones: slots.slice(0, 10).map(s => ({
-                id: s.codigo_slot,
-                hora: new Date(s.hora_inicio).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }),
-                sede: s.sede?.nombre || 'Sede Principal',
-            })),
+            opciones: slots.slice(0, 10).map(s => {
+                // Extraer hora sin conversion de timezone (la BD guarda hora local)
+                const horaDate = new Date(s.hora_inicio);
+                const horas = horaDate.getUTCHours().toString().padStart(2, '0');
+                const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+                return {
+                    id: s.codigo_slot,
+                    hora: `${horas}:${minutos}`,
+                    sede: s.sede?.nombre || 'Sede Principal',
+                };
+            }),
             accion: 'SELECCIONAR_SLOT',
         };
     }
