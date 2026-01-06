@@ -232,19 +232,20 @@ IMPORTANTE EN EL RESUMEN:
    */
   async generateChatResponse(interpretation: LabResultInterpretation): Promise<string> {
     if (!interpretation.success) {
-      return `Lo siento, no pude analizar el documento. ${interpretation.error || 'Por favor, asegúrate de que sea un PDF legible con resultados de laboratorio.'}`;
+      return `Lo siento, no pude analizar el documento. ${interpretation.error || 'Por favor, asegurate de que sea un PDF legible con resultados de laboratorio.'}`;
     }
 
-    let response = '📋 **Interpretación de tus Resultados de Laboratorio**\n\n';
+    let response = 'INTERPRETACION DE TUS RESULTADOS DE LABORATORIO\n';
+    response += '═══════════════════════════════════════\n\n';
 
     // Resumen general
-    response += `📝 **Resumen:**\n${interpretation.resumen_general}\n\n`;
+    response += `RESUMEN:\n${interpretation.resumen_general}\n\n`;
 
     // Advertencias (si hay)
     if (interpretation.advertencias && interpretation.advertencias.length > 0) {
-      response += '⚠️ **Atención:**\n';
+      response += 'ATENCION:\n';
       interpretation.advertencias.forEach(adv => {
-        response += `• ${adv}\n`;
+        response += `  - ${adv}\n`;
       });
       response += '\n';
     }
@@ -255,25 +256,25 @@ IMPORTANTE EN EL RESUMEN:
     );
 
     if (outOfRange.length > 0) {
-      response += '🔍 **Valores fuera de rango:**\n';
+      response += 'VALORES FUERA DE RANGO:\n';
       outOfRange.forEach(r => {
-        const icon = r.estado === 'CRITICO' ? '🔴' : r.estado === 'ALTO' ? '📈' : '📉';
-        response += `${icon} **${r.examen}**: ${r.valor} ${r.unidad || ''} (Ref: ${r.valor_referencia || 'N/A'})\n`;
-        response += `   → ${r.interpretacion}\n`;
+        const indicator = r.estado === 'CRITICO' ? '[!]' : r.estado === 'ALTO' ? '[+]' : '[-]';
+        response += `\n${indicator} ${r.examen}: ${r.valor} ${r.unidad || ''} (Ref: ${r.valor_referencia || 'N/A'})\n`;
+        response += `    ${r.interpretacion}\n`;
       });
       response += '\n';
     }
 
     // Recomendaciones
     if (interpretation.recomendaciones && interpretation.recomendaciones.length > 0) {
-      response += '💡 **Recomendaciones:**\n';
+      response += 'RECOMENDACIONES:\n';
       interpretation.recomendaciones.forEach(rec => {
-        response += `• ${rec}\n`;
+        response += `  - ${rec}\n`;
       });
     }
 
-    response += '\n---\n';
-    response += '⚕️ *Recuerda: Esta interpretación es educativa. Consulta siempre con tu médico para un diagnóstico profesional.*';
+    response += '\n───────────────────────────────────────\n';
+    response += 'Nota: Esta interpretacion es educativa. Consulta siempre con tu medico para un diagnostico profesional.';
 
     return response;
   }

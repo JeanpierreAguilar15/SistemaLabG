@@ -545,17 +545,32 @@ export default function PublicChatWidget() {
 
                             {/* Quick Actions */}
                             {showQuickActions && messages.length === 0 && chatMode === 'BOT' && (
-                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                    {quickActions.map((action, index) => (
-                                        <button
-                                            key={index}
-                                            onClick={() => handleQuickAction(action)}
-                                            className="flex items-center gap-2 p-3 bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-sm text-gray-700 hover:text-blue-600"
-                                        >
-                                            <span className="text-blue-500">{action.icon}</span>
-                                            {action.label}
-                                        </button>
-                                    ))}
+                                <div className="space-y-3 mt-2">
+                                    {/* Botón destacado para subir resultados */}
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="w-full flex items-center justify-center gap-3 p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl shadow-md hover:shadow-lg hover:from-blue-700 hover:to-blue-800 transition-all"
+                                    >
+                                        <FileText size={22} />
+                                        <div className="text-left">
+                                            <p className="font-semibold">Interpretar mis Resultados</p>
+                                            <p className="text-xs opacity-80">Sube tu PDF y te lo explico</p>
+                                        </div>
+                                    </button>
+
+                                    {/* Otras acciones rápidas */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {quickActions.filter(a => a.message !== '__UPLOAD_PDF__').map((action, index) => (
+                                            <button
+                                                key={index}
+                                                onClick={() => handleQuickAction(action)}
+                                                className="flex items-center gap-2 p-3 bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-sm text-gray-700 hover:text-blue-600"
+                                            >
+                                                <span className="text-blue-500">{action.icon}</span>
+                                                {action.label}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
 
@@ -637,7 +652,7 @@ export default function PublicChatWidget() {
                                     className="w-full mb-3 flex items-center justify-center gap-2 py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-sm transition-colors"
                                 >
                                     <Phone size={16} />
-                                    Hablar con un operador
+                                    Contactar
                                 </button>
                             )}
 
