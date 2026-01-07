@@ -436,7 +436,7 @@ export default function CitasPage() {
                       </span>
                     </div>
                     <div className="flex space-x-2 mt-3">
-                      {!cita.confirmada && cita.estado === 'PENDIENTE' && (
+                      {!cita.confirmada && (cita.estado === 'PENDIENTE' || cita.estado === 'AGENDADA') && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -445,7 +445,7 @@ export default function CitasPage() {
                           Confirmar
                         </Button>
                       )}
-                      {cita.estado === 'PENDIENTE' && (
+                      {(cita.estado === 'PENDIENTE' || cita.estado === 'AGENDADA') && (
                         <>
                           <Button
                             size="sm"

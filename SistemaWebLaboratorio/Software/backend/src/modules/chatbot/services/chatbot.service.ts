@@ -141,7 +141,7 @@ export class ChatbotService implements OnModuleInit {
     ];
 
     // Estado del flujo de precios para cada sesión
-    private preciosFlowStates = new Map<string, { step: 'CATEGORIAS' | 'EXAMENES'; lastCategory?: string }>();
+    private preciosFlowStates = new Map<string, { step: 'CATEGORIAS' | 'EXAMENES'; categoriaId?: number; categoriaNombre?: string }>();
 
     // Estado de flujo de agendamiento para cada sesión
     private agendaFlowStates = new Map<string, boolean>();
@@ -297,21 +297,34 @@ export class ChatbotService implements OnModuleInit {
             };
         }
 
-        // Verificar si estamos en flujo de precios (selección de categoría)
+        // Verificar si estamos en flujo de precios
         const preciosState = this.preciosFlowStates.get(sessionId);
-        if (preciosState && preciosState.step === 'CATEGORIAS') {
-            // El usuario está seleccionando una categoría
-            const responseText = await this.handlePreciosPorCategoria(text);
-            this.preciosFlowStates.delete(sessionId); // Limpiar estado
-            await this.logMessage(sessionId, text, 'USER', userId);
-            await this.logMessage(sessionId, responseText, 'BOT', null, 'precios_categoria', 0.9);
+        if (preciosState) {
+            if (preciosState.step === 'CATEGORIAS') {
+                // El usuario está seleccionando una categoría
+                const result = await this.handlePreciosPorCategoria(sessionId, text);
+                await this.logMessage(sessionId, text, 'USER', userId);
+                await this.logMessage(sessionId, result.mensaje, 'BOT', null, 'precios_categoria', 0.9);
 
-            return {
-                text: responseText,
-                source: 'local',
-                intent: 'precios_categoria',
-                confidence: 0.9,
-            };
+                return {
+                    text: result.mensaje,
+                    source: 'local',
+                    intent: 'precios_categoria',
+                    confidence: 0.9,
+                };
+            } else if (preciosState.step === 'EXAMENES') {
+                // El usuario está consultando detalles de un examen
+                const result = await this.handleExamenDetalle(sessionId, text);
+                await this.logMessage(sessionId, text, 'USER', userId);
+                await this.logMessage(sessionId, result.mensaje, 'BOT', null, 'examen_detalle', 0.9);
+
+                return {
+                    text: result.mensaje,
+                    source: 'local',
+                    intent: 'examen_detalle',
+                    confidence: 0.9,
+                };
+            }
         }
 
         // Detectar intent usando patrones locales
@@ -511,7 +524,7 @@ export class ChatbotService implements OnModuleInit {
     /**
      * Maneja consultas de precios por categoría
      */
-    private async handlePreciosPorCategoria(categoriaInput: string): Promise<string> {
+    private async handlePreciosPorCategoria(sessionId: string, categoriaInput: string): Promise<{ mensaje: string }> {
         const categorias = await this.prisma.categoriaExamen.findMany({
             where: { activo: true },
             orderBy: { nombre: 'asc' },
@@ -521,10 +534,6 @@ export class ChatbotService implements OnModuleInit {
 
         // Intentar por número
         const numero = parseInt(categoriaInput);
-        const categoriasConExamenes = categorias.filter(async c => {
-            const count = await this.prisma.examen.count({ where: { codigo_categoria: c.codigo_categoria, activo: true } });
-            return count > 0;
-        });
 
         if (!isNaN(numero) && numero > 0 && numero <= categorias.length) {
             categoriaSeleccionada = categorias[numero - 1];
@@ -536,7 +545,7 @@ export class ChatbotService implements OnModuleInit {
         }
 
         if (!categoriaSeleccionada) {
-            return 'No encontre esa categoria. Por favor, escribe el numero o nombre exacto de la categoria.';
+            return { mensaje: 'No encontre esa categoria. Por favor, escribe el numero o nombre exacto de la categoria.' };
         }
 
         // Obtener exámenes de la categoría con precios
@@ -559,15 +568,110 @@ export class ChatbotService implements OnModuleInit {
         });
 
         if (examenes.length === 0) {
-            return `No hay examenes disponibles en la categoria ${categoriaSeleccionada.nombre}.`;
+            this.preciosFlowStates.delete(sessionId);
+            return { mensaje: `No hay examenes disponibles en la categoria ${categoriaSeleccionada.nombre}.` };
         }
+
+        // Actualizar estado para permitir consulta de detalles
+        this.preciosFlowStates.set(sessionId, {
+            step: 'EXAMENES',
+            categoriaId: categoriaSeleccionada.codigo_categoria,
+            categoriaNombre: categoriaSeleccionada.nombre,
+        });
 
         const listaExamenes = examenes.map(e => {
             const precio = e.precios[0]?.precio;
             return `- ${e.nombre}: ${precio ? '$' + precio : 'Consultar'}`;
         }).join('\n');
 
-        return `Examenes de ${categoriaSeleccionada.nombre}:\n\n${listaExamenes}\n\nPuedes preguntar por un examen especifico para mas detalles, o escribir "categorias" para ver otras opciones.`;
+        return { mensaje: `Examenes de ${categoriaSeleccionada.nombre}:\n\n${listaExamenes}\n\nEscribe el nombre del examen para ver mas detalles.\nEscribe "categorias" para ver otras opciones.` };
+    }
+
+    /**
+     * Maneja consultas de detalles de un examen específico
+     */
+    private async handleExamenDetalle(sessionId: string, input: string): Promise<{ mensaje: string }> {
+        const state = this.preciosFlowStates.get(sessionId);
+
+        // Si el usuario quiere ver otras categorías
+        if (/^categor[ií]as?$/i.test(input.trim()) || /^volver$/i.test(input.trim())) {
+            this.preciosFlowStates.set(sessionId, { step: 'CATEGORIAS' });
+            return { mensaje: await this.handlePreciosIntent(null) };
+        }
+
+        // Buscar examen en la categoría actual
+        const examenes = await this.prisma.examen.findMany({
+            where: {
+                codigo_categoria: state?.categoriaId,
+                activo: true,
+            },
+            include: {
+                precios: {
+                    where: { activo: true },
+                    orderBy: { fecha_inicio: 'desc' },
+                    take: 1,
+                }
+            },
+            orderBy: { nombre: 'asc' },
+        });
+
+        // Buscar por nombre (coincidencia parcial)
+        const inputLower = input.toLowerCase().trim();
+        let examenEncontrado = examenes.find(e =>
+            e.nombre.toLowerCase() === inputLower
+        );
+
+        if (!examenEncontrado) {
+            examenEncontrado = examenes.find(e =>
+                e.nombre.toLowerCase().includes(inputLower) ||
+                inputLower.includes(e.nombre.toLowerCase().split(' ')[0])
+            );
+        }
+
+        // Intentar por número si el usuario escribió un número
+        if (!examenEncontrado) {
+            const numero = parseInt(input);
+            if (!isNaN(numero) && numero > 0 && numero <= examenes.length) {
+                examenEncontrado = examenes[numero - 1];
+            }
+        }
+
+        if (!examenEncontrado) {
+            return {
+                mensaje: `No encontre "${input}" en la categoria ${state?.categoriaNombre}.\n\nPor favor, escribe el nombre exacto del examen o "categorias" para ver otras opciones.`
+            };
+        }
+
+        // Construir respuesta con detalles del examen
+        const precio = examenEncontrado.precios[0]?.precio;
+        let detalles = `${examenEncontrado.nombre}\n\n`;
+        detalles += `Precio: ${precio ? '$' + precio : 'Consultar en sede'}\n`;
+
+        if (examenEncontrado.descripcion) {
+            detalles += `\nDescripcion: ${examenEncontrado.descripcion}\n`;
+        }
+        if (examenEncontrado.tipo_muestra) {
+            detalles += `\nTipo de muestra: ${examenEncontrado.tipo_muestra}\n`;
+        }
+        if (examenEncontrado.tiempo_entrega_horas) {
+            const horas = examenEncontrado.tiempo_entrega_horas;
+            const tiempoTexto = horas >= 24 ? `${Math.floor(horas / 24)} dia(s)` : `${horas} hora(s)`;
+            detalles += `Tiempo de entrega: ${tiempoTexto}\n`;
+        }
+        if (examenEncontrado.requiere_ayuno) {
+            detalles += `\nRequiere ayuno: Si`;
+            if (examenEncontrado.horas_ayuno) {
+                detalles += ` (${examenEncontrado.horas_ayuno} horas)`;
+            }
+            detalles += '\n';
+        }
+        if (examenEncontrado.instrucciones_preparacion) {
+            detalles += `\nPreparacion: ${examenEncontrado.instrucciones_preparacion}\n`;
+        }
+
+        detalles += `\nDeseas agendar una cita para este examen? Escribe "agendar cita".\nO escribe otro nombre de examen, o "categorias" para ver otras opciones.`;
+
+        return { mensaje: detalles };
     }
 
     /**
