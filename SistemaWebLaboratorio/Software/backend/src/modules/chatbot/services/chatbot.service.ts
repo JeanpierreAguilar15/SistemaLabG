@@ -315,6 +315,22 @@ export class ChatbotService implements OnModuleInit {
             } else if (preciosState.step === 'EXAMENES') {
                 // El usuario está consultando detalles de un examen
                 const result = await this.handleExamenDetalle(sessionId, text);
+
+                // Si el usuario quiere agendar cita, cambiar al flujo de agenda
+                if (result.cambiarFlujo === 'AGENDAR_CITA') {
+                    const agendaResult = await this.agendaService.iniciarAgendamiento(sessionId);
+                    await this.logMessage(sessionId, text, 'USER', userId);
+                    await this.logMessage(sessionId, agendaResult.mensaje, 'BOT', null, 'agendar_cita', 0.9);
+
+                    return {
+                        text: agendaResult.mensaje,
+                        source: 'local',
+                        intent: 'agendar_cita',
+                        confidence: 0.9,
+                        accion: agendaResult.accion,
+                    };
+                }
+
                 await this.logMessage(sessionId, text, 'USER', userId);
                 await this.logMessage(sessionId, result.mensaje, 'BOT', null, 'examen_detalle', 0.9);
 
@@ -590,13 +606,20 @@ export class ChatbotService implements OnModuleInit {
     /**
      * Maneja consultas de detalles de un examen específico
      */
-    private async handleExamenDetalle(sessionId: string, input: string): Promise<{ mensaje: string }> {
+    private async handleExamenDetalle(sessionId: string, input: string): Promise<{ mensaje: string; cambiarFlujo?: string }> {
         const state = this.preciosFlowStates.get(sessionId);
 
         // Si el usuario quiere ver otras categorías
         if (/^categor[ií]as?$/i.test(input.trim()) || /^volver$/i.test(input.trim())) {
             this.preciosFlowStates.set(sessionId, { step: 'CATEGORIAS' });
             return { mensaje: await this.handlePreciosIntent(null) };
+        }
+
+        // Si el usuario quiere agendar una cita, salir del flujo de precios
+        if (/(?:agendar|reservar|sacar|pedir|solicitar|quiero).*(?:cita|turno|hora)/i.test(input) ||
+            /^agendar\s*cita$/i.test(input.trim())) {
+            this.preciosFlowStates.delete(sessionId);
+            return { mensaje: '', cambiarFlujo: 'AGENDAR_CITA' };
         }
 
         // Buscar examen en la categoría actual
