@@ -14,14 +14,16 @@ interface ExamenSeleccionado {
  * Estado de la conversación de agendamiento
  */
 interface AgendaConversationState {
-    step: 'INICIAL' | 'SELECCIONAR_SERVICIO' | 'SELECCIONAR_CATEGORIA' | 'SELECCIONAR_EXAMENES' | 'SELECCIONAR_FECHA' | 'SELECCIONAR_TURNO' | 'SELECCIONAR_SLOT' | 'CONFIRMAR' | 'COMPLETADO';
+    step: 'INICIAL' | 'SELECCIONAR_SERVICIO' | 'SELECCIONAR_CATEGORIA' | 'SELECCIONAR_EXAMENES' | 'SELECCIONAR_FECHA' | 'SELECCIONAR_TURNO' | 'SELECCIONAR_HORA_RANGO' | 'SELECCIONAR_SLOT' | 'CONFIRMAR' | 'COMPLETADO';
     servicioId?: number;
     servicioNombre?: string;
     requiereExamenes?: boolean;
     categoriaId?: number;
     examenesSeleccionados?: ExamenSeleccionado[];
     fecha?: string;
+    turnosDisponibles?: ('MANANA' | 'TARDE')[];
     turno?: 'MANANA' | 'TARDE';
+    horaRango?: string; // ej: "13:00-14:00"
     slotId?: number;
     slotHora?: string;
     sedeNombre?: string;
@@ -205,7 +207,7 @@ export class ChatbotAgendaService {
      */
     async seleccionarFecha(sessionId: string, input: string): Promise<{
         mensaje: string;
-        opciones?: { id: number; hora: string; sede: string }[];
+        opciones?: any[];
         accion: string;
     }> {
         const state = this.conversationStates.get(sessionId);
@@ -298,9 +300,15 @@ export class ChatbotAgendaService {
             }
         }
 
+        // Construir lista de turnos disponibles en orden
+        const turnosDisponibles: ('MANANA' | 'TARDE')[] = [];
+        if (slotsManana > 0) turnosDisponibles.push('MANANA');
+        if (slotsTarde > 0) turnosDisponibles.push('TARDE');
+
         // Actualizar estado
         state.step = 'SELECCIONAR_TURNO';
         state.fecha = fechaSeleccionada.toISOString().split('T')[0];
+        state.turnosDisponibles = turnosDisponibles;
         this.conversationStates.set(sessionId, state);
 
         const fechaFormateada = new Date(fechaSeleccionada).toLocaleDateString('es-EC', {
@@ -309,21 +317,21 @@ export class ChatbotAgendaService {
             month: 'long'
         });
 
-        let opcionesTurno = '';
-        if (slotsManana > 0 && slotsTarde > 0) {
-            opcionesTurno = '1. Turno Manana (7:00 - 12:00)\n2. Turno Tarde (12:00 - 18:00)';
-        } else if (slotsManana > 0) {
-            opcionesTurno = '1. Turno Manana (7:00 - 12:00)';
-        } else {
-            opcionesTurno = '1. Turno Tarde (12:00 - 18:00)';
-        }
+        // Construir opciones de turno dinámicamente
+        const opcionesTurno = turnosDisponibles.map((turno, idx) => {
+            if (turno === 'MANANA') {
+                return `${idx + 1}. Turno Manana (7:00 - 12:00)`;
+            } else {
+                return `${idx + 1}. Turno Tarde (12:00 - 18:00)`;
+            }
+        }).join('\n');
 
         return {
             mensaje: `Fecha seleccionada: ${fechaFormateada}\n\nSelecciona el turno de tu preferencia:\n\n${opcionesTurno}\n\nEscribe "manana" o "tarde" (o el numero).`,
-            opciones: [
-                { turno: 'MANANA', disponible: slotsManana > 0 },
-                { turno: 'TARDE', disponible: slotsTarde > 0 },
-            ],
+            opciones: turnosDisponibles.map(t => ({
+                turno: t,
+                disponible: true,
+            })),
             accion: 'SELECCIONAR_TURNO',
         };
     }
@@ -333,7 +341,7 @@ export class ChatbotAgendaService {
      */
     async seleccionarTurno(sessionId: string, input: string): Promise<{
         mensaje: string;
-        opciones?: { id: number; hora: string; sede: string }[];
+        opciones?: any[];
         accion: string;
     }> {
         const state = this.conversationStates.get(sessionId);
@@ -341,19 +349,35 @@ export class ChatbotAgendaService {
             return { mensaje: 'Por favor, inicia el proceso de agendamiento escribiendo "agendar cita".', accion: 'REINICIAR' };
         }
 
+        const turnosDisponibles = state.turnosDisponibles || ['MANANA', 'TARDE'];
+
         // Detectar turno seleccionado
         let turnoSeleccionado: 'MANANA' | 'TARDE' | null = null;
         const inputLower = input.toLowerCase().trim();
 
-        if (inputLower === '1' || /ma[nñ]ana/i.test(inputLower)) {
-            turnoSeleccionado = 'MANANA';
-        } else if (inputLower === '2' || /tarde/i.test(inputLower)) {
-            turnoSeleccionado = 'TARDE';
+        // Primero intentar por nombre directo
+        if (/ma[nñ]ana/i.test(inputLower)) {
+            if (turnosDisponibles.includes('MANANA')) {
+                turnoSeleccionado = 'MANANA';
+            }
+        } else if (/tarde/i.test(inputLower)) {
+            if (turnosDisponibles.includes('TARDE')) {
+                turnoSeleccionado = 'TARDE';
+            }
+        } else {
+            // Intentar por número (índice en la lista de turnos disponibles)
+            const numero = parseInt(inputLower);
+            if (!isNaN(numero) && numero >= 1 && numero <= turnosDisponibles.length) {
+                turnoSeleccionado = turnosDisponibles[numero - 1];
+            }
         }
 
         if (!turnoSeleccionado) {
+            const opcionesTexto = turnosDisponibles.length === 1
+                ? `Escribe "1" o "${turnosDisponibles[0] === 'MANANA' ? 'manana' : 'tarde'}".`
+                : 'Escribe "manana" o "tarde" (o 1/2).';
             return {
-                mensaje: 'No entendi tu seleccion. Por favor, escribe "manana" o "tarde" (o 1/2).',
+                mensaje: `No entendi tu seleccion. ${opcionesTexto}`,
                 accion: 'SELECCIONAR_TURNO_RETRY',
             };
         }
@@ -387,12 +411,147 @@ export class ChatbotAgendaService {
             };
         }
 
-        // Actualizar estado
-        state.step = 'SELECCIONAR_SLOT';
+        // Agrupar slots por rango de hora (ej: 13:00-14:00, 14:00-15:00)
+        const rangosPorHora = new Map<string, number>();
+        for (const slot of slotsFiltrados) {
+            const horaDate = new Date(slot.hora_inicio);
+            const horaInicio = horaDate.getUTCHours();
+            const rangoKey = `${horaInicio.toString().padStart(2, '0')}:00-${(horaInicio + 1).toString().padStart(2, '0')}:00`;
+            rangosPorHora.set(rangoKey, (rangosPorHora.get(rangoKey) || 0) + 1);
+        }
+
+        const rangosArray = Array.from(rangosPorHora.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+        // Si hay pocos slots (8 o menos), mostrarlos directamente
+        if (slotsFiltrados.length <= 8) {
+            state.step = 'SELECCIONAR_SLOT';
+            state.turno = turnoSeleccionado;
+            this.conversationStates.set(sessionId, state);
+
+            const listaHorarios = slotsFiltrados.map((slot, idx) => {
+                const horaDate = new Date(slot.hora_inicio);
+                const horas = horaDate.getUTCHours().toString().padStart(2, '0');
+                const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+                const horaInicio = `${horas}:${minutos}`;
+                return `${idx + 1}. ${horaInicio} - ${slot.sede?.nombre || 'Sede Principal'}`;
+            }).join('\n');
+
+            const turnoNombre = turnoSeleccionado === 'MANANA' ? 'Manana' : 'Tarde';
+
+            return {
+                mensaje: `Turno ${turnoNombre} seleccionado.\n\nHorarios disponibles:\n\n${listaHorarios}\n\nEscribe el numero del horario que prefieras.`,
+                opciones: slotsFiltrados.map(s => {
+                    const horaDate = new Date(s.hora_inicio);
+                    const horas = horaDate.getUTCHours().toString().padStart(2, '0');
+                    const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+                    return {
+                        id: s.codigo_slot,
+                        hora: `${horas}:${minutos}`,
+                        sede: s.sede?.nombre || 'Sede Principal',
+                    };
+                }),
+                accion: 'SELECCIONAR_SLOT',
+            };
+        }
+
+        // Si hay muchos slots, mostrar rangos de hora primero
+        state.step = 'SELECCIONAR_HORA_RANGO';
         state.turno = turnoSeleccionado;
         this.conversationStates.set(sessionId, state);
 
-        const listaHorarios = slotsFiltrados.map((slot, idx) => {
+        const listaRangos = rangosArray.map(([rango, cantidad], idx) => {
+            return `${idx + 1}. ${rango} (${cantidad} horarios)`;
+        }).join('\n');
+
+        const turnoNombre = turnoSeleccionado === 'MANANA' ? 'Manana' : 'Tarde';
+
+        return {
+            mensaje: `Turno ${turnoNombre} seleccionado.\n\nTenemos ${slotsFiltrados.length} horarios disponibles. Selecciona un rango de hora:\n\n${listaRangos}\n\nEscribe el numero del rango.`,
+            opciones: rangosArray.map(([rango, cantidad]) => ({
+                rango,
+                cantidad,
+            })),
+            accion: 'SELECCIONAR_HORA_RANGO',
+        };
+    }
+
+    /**
+     * Procesa la selección de rango de hora
+     */
+    async seleccionarHoraRango(sessionId: string, input: string): Promise<{
+        mensaje: string;
+        opciones?: any[];
+        accion: string;
+    }> {
+        const state = this.conversationStates.get(sessionId);
+        if (!state || state.step !== 'SELECCIONAR_HORA_RANGO') {
+            return { mensaje: 'Por favor, inicia el proceso de agendamiento escribiendo "agendar cita".', accion: 'REINICIAR' };
+        }
+
+        // Obtener slots del turno seleccionado
+        const slots = await this.prisma.slot.findMany({
+            where: {
+                codigo_servicio: state.servicioId,
+                fecha: new Date(state.fecha!),
+                activo: true,
+                cupos_disponibles: { gt: 0 },
+            },
+            include: { sede: true },
+            orderBy: { hora_inicio: 'asc' },
+        });
+
+        // Filtrar por turno
+        const slotsFiltrados = slots.filter(slot => {
+            const hora = new Date(slot.hora_inicio).getUTCHours();
+            if (state.turno === 'MANANA') {
+                return hora < 12;
+            } else {
+                return hora >= 12;
+            }
+        });
+
+        // Obtener rangos disponibles
+        const rangosPorHora = new Map<string, typeof slotsFiltrados>();
+        for (const slot of slotsFiltrados) {
+            const horaDate = new Date(slot.hora_inicio);
+            const horaInicio = horaDate.getUTCHours();
+            const rangoKey = `${horaInicio.toString().padStart(2, '0')}:00-${(horaInicio + 1).toString().padStart(2, '0')}:00`;
+            if (!rangosPorHora.has(rangoKey)) {
+                rangosPorHora.set(rangoKey, []);
+            }
+            rangosPorHora.get(rangoKey)!.push(slot);
+        }
+
+        const rangosArray = Array.from(rangosPorHora.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+        // Determinar rango seleccionado
+        let rangoSeleccionado: [string, typeof slotsFiltrados] | undefined;
+        const numero = parseInt(input.trim());
+
+        if (!isNaN(numero) && numero >= 1 && numero <= rangosArray.length) {
+            rangoSeleccionado = rangosArray[numero - 1];
+        } else {
+            // Intentar por nombre del rango (ej: "13:00-14:00")
+            rangoSeleccionado = rangosArray.find(([rango]) =>
+                input.includes(rango) || rango.includes(input.trim())
+            );
+        }
+
+        if (!rangoSeleccionado) {
+            return {
+                mensaje: `No entendi tu seleccion. Por favor, escribe un numero del 1 al ${rangosArray.length}.`,
+                accion: 'SELECCIONAR_HORA_RANGO_RETRY',
+            };
+        }
+
+        const [rangoKey, slotsDelRango] = rangoSeleccionado;
+
+        // Guardar rango y pasar a selección de slot
+        state.step = 'SELECCIONAR_SLOT';
+        state.horaRango = rangoKey;
+        this.conversationStates.set(sessionId, state);
+
+        const listaHorarios = slotsDelRango.map((slot, idx) => {
             const horaDate = new Date(slot.hora_inicio);
             const horas = horaDate.getUTCHours().toString().padStart(2, '0');
             const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
@@ -400,11 +559,9 @@ export class ChatbotAgendaService {
             return `${idx + 1}. ${horaInicio} - ${slot.sede?.nombre || 'Sede Principal'}`;
         }).join('\n');
 
-        const turnoNombre = turnoSeleccionado === 'MANANA' ? 'Manana' : 'Tarde';
-
         return {
-            mensaje: `Turno ${turnoNombre} seleccionado.\n\nHorarios disponibles:\n\n${listaHorarios}\n\nEscribe el numero del horario que prefieras.`,
-            opciones: slotsFiltrados.map(s => {
+            mensaje: `Rango ${rangoKey} seleccionado.\n\nHorarios disponibles:\n\n${listaHorarios}\n\nEscribe el numero del horario que prefieras.`,
+            opciones: slotsDelRango.map(s => {
                 const horaDate = new Date(s.hora_inicio);
                 const horas = horaDate.getUTCHours().toString().padStart(2, '0');
                 const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
@@ -452,7 +609,7 @@ export class ChatbotAgendaService {
         let mensajeExamenes = '';
 
         if (examenesYaSeleccionados.length > 0) {
-            const total = examenesYaSeleccionados.reduce((sum, e) => sum + e.precio, 0);
+            const total = examenesYaSeleccionados.reduce((sum, e) => sum + Number(e.precio), 0);
             mensajeExamenes = `\nExamenes seleccionados (${examenesYaSeleccionados.length}):\n${examenesYaSeleccionados.map(e => `  - ${e.nombre}: $${e.precio}`).join('\n')}\n  Total: $${total}\n`;
         }
 
@@ -575,7 +732,7 @@ export class ChatbotAgendaService {
 
         let mensajeSeleccionados = '';
         if (examenesYaSeleccionados.length > 0) {
-            const total = examenesYaSeleccionados.reduce((sum, e) => sum + e.precio, 0);
+            const total = examenesYaSeleccionados.reduce((sum, e) => sum + Number(e.precio), 0);
             mensajeSeleccionados = `\n\nSeleccionados: ${examenesYaSeleccionados.length} examenes - Total: $${total}`;
         }
 
@@ -649,7 +806,7 @@ export class ChatbotAgendaService {
         }
 
         const examenSeleccionado = examenes[numero - 1];
-        const precio = examenSeleccionado.precios[0]?.precio || 0;
+        const precio = Number(examenSeleccionado.precios[0]?.precio || 0);
 
         if (!state.examenesSeleccionados) {
             state.examenesSeleccionados = [];
@@ -720,7 +877,7 @@ export class ChatbotAgendaService {
         state.step = 'SELECCIONAR_FECHA';
         this.conversationStates.set(sessionId, state);
 
-        const total = state.examenesSeleccionados?.reduce((sum, e) => sum + e.precio, 0) || 0;
+        const total = state.examenesSeleccionados?.reduce((sum, e) => sum + Number(e.precio), 0) || 0;
         const resumenExamenes = state.examenesSeleccionados?.map(e => `  - ${e.nombre}`).join('\n') || '';
 
         const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
@@ -773,7 +930,7 @@ export class ChatbotAgendaService {
         });
 
         // Filtrar por turno si está seleccionado
-        const slots = state.turno ? allSlots.filter(slot => {
+        let slots = state.turno ? allSlots.filter(slot => {
             const hora = new Date(slot.hora_inicio).getUTCHours();
             if (state.turno === 'MANANA') {
                 return hora < 12;
@@ -781,6 +938,15 @@ export class ChatbotAgendaService {
                 return hora >= 12;
             }
         }) : allSlots;
+
+        // Filtrar por rango de hora si está seleccionado (ej: "13:00-14:00")
+        if (state.horaRango) {
+            const horaRangoInicio = parseInt(state.horaRango.split(':')[0]);
+            slots = slots.filter(slot => {
+                const hora = new Date(slot.hora_inicio).getUTCHours();
+                return hora === horaRangoInicio;
+            });
+        }
 
         const numero = parseInt(input);
         if (isNaN(numero) || numero < 1 || numero > slots.length) {
@@ -923,15 +1089,23 @@ export class ChatbotAgendaService {
                     },
                 });
 
-                // Si hay exámenes seleccionados, crear cotización
+                // Si hay exámenes seleccionados, crear cotización y vincular a cita
                 let cotizacion = null;
                 if (state.requiereExamenes && state.examenesSeleccionados && state.examenesSeleccionados.length > 0) {
-                    const total = state.examenesSeleccionados.reduce((sum, e) => sum + e.precio, 0);
+                    const total = state.examenesSeleccionados.reduce((sum, e) => sum + Number(e.precio), 0);
+
+                    // Generar número de cotización único
+                    const numeroCotizacion = `COT-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+
+                    // Fecha de expiración: 7 días desde hoy
+                    const fechaExpiracion = new Date();
+                    fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
 
                     cotizacion = await prisma.cotizacion.create({
                         data: {
-                            codigo_paciente: userId,
-                            codigo_cita: cita.codigo_cita,
+                            paciente: { connect: { codigo_usuario: userId } },
+                            numero_cotizacion: numeroCotizacion,
+                            fecha_expiracion: fechaExpiracion,
                             estado: 'PENDIENTE',
                             subtotal: total,
                             descuento: 0,
@@ -939,13 +1113,19 @@ export class ChatbotAgendaService {
                             observaciones: 'Cotización generada vía chatbot',
                             detalles: {
                                 create: state.examenesSeleccionados.map(e => ({
-                                    codigo_examen: e.codigo,
+                                    examen: { connect: { codigo_examen: e.codigo } },
                                     cantidad: 1,
                                     precio_unitario: e.precio,
-                                    subtotal: e.precio,
+                                    total_linea: e.precio,
                                 })),
                             },
                         },
+                    });
+
+                    // Vincular cotización a la cita
+                    await prisma.cita.update({
+                        where: { codigo_cita: cita.codigo_cita },
+                        data: { codigo_cotizacion: cotizacion.codigo_cotizacion },
                     });
                 }
 
@@ -969,7 +1149,7 @@ export class ChatbotAgendaService {
             let mensajeConfirmacion = `Tu cita ha sido agendada exitosamente.\n\nCodigo de cita: #${cita.codigo_cita}\nServicio: ${slot.servicio.nombre}\nFecha: ${fechaFormateada}\nHora: ${state.slotHora}\nSede: ${slot.sede?.nombre || 'Sede Principal'}`;
 
             if (cotizacion && state.examenesSeleccionados) {
-                const total = state.examenesSeleccionados.reduce((sum, e) => sum + e.precio, 0);
+                const total = state.examenesSeleccionados.reduce((sum, e) => sum + Number(e.precio), 0);
                 mensajeConfirmacion += `\n\nExamenes solicitados (${state.examenesSeleccionados.length}):\n${state.examenesSeleccionados.map(e => `  - ${e.nombre}: $${e.precio}`).join('\n')}\nTotal a pagar: $${total}\nCotizacion: #${cotizacion.codigo_cotizacion}`;
             }
 
@@ -1256,6 +1436,9 @@ export class ChatbotAgendaService {
 
             case 'SELECCIONAR_TURNO':
                 return this.seleccionarTurno(sessionId, input);
+
+            case 'SELECCIONAR_HORA_RANGO':
+                return this.seleccionarHoraRango(sessionId, input);
 
             case 'SELECCIONAR_SLOT':
                 return this.seleccionarSlot(sessionId, input, userId);
