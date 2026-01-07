@@ -2,6 +2,30 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 /**
+ * Extrae la hora de un campo TIME de PostgreSQL
+ * PostgreSQL TIME se almacena sin zona horaria, pero Prisma lo convierte a Date
+ * Usamos toTimeString para obtener la hora local tal como se almacenó
+ */
+function extractHourFromTime(time: Date): number {
+    // toTimeString devuelve formato "HH:MM:SS GMT±XXXX"
+    const timeStr = time.toTimeString();
+    const hour = parseInt(timeStr.substring(0, 2));
+    return isNaN(hour) ? time.getHours() : hour;
+}
+
+function extractMinuteFromTime(time: Date): number {
+    const timeStr = time.toTimeString();
+    const minute = parseInt(timeStr.substring(3, 5));
+    return isNaN(minute) ? time.getMinutes() : minute;
+}
+
+function extractTimeString(time: Date): string {
+    const timeStr = time.toTimeString();
+    // Formato "HH:MM:SS GMT±XXXX" -> extraemos "HH:MM"
+    return timeStr.substring(0, 5);
+}
+
+/**
  * Examen seleccionado para cotización
  */
 interface ExamenSeleccionado {
@@ -292,7 +316,7 @@ export class ChatbotAgendaService {
         let slotsManana = 0;
         let slotsTarde = 0;
         for (const slot of slots) {
-            const hora = new Date(slot.hora_inicio).getUTCHours();
+            const hora = extractHourFromTime(new Date(slot.hora_inicio));
             if (hora < 12) {
                 slotsManana++;
             } else {
@@ -396,7 +420,7 @@ export class ChatbotAgendaService {
 
         // Filtrar por turno
         const slotsFiltrados = slots.filter(slot => {
-            const hora = new Date(slot.hora_inicio).getUTCHours();
+            const hora = extractHourFromTime(new Date(slot.hora_inicio));
             if (turnoSeleccionado === 'MANANA') {
                 return hora < 12;
             } else {
@@ -415,7 +439,7 @@ export class ChatbotAgendaService {
         const rangosPorHora = new Map<string, number>();
         for (const slot of slotsFiltrados) {
             const horaDate = new Date(slot.hora_inicio);
-            const horaInicio = horaDate.getUTCHours();
+            const horaInicio = extractHourFromTime(horaDate);
             const rangoKey = `${horaInicio.toString().padStart(2, '0')}:00-${(horaInicio + 1).toString().padStart(2, '0')}:00`;
             rangosPorHora.set(rangoKey, (rangosPorHora.get(rangoKey) || 0) + 1);
         }
@@ -430,8 +454,8 @@ export class ChatbotAgendaService {
 
             const listaHorarios = slotsFiltrados.map((slot, idx) => {
                 const horaDate = new Date(slot.hora_inicio);
-                const horas = horaDate.getUTCHours().toString().padStart(2, '0');
-                const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+                const horas = extractHourFromTime(horaDate).toString().padStart(2, '0');
+                const minutos = extractMinuteFromTime(horaDate).toString().padStart(2, '0');
                 const horaInicio = `${horas}:${minutos}`;
                 return `${idx + 1}. ${horaInicio} - ${slot.sede?.nombre || 'Sede Principal'}`;
             }).join('\n');
@@ -442,8 +466,8 @@ export class ChatbotAgendaService {
                 mensaje: `Turno ${turnoNombre} seleccionado.\n\nHorarios disponibles:\n\n${listaHorarios}\n\nEscribe el numero del horario que prefieras.`,
                 opciones: slotsFiltrados.map(s => {
                     const horaDate = new Date(s.hora_inicio);
-                    const horas = horaDate.getUTCHours().toString().padStart(2, '0');
-                    const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+                    const horas = extractHourFromTime(horaDate).toString().padStart(2, '0');
+                    const minutos = extractMinuteFromTime(horaDate).toString().padStart(2, '0');
                     return {
                         id: s.codigo_slot,
                         hora: `${horas}:${minutos}`,
@@ -502,7 +526,7 @@ export class ChatbotAgendaService {
 
         // Filtrar por turno
         const slotsFiltrados = slots.filter(slot => {
-            const hora = new Date(slot.hora_inicio).getUTCHours();
+            const hora = extractHourFromTime(new Date(slot.hora_inicio));
             if (state.turno === 'MANANA') {
                 return hora < 12;
             } else {
@@ -514,7 +538,7 @@ export class ChatbotAgendaService {
         const rangosPorHora = new Map<string, typeof slotsFiltrados>();
         for (const slot of slotsFiltrados) {
             const horaDate = new Date(slot.hora_inicio);
-            const horaInicio = horaDate.getUTCHours();
+            const horaInicio = extractHourFromTime(horaDate);
             const rangoKey = `${horaInicio.toString().padStart(2, '0')}:00-${(horaInicio + 1).toString().padStart(2, '0')}:00`;
             if (!rangosPorHora.has(rangoKey)) {
                 rangosPorHora.set(rangoKey, []);
@@ -553,8 +577,8 @@ export class ChatbotAgendaService {
 
         const listaHorarios = slotsDelRango.map((slot, idx) => {
             const horaDate = new Date(slot.hora_inicio);
-            const horas = horaDate.getUTCHours().toString().padStart(2, '0');
-            const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+            const horas = extractHourFromTime(horaDate).toString().padStart(2, '0');
+            const minutos = extractMinuteFromTime(horaDate).toString().padStart(2, '0');
             const horaInicio = `${horas}:${minutos}`;
             return `${idx + 1}. ${horaInicio} - ${slot.sede?.nombre || 'Sede Principal'}`;
         }).join('\n');
@@ -563,8 +587,8 @@ export class ChatbotAgendaService {
             mensaje: `Rango ${rangoKey} seleccionado.\n\nHorarios disponibles:\n\n${listaHorarios}\n\nEscribe el numero del horario que prefieras.`,
             opciones: slotsDelRango.map(s => {
                 const horaDate = new Date(s.hora_inicio);
-                const horas = horaDate.getUTCHours().toString().padStart(2, '0');
-                const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+                const horas = extractHourFromTime(horaDate).toString().padStart(2, '0');
+                const minutos = extractMinuteFromTime(horaDate).toString().padStart(2, '0');
                 return {
                     id: s.codigo_slot,
                     hora: `${horas}:${minutos}`,
@@ -931,7 +955,7 @@ export class ChatbotAgendaService {
 
         // Filtrar por turno si está seleccionado
         let slots = state.turno ? allSlots.filter(slot => {
-            const hora = new Date(slot.hora_inicio).getUTCHours();
+            const hora = extractHourFromTime(new Date(slot.hora_inicio));
             if (state.turno === 'MANANA') {
                 return hora < 12;
             } else {
@@ -943,7 +967,7 @@ export class ChatbotAgendaService {
         if (state.horaRango) {
             const horaRangoInicio = parseInt(state.horaRango.split(':')[0]);
             slots = slots.filter(slot => {
-                const hora = new Date(slot.hora_inicio).getUTCHours();
+                const hora = extractHourFromTime(new Date(slot.hora_inicio));
                 return hora === horaRangoInicio;
             });
         }
@@ -959,8 +983,8 @@ export class ChatbotAgendaService {
         const slotSeleccionado = slots[numero - 1];
         // Extraer hora sin conversion de timezone (la BD guarda hora local)
         const horaDate = new Date(slotSeleccionado.hora_inicio);
-        const horasStr = horaDate.getUTCHours().toString().padStart(2, '0');
-        const minutosStr = horaDate.getUTCMinutes().toString().padStart(2, '0');
+        const horasStr = extractHourFromTime(horaDate).toString().padStart(2, '0');
+        const minutosStr = extractMinuteFromTime(horaDate).toString().padStart(2, '0');
         const horaFormateada = `${horasStr}:${minutosStr}`;
 
         // Actualizar estado
@@ -1221,8 +1245,8 @@ export class ChatbotAgendaService {
             });
             // Extraer hora directamente sin conversion de timezone (la BD guarda hora local)
             const horaDate = new Date(cita.slot.hora_inicio);
-            const horas = horaDate.getUTCHours().toString().padStart(2, '0');
-            const minutos = horaDate.getUTCMinutes().toString().padStart(2, '0');
+            const horas = extractHourFromTime(horaDate).toString().padStart(2, '0');
+            const minutos = extractMinuteFromTime(horaDate).toString().padStart(2, '0');
             const hora = `${horas}:${minutos}`;
             const cancelable = (cita.estado === 'AGENDADA' || cita.estado === 'PENDIENTE') ? ' [Cancelable]' : '';
             return `Cita #${cita.codigo_cita} - ${cita.slot.servicio.nombre}\nFecha: ${fecha}, Hora: ${hora}\nSede: ${cita.slot.sede?.nombre || 'Sede'} | Estado: ${cita.estado}${cancelable}`;
