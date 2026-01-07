@@ -973,10 +973,10 @@ export class AgendaService {
       throw new NotFoundException(`Cita no encontrada`);
     }
 
-    // Solo se puede confirmar citas en estado PENDIENTE
-    if (cita.estado !== 'PENDIENTE') {
+    // Solo se puede confirmar citas en estado PENDIENTE o AGENDADA
+    if (cita.estado !== 'PENDIENTE' && cita.estado !== 'AGENDADA') {
       throw new BadRequestException(
-        `No se puede confirmar una cita en estado ${cita.estado}. Solo citas pendientes pueden ser confirmadas.`,
+        `No se puede confirmar una cita en estado ${cita.estado}. Solo citas pendientes o agendadas pueden ser confirmadas.`,
       );
     }
 
