@@ -25,6 +25,10 @@ class ApiClient {
     }
   }
 
+  logout() {
+    this.clearToken();
+  }
+
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = this.getToken();
     const headers: HeadersInit = {
