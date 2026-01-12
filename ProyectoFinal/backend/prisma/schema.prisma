@@ -1,0 +1,152 @@
+// Prisma Schema - Sistema de Reservas Centro Deportivo
+// Arquitectura: Monolito Modular
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MÓDULO: USUARIOS
+// ============================================
+
+enum Rol {
+  ADMIN
+  CLIENTE
+}
+
+model Usuario {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  nombre    String
+  apellido  String
+  telefono  String?
+  rol       Rol      @default(CLIENTE)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  reservas Reserva[]
+  pagos    Pago[]
+
+  @@map("usuarios")
+}
+
+// ============================================
+// MÓDULO: CANCHAS
+// ============================================
+
+enum TipoCancha {
+  FUTBOL
+  TENIS
+  BASQUET
+}
+
+model Cancha {
+  id          String     @id @default(uuid())
+  nombre      String
+  tipo        TipoCancha
+  descripcion String?
+  precioPorHora Decimal  @db.Decimal(10, 2)
+  activa      Boolean    @default(true)
+  imagen      String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relaciones
+  horarios  HorarioCancha[]
+  reservas  Reserva[]
+
+  @@map("canchas")
+}
+
+model HorarioCancha {
+  id          String   @id @default(uuid())
+  canchaId    String
+  diaSemana   Int      // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  horaInicio  String   // "08:00"
+  horaFin     String   // "22:00"
+  disponible  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  cancha Cancha @relation(fields: [canchaId], references: [id], onDelete: Cascade)
+
+  @@unique([canchaId, diaSemana])
+  @@map("horarios_cancha")
+}
+
+// ============================================
+// MÓDULO: RESERVAS
+// ============================================
+
+enum EstadoReserva {
+  PENDIENTE
+  CONFIRMADA
+  CANCELADA
+  COMPLETADA
+}
+
+model Reserva {
+  id          String        @id @default(uuid())
+  usuarioId   String
+  canchaId    String
+  fecha       DateTime      @db.Date
+  horaInicio  String        // "10:00"
+  horaFin     String        // "11:00"
+  estado      EstadoReserva @default(PENDIENTE)
+  notas       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relaciones
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+  cancha  Cancha  @relation(fields: [canchaId], references: [id])
+  pago    Pago?
+
+  @@unique([canchaId, fecha, horaInicio])
+  @@map("reservas")
+}
+
+// ============================================
+// MÓDULO: PAGOS
+// ============================================
+
+enum EstadoPago {
+  PENDIENTE
+  PROCESANDO
+  COMPLETADO
+  FALLIDO
+  REEMBOLSADO
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+}
+
+model Pago {
+  id          String      @id @default(uuid())
+  reservaId   String      @unique
+  usuarioId   String
+  monto       Decimal     @db.Decimal(10, 2)
+  metodo      MetodoPago
+  estado      EstadoPago  @default(PENDIENTE)
+  referencia  String?     // Número de referencia/transacción
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relaciones
+  reserva Reserva @relation(fields: [reservaId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@map("pagos")
+}
