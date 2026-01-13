@@ -704,6 +704,23 @@ export class AdminService {
       );
     }
 
+    // Verificar si está en cotizaciones pendientes
+    const cotizacionesPendientes = await this.prisma.cotizacionDetalle.count({
+      where: {
+        codigo_examen,
+        cotizacion: {
+          estado: { in: ['PENDIENTE', 'PENDIENTE_PAGO_VENTANILLA', 'PAGO_EN_PROCESO'] },
+        },
+      },
+    });
+
+    if (cotizacionesPendientes > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar: el examen esta en ${cotizacionesPendientes} cotizacion(es) pendiente(s). ` +
+        'Espere a que se procesen o cancelen las cotizaciones primero.'
+      );
+    }
+
     // Desactivar en lugar de eliminar
     const result = await this.prisma.examen.update({
       where: { codigo_examen },
