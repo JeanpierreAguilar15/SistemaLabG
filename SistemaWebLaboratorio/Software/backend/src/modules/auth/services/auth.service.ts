@@ -806,6 +806,26 @@ export class AuthService {
       };
     }
 
+    // Rate limiting: máximo 3 solicitudes por hora por email
+    const oneHourAgo = new Date();
+    oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+
+    const recentRequests = await this.prisma.tokenRecuperacion.count({
+      where: {
+        email,
+        fecha_creacion: {
+          gte: oneHourAgo,
+        },
+      },
+    });
+
+    if (recentRequests >= 3) {
+      this.logger.warn(`[ForgotPassword] Rate limit excedido para: ${email} (${recentRequests} solicitudes en la última hora)`);
+      throw new BadRequestException(
+        'Has excedido el límite de solicitudes de recuperación. Por favor, espera una hora e intenta de nuevo.',
+      );
+    }
+
     // Invalidar tokens de recuperación anteriores
     await this.prisma.tokenRecuperacion.updateMany({
       where: {
@@ -821,8 +841,8 @@ export class AuthService {
     // Generar código de 6 dígitos
     const codigo = this.comunicacionesService.generateVerificationCode();
 
-    // Calcular fecha de expiración (15 minutos)
-    const expiresInMinutes = 15;
+    // Calcular fecha de expiración (5 minutos)
+    const expiresInMinutes = 5;
     const fecha_expiracion = new Date();
     fecha_expiracion.setMinutes(fecha_expiracion.getMinutes() + expiresInMinutes);
 
@@ -912,6 +932,12 @@ export class AuthService {
 
     if (!token) {
       throw new BadRequestException('Código inválido o expirado');
+    }
+
+    // Validar que la nueva contraseña sea diferente de la anterior
+    const isSamePassword = await bcrypt.compare(newPassword, token.usuario.password_hash);
+    if (isSamePassword) {
+      throw new BadRequestException('La nueva contraseña debe ser diferente a la anterior');
     }
 
     // Validar fortaleza de la nueva contraseña
