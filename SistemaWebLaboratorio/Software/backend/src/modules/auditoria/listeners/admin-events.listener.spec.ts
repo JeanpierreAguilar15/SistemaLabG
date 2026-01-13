@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminEventsListener } from './admin-events.listener';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '@prisma/prisma.service';
 import { AdminEventPayload } from '../../admin/admin-events.service';
 
 describe('AdminEventsListener', () => {
