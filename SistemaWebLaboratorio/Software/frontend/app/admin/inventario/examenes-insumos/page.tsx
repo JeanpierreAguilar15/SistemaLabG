@@ -124,6 +124,7 @@ export default function ExamenesInsumosPage() {
   const [cantidadRequerida, setCantidadRequerida] = useState('1');
   const [searchItem, setSearchItem] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<{codigoExamen: number, codigoItem: number, nombreInsumo: string} | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
@@ -257,12 +258,12 @@ export default function ExamenesInsumosPage() {
     }
   };
 
-  const handleQuitarInsumo = async (codigoExamen: number, codigoItem: number, nombreInsumo: string) => {
-    if (!confirm(`¿Quitar "${nombreInsumo}" de este examen?`)) return;
+  const handleQuitarInsumo = async () => {
+    if (!confirmRemove) return;
 
     try {
       const res = await fetch(
-        `${API_URL}/admin/inventory/examenes/${codigoExamen}/insumos/${codigoItem}`,
+        `${API_URL}/admin/inventory/examenes/${confirmRemove.codigoExamen}/insumos/${confirmRemove.codigoItem}`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
@@ -271,6 +272,7 @@ export default function ExamenesInsumosPage() {
 
       if (res.ok) {
         showMessage('success', 'Insumo removido del examen');
+        setConfirmRemove(null);
         fetchData();
       } else {
         const data = await res.json();
@@ -520,7 +522,7 @@ export default function ExamenesInsumosPage() {
                                   className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
                                   title="Desvincular insumo"
                                   onClick={() =>
-                                    handleQuitarInsumo(examen.codigo_examen, ins.codigo_item, ins.nombre)
+                                    setConfirmRemove({codigoExamen: examen.codigo_examen, codigoItem: ins.codigo_item, nombreInsumo: ins.nombre})
                                   }
                                 >
                                   <Unlink className="h-3 w-3" />
@@ -830,6 +832,38 @@ export default function ExamenesInsumosPage() {
             >
               <CheckCircle className="h-4 w-4 mr-1" />
               Guardar Cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Remove Insumo Dialog */}
+      <Dialog open={!!confirmRemove} onOpenChange={(open) => !open && setConfirmRemove(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Desvincular Insumo
+            </DialogTitle>
+            <DialogDescription>
+              Esta seguro de quitar <span className="font-semibold">&quot;{confirmRemove?.nombreInsumo}&quot;</span> de este examen?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                El insumo dejara de estar vinculado a este examen. No se eliminara del inventario.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRemove(null)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleQuitarInsumo}>
+              <XCircle className="h-4 w-4 mr-1" />
+              Desvincular
             </Button>
           </DialogFooter>
         </DialogContent>

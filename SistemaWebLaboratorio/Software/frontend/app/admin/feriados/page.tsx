@@ -16,6 +16,7 @@ export default function FeriadosPage() {
         fecha: '',
         descripcion: '',
     });
+    const [confirmDelete, setConfirmDelete] = useState<Feriado | null>(null);
 
     useEffect(() => {
         loadFeriados();
@@ -48,12 +49,12 @@ export default function FeriadosPage() {
         }
     };
 
-    const handleDelete = async (id: number) => {
-        if (!confirm('¿Estás seguro de eliminar este feriado?')) return;
-        if (!accessToken) return;
+    const handleDelete = async () => {
+        if (!confirmDelete || !accessToken) return;
 
         try {
-            await feriadosService.delete(id, accessToken);
+            await feriadosService.delete(confirmDelete.codigo_feriado, accessToken);
+            setConfirmDelete(null);
             loadFeriados();
         } catch (err: any) {
             alert('Error al eliminar feriado');
@@ -120,7 +121,7 @@ export default function FeriadosPage() {
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <button
-                                            onClick={() => handleDelete(feriado.codigo_feriado)}
+                                            onClick={() => setConfirmDelete(feriado)}
                                             className="text-red-400 hover:text-red-300 transition-colors"
                                         >
                                             Eliminar
@@ -152,7 +153,7 @@ export default function FeriadosPage() {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-400 mb-1">
-                                    Descripción
+                                    Descripcion
                                 </label>
                                 <input
                                     type="text"
@@ -179,6 +180,38 @@ export default function FeriadosPage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {confirmDelete && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md p-6 shadow-2xl">
+                        <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-500/10 rounded-full mb-4">
+                            <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-white text-center mb-2">
+                            Confirmar Eliminacion
+                        </h3>
+                        <p className="text-sm text-slate-400 text-center mb-4">
+                            Estas seguro de eliminar el feriado <span className="font-semibold text-white">{confirmDelete.descripcion}</span> del {format(new Date(confirmDelete.fecha), 'dd/MM/yyyy', { locale: es })}?
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setConfirmDelete(null)}
+                                className="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleDelete}
+                                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                            >
+                                Eliminar
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

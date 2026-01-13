@@ -371,6 +371,10 @@ export default function InventarioPage() {
   const [generarPedidoProveedor, setGenerarPedidoProveedor] = useState<string>('')
   const [generarPedidoLoading, setGenerarPedidoLoading] = useState(false)
 
+  // Confirmation modals state
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<ItemInventario | null>(null)
+  const [confirmDeleteCategoria, setConfirmDeleteCategoria] = useState<Categoria | null>(null)
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -693,11 +697,11 @@ export default function InventarioPage() {
     }
   }
 
-  const handleDeleteItem = async (codigo_item: number) => {
-    if (!confirm('¿Estás seguro de que deseas desactivar este item?')) return
+  const handleDeleteItem = async () => {
+    if (!confirmDeleteItem) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items/${codigo_item}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items/${confirmDeleteItem.codigo_item}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -706,13 +710,14 @@ export default function InventarioPage() {
 
       if (response.ok || response.status === 204) {
         setMessage({ type: 'success', text: 'Item desactivado correctamente' })
+        setConfirmDeleteItem(null)
         loadItems()
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.message || 'Error al desactivar item' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexion al servidor' })
     }
   }
 
@@ -1003,11 +1008,11 @@ export default function InventarioPage() {
     }
   }
 
-  const handleDeleteCategoria = async (codigo_categoria: number) => {
-    if (!confirm('¿Está seguro de eliminar esta categoría? Si tiene items asociados, será desactivada.')) return
+  const handleDeleteCategoria = async () => {
+    if (!confirmDeleteCategoria) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories/${codigo_categoria}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories/${confirmDeleteCategoria.codigo_categoria}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -1015,14 +1020,15 @@ export default function InventarioPage() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Categoría eliminada correctamente' })
+        setMessage({ type: 'success', text: 'Categoria eliminada correctamente' })
+        setConfirmDeleteCategoria(null)
         loadCategorias()
       } else {
         const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al eliminar categoría' })
+        setMessage({ type: 'error', text: error.message || 'Error al eliminar categoria' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexion al servidor' })
     }
   }
 
@@ -2081,7 +2087,7 @@ export default function InventarioPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleDeleteItem(item.codigo_item)}
+                                onClick={() => setConfirmDeleteItem(item)}
                                 className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
                               >
                                 Desactivar
@@ -3688,7 +3694,7 @@ export default function InventarioPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleDeleteCategoria(cat.codigo_categoria)}
+                              onClick={() => setConfirmDeleteCategoria(cat)}
                               className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
                             >
                               Eliminar
@@ -4573,6 +4579,68 @@ export default function InventarioPage() {
                   )}
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Item Modal */}
+      {confirmDeleteItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-lab-danger-100 rounded-full mb-4">
+              <svg className="w-6 h-6 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-lab-neutral-900 text-center mb-2">
+              Desactivar Item
+            </h3>
+            <p className="text-sm text-lab-neutral-600 text-center mb-4">
+              Estas seguro de desactivar el item <span className="font-semibold">{confirmDeleteItem.nombre}</span> ({confirmDeleteItem.codigo_interno})?
+            </p>
+            <p className="text-xs text-amber-600 text-center mb-6 bg-amber-50 p-2 rounded">
+              El item quedara inactivo pero se mantendran los registros historicos.
+            </p>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setConfirmDeleteItem(null)} className="flex-1">
+                Cancelar
+              </Button>
+              <Button onClick={handleDeleteItem} className="flex-1 bg-lab-danger-600 hover:bg-lab-danger-700">
+                Desactivar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Category Modal */}
+      {confirmDeleteCategoria && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-lab-danger-100 rounded-full mb-4">
+              <svg className="w-6 h-6 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-lab-neutral-900 text-center mb-2">
+              Eliminar Categoria
+            </h3>
+            <p className="text-sm text-lab-neutral-600 text-center mb-4">
+              Estas seguro de eliminar la categoria <span className="font-semibold">{confirmDeleteCategoria.nombre}</span>?
+            </p>
+            {confirmDeleteCategoria._count && confirmDeleteCategoria._count.items > 0 && (
+              <p className="text-xs text-amber-600 text-center mb-6 bg-amber-50 p-2 rounded">
+                Esta categoria tiene {confirmDeleteCategoria._count.items} item(s) asociados. Sera desactivada en lugar de eliminada.
+              </p>
+            )}
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setConfirmDeleteCategoria(null)} className="flex-1">
+                Cancelar
+              </Button>
+              <Button onClick={handleDeleteCategoria} className="flex-1 bg-lab-danger-600 hover:bg-lab-danger-700">
+                Eliminar
+              </Button>
             </div>
           </div>
         </div>

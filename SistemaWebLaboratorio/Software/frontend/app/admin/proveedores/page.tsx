@@ -90,6 +90,7 @@ export default function SuppliersManagement() {
     direccion: '',
     activo: true,
   })
+  const [confirmToggle, setConfirmToggle] = useState<{supplier: Supplier, activar: boolean} | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -279,32 +280,32 @@ export default function SuppliersManagement() {
     }
   }
 
-  const handleToggleActive = async (codigo_proveedor: number, activar: boolean) => {
-    const mensaje = activar ? '¿Deseas reactivar este proveedor?' : '¿Deseas desactivar este proveedor?'
-    if (!confirm(mensaje)) return
+  const handleToggleActive = async () => {
+    if (!confirmToggle) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers/${codigo_proveedor}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers/${confirmToggle.supplier.codigo_proveedor}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ activo: activar }),
+        body: JSON.stringify({ activo: confirmToggle.activar }),
       })
 
       if (response.ok) {
         setMessage({
           type: 'success',
-          text: activar ? 'Proveedor activado correctamente' : 'Proveedor desactivado correctamente',
+          text: confirmToggle.activar ? 'Proveedor activado correctamente' : 'Proveedor desactivado correctamente',
         })
+        setConfirmToggle(null)
         loadSuppliers()
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.message || 'Error al cambiar estado del proveedor' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexion al servidor' })
     }
   }
 
@@ -685,7 +686,7 @@ export default function SuppliersManagement() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleToggleActive(supplier.codigo_proveedor, false)}
+                        onClick={() => setConfirmToggle({supplier, activar: false})}
                         className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
                       >
                         Desactivar
@@ -694,7 +695,7 @@ export default function SuppliersManagement() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleToggleActive(supplier.codigo_proveedor, true)}
+                        onClick={() => setConfirmToggle({supplier, activar: true})}
                         className="text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50"
                       >
                         Activar
@@ -723,6 +724,57 @@ export default function SuppliersManagement() {
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal */}
+      {confirmToggle && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className={`flex items-center justify-center w-12 h-12 mx-auto rounded-full mb-4 ${
+              confirmToggle.activar ? 'bg-lab-success-100' : 'bg-lab-danger-100'
+            }`}>
+              <svg className={`w-6 h-6 ${confirmToggle.activar ? 'text-lab-success-600' : 'text-lab-danger-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {confirmToggle.activar ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                )}
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-lab-neutral-900 text-center mb-2">
+              {confirmToggle.activar ? 'Activar Proveedor' : 'Desactivar Proveedor'}
+            </h3>
+            <p className="text-sm text-lab-neutral-600 text-center mb-4">
+              {confirmToggle.activar
+                ? `Deseas reactivar al proveedor "${confirmToggle.supplier.razon_social}"?`
+                : `Deseas desactivar al proveedor "${confirmToggle.supplier.razon_social}"?`
+              }
+            </p>
+            {!confirmToggle.activar && confirmToggle.supplier.estadisticas?.tiene_ordenes && (
+              <p className="text-xs text-amber-600 text-center mb-4 bg-amber-50 p-2 rounded">
+                Este proveedor tiene ordenes de compra asociadas. Solo sera desactivado.
+              </p>
+            )}
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setConfirmToggle(null)}
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleToggleActive}
+                className={`flex-1 ${confirmToggle.activar
+                  ? 'bg-lab-success-600 hover:bg-lab-success-700'
+                  : 'bg-lab-danger-600 hover:bg-lab-danger-700'
+                }`}
+              >
+                {confirmToggle.activar ? 'Activar' : 'Desactivar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

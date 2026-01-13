@@ -104,6 +104,11 @@ export default function OrdenesCompraPage() {
     detalles: [] as { codigo_item: string; cantidad: string; precio_unitario: string }[],
   })
 
+  // Confirmation modals state
+  const [confirmEmit, setConfirmEmit] = useState<OrdenCompra | null>(null)
+  const [confirmReceive, setConfirmReceive] = useState<OrdenCompra | null>(null)
+  const [confirmCancel, setConfirmCancel] = useState<OrdenCompra | null>(null)
+
   useEffect(() => {
     loadOrdenes()
     loadProveedores()
@@ -269,12 +274,12 @@ export default function OrdenesCompraPage() {
     }
   }
 
-  const handleEmit = async (codigo_orden: number) => {
-    if (!confirm('¿Está seguro de emitir esta orden de compra? Una vez emitida no podrá modificarse. Se descargará el PDF para imprimir.')) return
+  const handleEmit = async () => {
+    if (!confirmEmit) return
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders/${codigo_orden}/emit`,
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders/${confirmEmit.codigo_orden}/emit`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -283,25 +288,27 @@ export default function OrdenesCompraPage() {
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'Orden emitida correctamente. Descargando PDF...' })
+        const codigo = confirmEmit.codigo_orden
+        setConfirmEmit(null)
         loadOrdenes()
         loadStats()
-        // Descargar PDF automáticamente después de emitir
-        await handleExportPdf(codigo_orden)
+        // Descargar PDF automaticamente despues de emitir
+        await handleExportPdf(codigo)
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.message || 'Error al emitir orden' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión' })
+      setMessage({ type: 'error', text: 'Error de conexion' })
     }
   }
 
-  const handleReceive = async (codigo_orden: number) => {
-    if (!confirm('¿Confirma la recepción de esta orden? Esto actualizará el inventario.')) return
+  const handleReceive = async () => {
+    if (!confirmReceive) return
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders/${codigo_orden}/receive`,
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders/${confirmReceive.codigo_orden}/receive`,
         {
           method: 'POST',
           headers: {
@@ -314,22 +321,23 @@ export default function OrdenesCompraPage() {
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'Orden recibida - Inventario actualizado' })
+        setConfirmReceive(null)
         loadOrdenes()
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.message || 'Error al recibir orden' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión' })
+      setMessage({ type: 'error', text: 'Error de conexion' })
     }
   }
 
-  const handleCancel = async (codigo_orden: number) => {
-    if (!confirm('¿Está seguro de cancelar esta orden de compra?')) return
+  const handleCancel = async () => {
+    if (!confirmCancel) return
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders/${codigo_orden}/cancel`,
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/purchase-orders/${confirmCancel.codigo_orden}/cancel`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -338,13 +346,14 @@ export default function OrdenesCompraPage() {
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'Orden cancelada' })
+        setConfirmCancel(null)
         loadOrdenes()
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.message || 'Error al cancelar orden' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión' })
+      setMessage({ type: 'error', text: 'Error de conexion' })
     }
   }
 
@@ -669,14 +678,14 @@ export default function OrdenesCompraPage() {
                           <Button size="sm" variant="outline" onClick={() => handleEdit(orden)}>
                             Editar
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => handleEmit(orden.codigo_orden)}>
+                          <Button size="sm" variant="outline" onClick={() => setConfirmEmit(orden)}>
                             Emitir
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
                             className="text-red-600"
-                            onClick={() => handleCancel(orden.codigo_orden)}
+                            onClick={() => setConfirmCancel(orden)}
                           >
                             Cancelar
                           </Button>
@@ -688,7 +697,7 @@ export default function OrdenesCompraPage() {
                             size="sm"
                             variant="outline"
                             className="text-green-600"
-                            onClick={() => handleReceive(orden.codigo_orden)}
+                            onClick={() => setConfirmReceive(orden)}
                           >
                             Recibir
                           </Button>
@@ -696,7 +705,7 @@ export default function OrdenesCompraPage() {
                             size="sm"
                             variant="outline"
                             className="text-red-600"
-                            onClick={() => handleCancel(orden.codigo_orden)}
+                            onClick={() => setConfirmCancel(orden)}
                           >
                             Cancelar
                           </Button>
@@ -982,6 +991,96 @@ export default function OrdenesCompraPage() {
                   Cerrar
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Emit Confirmation Modal */}
+      {confirmEmit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-blue-100 rounded-full mb-4">
+              <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+              Emitir Orden de Compra
+            </h3>
+            <p className="text-sm text-gray-600 text-center mb-4">
+              Esta seguro de emitir la orden <span className="font-semibold">{confirmEmit.numero_orden}</span>?
+            </p>
+            <p className="text-xs text-amber-600 text-center mb-6 bg-amber-50 p-2 rounded">
+              Una vez emitida no podra modificarse. Se descargara el PDF para imprimir.
+            </p>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setConfirmEmit(null)} className="flex-1">
+                Cancelar
+              </Button>
+              <Button onClick={handleEmit} className="flex-1 bg-blue-600 hover:bg-blue-700">
+                Emitir Orden
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receive Confirmation Modal */}
+      {confirmReceive && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-green-100 rounded-full mb-4">
+              <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+              Confirmar Recepcion
+            </h3>
+            <p className="text-sm text-gray-600 text-center mb-4">
+              Confirma la recepcion de la orden <span className="font-semibold">{confirmReceive.numero_orden}</span>?
+            </p>
+            <p className="text-xs text-green-600 text-center mb-6 bg-green-50 p-2 rounded">
+              Esto actualizara el inventario con los items de la orden.
+            </p>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setConfirmReceive(null)} className="flex-1">
+                Cancelar
+              </Button>
+              <Button onClick={handleReceive} className="flex-1 bg-green-600 hover:bg-green-700">
+                Confirmar Recepcion
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Confirmation Modal */}
+      {confirmCancel && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
+              <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+              Cancelar Orden
+            </h3>
+            <p className="text-sm text-gray-600 text-center mb-4">
+              Esta seguro de cancelar la orden <span className="font-semibold">{confirmCancel.numero_orden}</span>?
+            </p>
+            <p className="text-xs text-red-600 text-center mb-6 bg-red-50 p-2 rounded">
+              Esta accion no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setConfirmCancel(null)} className="flex-1">
+                No, Mantener
+              </Button>
+              <Button onClick={handleCancel} className="flex-1 bg-red-600 hover:bg-red-700">
+                Si, Cancelar
+              </Button>
             </div>
           </div>
         </div>
