@@ -84,11 +84,31 @@ export class AdminService {
 
     // Proteger rol de administrador del sistema (nivel 10 o nombre ADMIN)
     const isSystemAdmin = role.nivel_acceso === 10 || role.nombre.toUpperCase() === 'ADMIN';
-    if (isSystemAdmin && data.activo === false) {
-      throw new BadRequestException(
-        'No se puede desactivar el rol de administrador del sistema. ' +
-        'Este rol es necesario para el funcionamiento del sistema.'
-      );
+
+    if (isSystemAdmin) {
+      // No permitir desactivar el rol de administrador
+      if (data.activo === false) {
+        throw new BadRequestException(
+          'No se puede desactivar el rol de administrador del sistema. ' +
+          'Este rol es necesario para el funcionamiento del sistema.'
+        );
+      }
+
+      // No permitir cambiar el nombre del rol de administrador
+      if (data.nombre && (data.nombre as string).toUpperCase() !== 'ADMIN') {
+        throw new BadRequestException(
+          'No se puede cambiar el nombre del rol de administrador del sistema. ' +
+          'El nombre "ADMIN" es requerido para el funcionamiento del sistema.'
+        );
+      }
+
+      // No permitir bajar el nivel de acceso del administrador
+      if (data.nivel_acceso && (data.nivel_acceso as number) < 10) {
+        throw new BadRequestException(
+          'No se puede reducir el nivel de acceso del rol de administrador del sistema. ' +
+          'El nivel 10 es requerido para el funcionamiento del sistema.'
+        );
+      }
     }
 
     // Si se va a DESACTIVAR el rol, verificar que no tenga usuarios asignados

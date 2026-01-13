@@ -17,13 +17,19 @@ export class RolesGuard implements CanActivate {
     }
 
     const { user } = context.switchToHttp().getRequest();
+    const userRole = user?.rol?.toUpperCase() || '';
+
+    // Case-insensitive comparison for role names
+    const hasPermission = requiredRoles.some(
+      (role) => userRole === role.toUpperCase()
+    );
 
     console.log('RolesGuard Check:', {
       userRole: user?.rol,
       requiredRoles,
-      hasPermission: requiredRoles.some((role) => user.rol === role)
+      hasPermission
     });
 
-    return requiredRoles.some((role) => user.rol === role);
+    return hasPermission;
   }
 }
