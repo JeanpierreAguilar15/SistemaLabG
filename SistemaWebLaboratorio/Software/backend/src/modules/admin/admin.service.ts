@@ -184,6 +184,20 @@ export class AdminService {
   }
 
   async createService(data: Prisma.ServicioCreateInput, adminId: number) {
+    // Validar nombre único (case insensitive)
+    const existingService = await this.prisma.servicio.findFirst({
+      where: {
+        nombre: { equals: data.nombre as string, mode: 'insensitive' },
+      },
+    });
+
+    if (existingService) {
+      throw new BadRequestException(
+        `Ya existe un servicio con el nombre "${existingService.nombre}". ` +
+        'Los nombres de servicios deben ser únicos.'
+      );
+    }
+
     const service = await this.prisma.servicio.create({
       data,
     });
@@ -207,6 +221,23 @@ export class AdminService {
       throw new NotFoundException('Servicio no encontrado');
     }
 
+    // Validar nombre único si se está actualizando el nombre (case insensitive)
+    if (data.nombre) {
+      const existingService = await this.prisma.servicio.findFirst({
+        where: {
+          nombre: { equals: data.nombre as string, mode: 'insensitive' },
+          codigo_servicio: { not: codigo_servicio },
+        },
+      });
+
+      if (existingService) {
+        throw new BadRequestException(
+          `Ya existe un servicio con el nombre "${existingService.nombre}". ` +
+          'Los nombres de servicios deben ser únicos.'
+        );
+      }
+    }
+
     const updatedService = await this.prisma.servicio.update({
       where: { codigo_servicio },
       data,
@@ -225,10 +256,47 @@ export class AdminService {
   async deleteService(codigo_servicio: number, adminId: number) {
     const service = await this.prisma.servicio.findUnique({
       where: { codigo_servicio },
+      include: {
+        _count: {
+          select: { horarios: true, slots: true },
+        },
+      },
     });
 
     if (!service) {
       throw new NotFoundException('Servicio no encontrado');
+    }
+
+    // Verificar si tiene horarios activos
+    const horariosActivos = await this.prisma.horarioAtencion.count({
+      where: {
+        codigo_servicio,
+        activo: true,
+      },
+    });
+
+    if (horariosActivos > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar: el servicio tiene ${horariosActivos} horario(s) de atención activo(s). ` +
+        'Desactive los horarios primero.'
+      );
+    }
+
+    // Verificar si tiene citas pendientes
+    const citasPendientes = await this.prisma.cita.count({
+      where: {
+        slot: {
+          codigo_servicio,
+        },
+        estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+      },
+    });
+
+    if (citasPendientes > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar: el servicio tiene ${citasPendientes} cita(s) pendiente(s). ` +
+        'Cancele o complete las citas primero.'
+      );
     }
 
     // Desactivar en lugar de eliminar

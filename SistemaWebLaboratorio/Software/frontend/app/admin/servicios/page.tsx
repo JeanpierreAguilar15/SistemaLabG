@@ -25,6 +25,11 @@ export default function ServicesManagement() {
   const [showModal, setShowModal] = useState(false)
   const [editingService, setEditingService] = useState<Service | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{
+    show: boolean
+    serviceId: number | null
+    serviceName: string
+  }>({ show: false, serviceId: null, serviceName: '' })
   const [formData, setFormData] = useState<ServiceFormData>({
     nombre: '',
     descripcion: '',
@@ -182,13 +187,15 @@ export default function ServicesManagement() {
     }
   }
 
-  const handleDelete = async (serviceId: number, serviceName: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar el servicio "${serviceName}"?`)) {
-      return
-    }
+  const handleDeleteClick = (serviceId: number, serviceName: string) => {
+    setConfirmDelete({ show: true, serviceId, serviceName })
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!confirmDelete.serviceId) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/services/${serviceId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/services/${confirmDelete.serviceId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -196,18 +203,20 @@ export default function ServicesManagement() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Servicio eliminado correctamente' })
+        setMessage({ type: 'success', text: 'Servicio desactivado correctamente' })
         loadServices()
       } else {
         const error = await response.json()
         setMessage({
           type: 'error',
-          text: error.message || 'Error al eliminar el servicio',
+          text: error.message || 'Error al desactivar el servicio',
         })
       }
     } catch (error) {
       console.error('Error deleting service:', error)
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setConfirmDelete({ show: false, serviceId: null, serviceName: '' })
     }
   }
 
@@ -351,7 +360,7 @@ export default function ServicesManagement() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleDelete(service.codigo_servicio, service.nombre)}
+                  onClick={() => handleDeleteClick(service.codigo_servicio, service.nombre)}
                   className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
                   title="Eliminar servicio"
                 >
@@ -478,6 +487,48 @@ export default function ServicesManagement() {
                   </Button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Delete */}
+      {confirmDelete.show && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setConfirmDelete({ show: false, serviceId: null, serviceName: '' })}></div>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex-shrink-0 w-10 h-10 bg-lab-warning-100 rounded-full flex items-center justify-center">
+                    <svg className="w-6 h-6 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-lab-neutral-900">Desactivar Servicio</h3>
+                </div>
+                <p className="text-lab-neutral-600">
+                  ¿Estás seguro de que deseas desactivar el servicio <span className="font-semibold">"{confirmDelete.serviceName}"</span>?
+                </p>
+                <p className="text-sm text-lab-neutral-500 mt-2">
+                  El servicio quedará inactivo y no estará disponible para agendar nuevas citas.
+                </p>
+              </div>
+              <div className="bg-lab-neutral-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <Button
+                  onClick={handleDeleteConfirm}
+                  className="w-full sm:w-auto sm:ml-3 bg-lab-warning-600 hover:bg-lab-warning-700 text-white"
+                >
+                  Desactivar
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setConfirmDelete({ show: false, serviceId: null, serviceName: '' })}
+                  className="mt-3 w-full sm:mt-0 sm:w-auto"
+                >
+                  Cancelar
+                </Button>
+              </div>
             </div>
           </div>
         </div>
