@@ -65,6 +65,7 @@ model Usuario {
   rol                           Rol       @relation(fields: [codigo_rol], references: [codigo_rol])
 
   sesiones                      Sesion[]
+  tokens_recuperacion           TokenRecuperacion[]
   consentimientos               Consentimiento[]
   perfil_medico                 PerfilMedico?
   citas_como_paciente           Cita[]    @relation("CitasPaciente")
@@ -106,6 +107,25 @@ model Sesion {
   usuario             Usuario   @relation(fields: [codigo_usuario], references: [codigo_usuario])
 
   @@map("sesion")
+  @@schema("usuarios")
+}
+
+model TokenRecuperacion {
+  codigo_token        Int       @id @default(autoincrement())
+  codigo_usuario      Int
+  codigo              String    @db.VarChar(6)
+  email               String    @db.VarChar(100)
+  fecha_creacion      DateTime  @default(now())
+  fecha_expiracion    DateTime
+  usado               Boolean   @default(false)
+  fecha_uso           DateTime?
+  ip_address          String?   @db.VarChar(45)
+
+  usuario             Usuario   @relation(fields: [codigo_usuario], references: [codigo_usuario])
+
+  @@index([email, codigo])
+  @@index([codigo_usuario])
+  @@map("token_recuperacion")
   @@schema("usuarios")
 }
 

@@ -8,6 +8,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { AuditoriaModule } from '../auditoria/auditoria.module';
+import { ComunicacionesModule } from '../comunicaciones/comunicaciones.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AuditoriaModule } from '../auditoria/auditoria.module';
       }),
     }),
     AuditoriaModule,
+    ComunicacionesModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtRefreshStrategy, LocalStrategy],

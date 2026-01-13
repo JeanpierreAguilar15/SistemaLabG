@@ -9,14 +9,19 @@ export class ForgotPasswordDto {
 }
 
 export class ResetPasswordDto {
-  @ApiProperty({ example: 'newpassword123', description: 'Nueva contraseña' })
+  @ApiProperty({ example: 'paciente@example.com', description: 'Correo electrónico' })
+  @IsEmail({}, { message: 'El correo electrónico no es válido' })
+  @IsNotEmpty({ message: 'El correo electrónico es requerido' })
+  email: string;
+
+  @ApiProperty({ example: '123456', description: 'Código de verificación de 6 dígitos' })
+  @IsString()
+  @IsNotEmpty({ message: 'El código es requerido' })
+  token: string;
+
+  @ApiProperty({ example: 'NuevaContraseña123', description: 'Nueva contraseña (mín. 8 caracteres, mayúscula, minúscula, número)' })
   @IsString()
   @IsNotEmpty({ message: 'La contraseña es requerida' })
-  @MinLength(6, { message: 'La contraseña debe tener al menos 6 caracteres' })
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
   newPassword: string;
-
-  @ApiProperty({ example: 'token-uuid', description: 'Token de recuperación' })
-  @IsString()
-  @IsNotEmpty({ message: 'El token es requerido' })
-  token: string;
 }
