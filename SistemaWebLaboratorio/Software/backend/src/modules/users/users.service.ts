@@ -187,6 +187,54 @@ export class UsersService {
       }
     }
 
+    // Validación crítica: Proteger al último administrador del sistema
+    if (data.codigo_rol) {
+      const currentUser = await this.prisma.usuario.findUnique({
+        where: { codigo_usuario },
+        include: { rol: true },
+      });
+
+      const newRole = await this.prisma.rol.findUnique({
+        where: { codigo_rol: data.codigo_rol },
+      });
+
+      if (currentUser && newRole) {
+        const isCurrentAdmin = currentUser.rol.nivel_acceso === 10 || currentUser.rol.nombre.toUpperCase() === 'ADMIN';
+        const isNewRoleAdmin = newRole.nivel_acceso === 10 || newRole.nombre.toUpperCase() === 'ADMIN';
+
+        // Si el usuario actual es admin y se está degradando
+        if (isCurrentAdmin && !isNewRoleAdmin) {
+          // Verificar si es el único admin activo
+          const adminCount = await this.prisma.usuario.count({
+            where: {
+              activo: true,
+              rol: {
+                OR: [
+                  { nivel_acceso: 10 },
+                  { nombre: { equals: 'ADMIN', mode: 'insensitive' } },
+                ],
+              },
+            },
+          });
+
+          if (adminCount <= 1) {
+            throw new BadRequestException(
+              'No se puede cambiar el rol del único administrador del sistema. ' +
+              'Debe existir al menos un usuario con rol de administrador.'
+            );
+          }
+
+          // Si el admin está cambiando su PROPIO rol
+          if (adminId && adminId === codigo_usuario) {
+            throw new BadRequestException(
+              'No puede cambiar su propio rol de administrador. ' +
+              'Solicite a otro administrador que realice este cambio.'
+            );
+          }
+        }
+      }
+    }
+
     const updatedUser = await this.prisma.usuario.update({
       where: { codigo_usuario },
       data,
