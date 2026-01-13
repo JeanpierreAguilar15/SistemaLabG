@@ -141,7 +141,7 @@ export class ComunicacionesService {
                 <tr>
                   <td style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 40px 30px; text-align: center;">
                     <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">
-                      🔬 Laboratorio Clínico Franz
+                      Laboratorio Clínico Franz
                     </h1>
                     <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0; font-size: 14px;">
                       Tu salud, nuestra prioridad
@@ -153,7 +153,7 @@ export class ComunicacionesService {
                 <tr>
                   <td style="padding: 40px 30px;">
                     <h2 style="color: #1e293b; margin: 0 0 20px; font-size: 24px; text-align: center;">
-                      🔐 Recuperación de Contraseña
+                      Recuperación de Contraseña
                     </h2>
 
                     <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 25px;">
@@ -174,7 +174,7 @@ export class ComunicacionesService {
                         ${code}
                       </p>
                       <p style="color: #94a3b8; font-size: 13px; margin: 15px 0 0;">
-                        ⏱️ Válido por ${expiresInMinutes} minutos
+                        Válido por ${expiresInMinutes} minutos
                       </p>
                     </div>
 
@@ -192,7 +192,7 @@ export class ComunicacionesService {
                     <!-- Alerta de seguridad -->
                     <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 0 8px 8px 0; padding: 15px 20px; margin: 0 0 25px;">
                       <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.5;">
-                        <strong>⚠️ Importante:</strong> Si no solicitaste este cambio, ignora este correo.
+                        <strong>Importante:</strong> Si no solicitaste este cambio, ignora este correo.
                         Tu contraseña permanecerá sin cambios.
                       </p>
                     </div>
@@ -211,10 +211,10 @@ export class ComunicacionesService {
                       <tr>
                         <td style="text-align: center;">
                           <p style="color: #64748b; font-size: 13px; margin: 0 0 10px;">
-                            📍 Av. Principal 123, Quito - Ecuador
+                            Av. Principal 123, Quito - Ecuador
                           </p>
                           <p style="color: #64748b; font-size: 13px; margin: 0 0 10px;">
-                            📞 (02) 1234-5678 | ✉️ info@labfranz.com
+                            Tel: (02) 1234-5678 | Email: info@labfranz.com
                           </p>
                           <p style="color: #94a3b8; font-size: 12px; margin: 15px 0 0;">
                             © ${new Date().getFullYear()} Laboratorio Clínico Franz. Todos los derechos reservados.
@@ -245,7 +245,7 @@ export class ComunicacionesService {
       const result = await this.transporter.sendMail({
         from: '"Laboratorio Franz" <' + this.configService.get('SMTP_USER') + '>',
         to: user.email,
-        subject: `🔐 Código de Verificación: ${code} - Laboratorio Franz`,
+        subject: `Código de Verificación: ${code} - Laboratorio Franz`,
         html,
       });
       this.logger.log(`Recovery email SENT to ${user.email} - MessageId: ${result.messageId}`);

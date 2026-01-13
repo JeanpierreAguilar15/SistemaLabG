@@ -110,7 +110,8 @@ export default function ForgotPasswordPage() {
 
     try {
       await authApi.verifyRecoveryCode(email, fullCode)
-      setSuccess('Código verificado correctamente')
+      // Clear success message and move to password step
+      setSuccess('')
       setStep('password')
     } catch (err) {
       if (err instanceof ApiError) {
