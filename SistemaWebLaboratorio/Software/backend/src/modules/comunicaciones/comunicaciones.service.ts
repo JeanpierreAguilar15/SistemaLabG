@@ -2,13 +2,38 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
+export interface EmailResult {
+  success: boolean;
+  message: string;
+  messageId?: string;
+}
+
 @Injectable()
 export class ComunicacionesService {
   private transporter: nodemailer.Transporter;
   private readonly logger = new Logger(ComunicacionesService.name);
+  private smtpVerified = false;
 
   constructor(private configService: ConfigService) {
     this.initializeTransporter();
+  }
+
+  /**
+   * Check if email service is properly configured and verified
+   */
+  isReady(): boolean {
+    return !!this.transporter && this.smtpVerified;
+  }
+
+  /**
+   * Get email service status for debugging
+   */
+  getStatus(): { configured: boolean; verified: boolean; host?: string } {
+    return {
+      configured: !!this.transporter,
+      verified: this.smtpVerified,
+      host: this.configService.get<string>('SMTP_HOST'),
+    };
   }
 
   private initializeTransporter() {
@@ -16,6 +41,9 @@ export class ComunicacionesService {
     const port = this.configService.get<number>('SMTP_PORT');
     const user = this.configService.get<string>('SMTP_USER');
     const pass = this.configService.get<string>('SMTP_PASS');
+
+    // Debug: mostrar qué variables se encontraron
+    this.logger.debug(`SMTP Config - Host: ${host ? 'SET' : 'MISSING'}, Port: ${port ? port : 'MISSING'}, User: ${user ? 'SET' : 'MISSING'}, Pass: ${pass ? 'SET' : 'MISSING'}`);
 
     if (host && port && user && pass) {
       this.transporter = nodemailer.createTransport({
@@ -27,7 +55,18 @@ export class ComunicacionesService {
           pass,
         },
       });
-      this.logger.log('SMTP Transporter initialized');
+      this.logger.log(`SMTP Transporter initialized - Host: ${host}, Port: ${port}, User: ${user}`);
+
+      // Verificar conexión SMTP
+      this.transporter.verify((error, success) => {
+        if (error) {
+          this.logger.error('SMTP Connection FAILED:', error.message);
+          this.smtpVerified = false;
+        } else {
+          this.logger.log('SMTP Connection VERIFIED - Ready to send emails');
+          this.smtpVerified = true;
+        }
+      });
     } else {
       this.logger.warn(
         'SMTP credentials not found. Email sending will be disabled or logged only.',
@@ -193,22 +232,28 @@ export class ComunicacionesService {
       </html>
     `;
 
+    this.logger.log(`>>> Attempting to send recovery email to ${user.email} with code ${code}`);
+
     if (!this.transporter) {
-      this.logger.warn(`[MOCK EMAIL] Recovery code ${code} to ${user.email}`);
+      this.logger.warn(`[MOCK EMAIL] Recovery code ${code} to ${user.email} - NO TRANSPORTER`);
       this.logger.debug(`Reset link: ${resetLink}`);
-      return;
+      return { success: false, message: 'Email service not configured' } as EmailResult;
     }
 
     try {
-      await this.transporter.sendMail({
+      this.logger.log(`>>> Transporter exists, sending email now...`);
+      const result = await this.transporter.sendMail({
         from: '"Laboratorio Franz" <' + this.configService.get('SMTP_USER') + '>',
         to: user.email,
         subject: `🔐 Código de Verificación: ${code} - Laboratorio Franz`,
         html,
       });
-      this.logger.log(`Recovery email sent to ${user.email}`);
-    } catch (error) {
-      this.logger.error(`Error sending recovery email to ${user.email}`, error);
+      this.logger.log(`Recovery email SENT to ${user.email} - MessageId: ${result.messageId}`);
+      return { success: true, message: 'Email sent successfully', messageId: result.messageId } as EmailResult;
+    } catch (error: any) {
+      this.logger.error(`ERROR sending recovery email to ${user.email}: ${error.message}`);
+      this.logger.error(`Full error:`, error);
+      return { success: false, message: error.message } as EmailResult;
     }
   }
 

@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +13,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 import { SecurityLoggingService, LoginFailReason } from '../../auditoria/services/security-logging.service';
+import { ComunicacionesService } from '../../comunicaciones/comunicaciones.service';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +22,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly securityLogging: SecurityLoggingService,
+    private readonly comunicacionesService: ComunicacionesService,
   ) {}
 
   /**
@@ -269,17 +272,33 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, usuario.password_hash);
 
     if (!isPasswordValid) {
-      // Increment failed attempts usando configuración dinámica
-      const intentos = usuario.intentos_fallidos + 1;
-      const bloqueado = intentos >= maxIntentos;
+      // Increment failed attempts usando operación atómica para evitar race conditions
+      // Usamos una transacción interactiva para garantizar atomicidad
+      const { intentos, bloqueado } = await this.prisma.$transaction(async (tx) => {
+        // Incrementar atómicamente usando increment
+        const usuarioActualizado = await tx.usuario.update({
+          where: { codigo_usuario: usuario.codigo_usuario },
+          data: {
+            intentos_fallidos: { increment: 1 },
+          },
+          select: { intentos_fallidos: true },
+        });
 
-      await this.prisma.usuario.update({
-        where: { codigo_usuario: usuario.codigo_usuario },
-        data: {
-          intentos_fallidos: intentos,
-          cuenta_bloqueada: bloqueado,
-          fecha_bloqueo: bloqueado ? new Date() : null,
-        },
+        const intentosActuales = usuarioActualizado.intentos_fallidos;
+        const debeBloquearse = intentosActuales >= maxIntentos;
+
+        // Si debe bloquearse, actualizar el estado de bloqueo
+        if (debeBloquearse) {
+          await tx.usuario.update({
+            where: { codigo_usuario: usuario.codigo_usuario },
+            data: {
+              cuenta_bloqueada: true,
+              fecha_bloqueo: new Date(),
+            },
+          });
+        }
+
+        return { intentos: intentosActuales, bloqueado: debeBloquearse };
       });
 
       // Registrar intento fallido - credenciales inválidas
@@ -750,6 +769,202 @@ export class AuthService {
     }
 
     return { message: 'Consentimientos actualizados correctamente' };
+  }
+
+  // ==================== RECUPERACIÓN DE CONTRASEÑA ====================
+
+  /**
+   * Solicitar recuperación de contraseña
+   * Genera un código de 6 dígitos y envía email con diseño profesional
+   */
+  async forgotPassword(email: string, ipAddress?: string) {
+    // Buscar usuario por email
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { email },
+    });
+
+    // Por seguridad, siempre respondemos lo mismo aunque no exista el usuario
+    if (!usuario) {
+      return {
+        message: 'Si el correo existe en nuestro sistema, recibirás un código de recuperación',
+      };
+    }
+
+    // Verificar que la cuenta esté activa
+    if (!usuario.activo) {
+      return {
+        message: 'Si el correo existe en nuestro sistema, recibirás un código de recuperación',
+      };
+    }
+
+    // Invalidar tokens de recuperación anteriores
+    await this.prisma.tokenRecuperacion.updateMany({
+      where: {
+        codigo_usuario: usuario.codigo_usuario,
+        usado: false,
+      },
+      data: {
+        usado: true,
+        fecha_uso: new Date(),
+      },
+    });
+
+    // Generar código de 6 dígitos
+    const codigo = this.comunicacionesService.generateVerificationCode();
+
+    // Calcular fecha de expiración (15 minutos)
+    const expiresInMinutes = 15;
+    const fecha_expiracion = new Date();
+    fecha_expiracion.setMinutes(fecha_expiracion.getMinutes() + expiresInMinutes);
+
+    // Guardar token en base de datos
+    await this.prisma.tokenRecuperacion.create({
+      data: {
+        codigo_usuario: usuario.codigo_usuario,
+        codigo,
+        email: usuario.email,
+        fecha_expiracion,
+        ip_address: ipAddress,
+      },
+    });
+
+    // Enviar email con diseño profesional
+    await this.comunicacionesService.sendPasswordRecoveryEmail(
+      { email: usuario.email, nombres: usuario.nombres },
+      codigo,
+      expiresInMinutes,
+    );
+
+    // Log de actividad
+    await this.logActivity(
+      usuario.codigo_usuario,
+      'SOLICITUD_RECUPERACION',
+      'Usuario',
+      usuario.codigo_usuario,
+      'Solicitud de recuperación de contraseña',
+      ipAddress,
+    );
+
+    return {
+      message: 'Si el correo existe en nuestro sistema, recibirás un código de recuperación',
+    };
+  }
+
+  /**
+   * Verificar código de recuperación
+   */
+  async verifyRecoveryCode(email: string, codigo: string) {
+    const token = await this.prisma.tokenRecuperacion.findFirst({
+      where: {
+        email,
+        codigo,
+        usado: false,
+        fecha_expiracion: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!token) {
+      throw new BadRequestException('Código inválido o expirado');
+    }
+
+    return {
+      valid: true,
+      message: 'Código verificado correctamente',
+    };
+  }
+
+  /**
+   * Resetear contraseña con código de verificación
+   */
+  async resetPassword(email: string, codigo: string, newPassword: string, ipAddress?: string) {
+    // Buscar token válido
+    const token = await this.prisma.tokenRecuperacion.findFirst({
+      where: {
+        email,
+        codigo,
+        usado: false,
+        fecha_expiracion: {
+          gt: new Date(),
+        },
+      },
+      include: {
+        usuario: true,
+      },
+    });
+
+    if (!token) {
+      throw new BadRequestException('Código inválido o expirado');
+    }
+
+    // Validar fortaleza de la nueva contraseña
+    if (newPassword.length < 8) {
+      throw new BadRequestException('La contraseña debe tener al menos 8 caracteres');
+    }
+
+    // Validar que tenga mayúscula, minúscula y número
+    const hasUppercase = /[A-Z]/.test(newPassword);
+    const hasLowercase = /[a-z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+
+    if (!hasUppercase || !hasLowercase || !hasNumber) {
+      throw new BadRequestException(
+        'La contraseña debe incluir al menos una mayúscula, una minúscula y un número',
+      );
+    }
+
+    // Hash de la nueva contraseña
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(newPassword, salt);
+
+    // Actualizar contraseña del usuario
+    await this.prisma.usuario.update({
+      where: { codigo_usuario: token.codigo_usuario },
+      data: {
+        password_hash,
+        salt,
+        intentos_fallidos: 0,
+        cuenta_bloqueada: false,
+        fecha_bloqueo: null,
+      },
+    });
+
+    // Marcar token como usado
+    await this.prisma.tokenRecuperacion.update({
+      where: { codigo_token: token.codigo_token },
+      data: {
+        usado: true,
+        fecha_uso: new Date(),
+      },
+    });
+
+    // Revocar todas las sesiones activas (seguridad)
+    await this.prisma.sesion.updateMany({
+      where: {
+        codigo_usuario: token.codigo_usuario,
+        activo: true,
+      },
+      data: {
+        activo: false,
+        revocado: true,
+        fecha_revocacion: new Date(),
+      },
+    });
+
+    // Log de actividad
+    await this.logActivity(
+      token.codigo_usuario,
+      'RESET_PASSWORD',
+      'Usuario',
+      token.codigo_usuario,
+      'Contraseña restablecida mediante código de recuperación',
+      ipAddress,
+    );
+
+    return {
+      message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.',
+    };
   }
 
   /**

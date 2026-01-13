@@ -5,6 +5,7 @@ import { AuthService } from '../services/auth.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
+import { ForgotPasswordDto, ResetPasswordDto, VerifyRecoveryCodeDto } from '../dto/recovery.dto';
 import { Public } from '../decorators/public.decorator';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
@@ -155,5 +156,43 @@ export class AuthController {
     @Body() consentimientos: Array<{ tipo: string; aceptado: boolean }>,
   ) {
     return this.authService.updateConsentimientos(codigo_usuario, consentimientos);
+  }
+
+  // ==================== RECUPERACIÓN DE CONTRASEÑA ====================
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Solicitar recuperación de contraseña' })
+  @ApiResponse({ status: 200, description: 'Si el email existe, se enviará un código de recuperación' })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto, @Req() request: Request) {
+    const ipAddress = request.ip || request.socket.remoteAddress;
+    return this.authService.forgotPassword(forgotPasswordDto.email, ipAddress);
+  }
+
+  @Public()
+  @Post('verify-recovery-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar código de recuperación' })
+  @ApiResponse({ status: 200, description: 'Código válido' })
+  @ApiResponse({ status: 400, description: 'Código inválido o expirado' })
+  async verifyRecoveryCode(@Body() verifyDto: VerifyRecoveryCodeDto) {
+    return this.authService.verifyRecoveryCode(verifyDto.email, verifyDto.codigo);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Restablecer contraseña con código de verificación' })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada correctamente' })
+  @ApiResponse({ status: 400, description: 'Código inválido, expirado o contraseña inválida' })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto, @Req() request: Request) {
+    const ipAddress = request.ip || request.socket.remoteAddress;
+    return this.authService.resetPassword(
+      resetPasswordDto.email,
+      resetPasswordDto.codigo,
+      resetPasswordDto.newPassword,
+      ipAddress,
+    );
   }
 }
