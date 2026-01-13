@@ -5,13 +5,12 @@ import { PagosController } from './pagos.controller';
 import { CotizacionesService } from './cotizaciones.service';
 import { PagosService } from './pagos.service';
 import { CotizacionPdfService } from './cotizacion-pdf.service';
-import { PayPhoneService } from './payphone.service';
 import { PrismaModule } from '@prisma/prisma.module';
 
 @Module({
   imports: [PrismaModule, ConfigModule],
   controllers: [CotizacionesController, PagosController],
-  providers: [CotizacionesService, PagosService, CotizacionPdfService, PayPhoneService],
-  exports: [CotizacionesService, PagosService, CotizacionPdfService, PayPhoneService],
+  providers: [CotizacionesService, PagosService, CotizacionPdfService],
+  exports: [CotizacionesService, PagosService, CotizacionPdfService],
 })
 export class PagosModule {}

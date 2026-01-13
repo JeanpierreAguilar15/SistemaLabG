@@ -106,12 +106,14 @@ export default function CotizacionesAdminPage() {
     switch (estado) {
       case 'PENDIENTE':
         return 'bg-lab-warning-100 text-lab-warning-800'
+      case 'PENDIENTE_PAGO_VENTANILLA':
+        return 'bg-amber-100 text-amber-800'
+      case 'PAGADA':
+        return 'bg-lab-success-100 text-lab-success-800'
       case 'APROBADA':
         return 'bg-lab-success-100 text-lab-success-800'
       case 'RECHAZADA':
         return 'bg-lab-danger-100 text-lab-danger-800'
-      case 'CONVERTIDA_A_PAGO':
-        return 'bg-lab-info-100 text-lab-info-800'
       case 'EXPIRADA':
         return 'bg-lab-neutral-100 text-lab-neutral-800'
       default:
@@ -171,10 +173,8 @@ export default function CotizacionesAdminPage() {
                 className="w-full h-10 px-3 rounded-md border border-lab-neutral-300"
               >
                 <option value="TODAS">Todas</option>
-                <option value="PENDIENTE">Pendientes</option>
-                <option value="APROBADA">Aprobadas</option>
-                <option value="RECHAZADA">Rechazadas</option>
-                <option value="CONVERTIDA_A_PAGO">Convertidas a Pago</option>
+                <option value="PENDIENTE_PAGO_VENTANILLA">Pendientes de Pago</option>
+                <option value="PAGADA">Pagadas</option>
                 <option value="EXPIRADA">Expiradas</option>
               </select>
             </div>

@@ -109,10 +109,6 @@ export default function CotizacionesPage() {
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
 
-  // Estados para selección de método de pago
-  const [showMetodoPagoModal, setShowMetodoPagoModal] = useState(false)
-  const [cotizacionParaPago, setCotizacionParaPago] = useState<Cotizacion | null>(null)
-  const [procesandoPago, setProcesandoPago] = useState(false)
 
   useEffect(() => {
     loadExamenes()
@@ -256,93 +252,18 @@ export default function CotizacionesPage() {
 
       if (response.ok) {
         const nuevaCotizacion = await response.json()
-        setMessage({ type: 'success', text: 'Cotización generada exitosamente. Seleccione el método de pago.' })
+        setMessage({ type: 'success', text: 'Cotizacion generada exitosamente. Ahora puedes agendar tu cita.' })
         setExamenesSeleccionados(new Map())
         loadCotizaciones()
-        // Mostrar modal de selección de pago
-        setCotizacionParaPago(nuevaCotizacion)
-        setShowMetodoPagoModal(true)
+        // Abrir directamente el modal para agendar cita
+        setSelectedCotizacion(nuevaCotizacion)
+        setShowAgendarCitaModal(true)
       } else {
         const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al generar cotización' })
+        setMessage({ type: 'error', text: error.message || 'Error al generar cotizacion' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión' })
-    }
-  }
-
-  // Abrir modal de selección de pago para cotización existente
-  const handleSeleccionarPago = (cotizacion: Cotizacion) => {
-    setCotizacionParaPago(cotizacion)
-    setShowMetodoPagoModal(true)
-  }
-
-  // Procesar selección de método de pago
-  const handleConfirmarMetodoPago = async (metodo: 'ONLINE' | 'VENTANILLA') => {
-    if (!cotizacionParaPago) return
-
-    try {
-      setProcesandoPago(true)
-
-      if (metodo === 'ONLINE') {
-        // Iniciar pago con PayPhone
-        const pagoResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/${cotizacionParaPago.codigo_cotizacion}/payphone/iniciar`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-            },
-          }
-        )
-
-        if (pagoResponse.ok) {
-          const { paymentUrl } = await pagoResponse.json()
-          setShowMetodoPagoModal(false)
-          setCotizacionParaPago(null)
-          // Redirigir a PayPhone
-          window.location.href = paymentUrl
-        } else {
-          const error = await pagoResponse.json()
-          setMessage({ type: 'error', text: error.message || 'Error al iniciar pago' })
-        }
-      } else {
-        // Pago en ventanilla
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/${cotizacionParaPago.codigo_cotizacion}/seleccionar-pago`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({ metodo_pago: metodo }),
-          }
-        )
-
-        if (response.ok) {
-          const cotizacionActualizada = await response.json()
-          setShowMetodoPagoModal(false)
-          setCotizacionParaPago(null)
-          loadCotizaciones()
-
-          setMessage({
-            type: 'success',
-            text: 'Has elegido pagar en ventanilla. Ahora puedes agendar tu cita y pagar cuando llegues al laboratorio.',
-          })
-          // Abrir modal para agendar cita
-          setSelectedCotizacion(cotizacionActualizada)
-          setShowAgendarCitaModal(true)
-        } else {
-          const error = await response.json()
-          setMessage({ type: 'error', text: error.message || 'Error al seleccionar método de pago' })
-        }
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión' })
-    } finally {
-      setProcesandoPago(false)
+      setMessage({ type: 'error', text: 'Error de conexion' })
     }
   }
 
@@ -425,20 +346,14 @@ export default function CotizacionesPage() {
     }
   }
 
-  // Determinar qué acciones están disponibles para una cotización
+  // Determinar que acciones estan disponibles para una cotizacion
   const getAccionesDisponibles = (cotizacion: Cotizacion) => {
     const acciones = {
-      puedeSeleccionarPago: false,
       puedeAgendarCita: false,
       tieneCita: !!cotizacion.cita,
     }
 
-    // Solo puede seleccionar pago si está en PENDIENTE o ACEPTADA
-    if (['PENDIENTE', 'ACEPTADA'].includes(cotizacion.estado)) {
-      acciones.puedeSeleccionarPago = true
-    }
-
-    // Solo puede agendar cita si tiene método de pago seleccionado y no tiene cita
+    // Puede agendar cita si esta pendiente de pago o pagada y no tiene cita
     if (['PAGADA', 'PENDIENTE_PAGO_VENTANILLA'].includes(cotizacion.estado) && !cotizacion.cita) {
       acciones.puedeAgendarCita = true
     }
@@ -703,11 +618,6 @@ export default function CotizacionesPage() {
                         <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(cotizacion.estado)}`}>
                           {getEstadoLabel(cotizacion.estado)}
                         </span>
-                        {cotizacion.metodo_pago_seleccionado && (
-                          <span className="ml-2 text-xs text-lab-neutral-500">
-                            ({cotizacion.metodo_pago_seleccionado === 'VENTANILLA' ? 'Ventanilla' : 'Online'})
-                          </span>
-                        )}
                       </div>
 
                       <div className="text-sm text-lab-neutral-700">
@@ -726,16 +636,9 @@ export default function CotizacionesPage() {
                         </svg>
                       </Button>
 
-                      {/* Botón para seleccionar método de pago */}
-                      {acciones.puedeSeleccionarPago && (
-                        <Button size="sm" onClick={() => handleSeleccionarPago(cotizacion)}>
-                          Seleccionar Pago
-                        </Button>
-                      )}
-
-                      {/* Botón para agendar cita (solo si ya seleccionó método de pago) */}
+                      {/* Boton para agendar cita */}
                       {acciones.puedeAgendarCita && (
-                        <Button size="sm" variant="outline" onClick={() => handleAgendarCita(cotizacion)}>
+                        <Button size="sm" onClick={() => handleAgendarCita(cotizacion)}>
                           Agendar Cita
                         </Button>
                       )}
@@ -927,113 +830,6 @@ export default function CotizacionesPage() {
         </div>
       )}
 
-      {/* Modal Selección de Método de Pago */}
-      {showMetodoPagoModal && cotizacionParaPago && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full">
-            <div className="p-6 border-b border-lab-neutral-200">
-              <h2 className="text-xl font-bold text-lab-neutral-900">
-                Seleccionar Método de Pago
-              </h2>
-              <p className="text-sm text-lab-neutral-600 mt-1">
-                Cotización: {cotizacionParaPago.numero_cotizacion}
-              </p>
-            </div>
-
-            <div className="p-6">
-              {/* Resumen de la cotización */}
-              <div className="bg-lab-neutral-50 rounded-lg p-4 mb-6">
-                <div className="flex justify-between items-center">
-                  <span className="text-lab-neutral-600">Total a pagar:</span>
-                  <span className="text-2xl font-bold text-lab-primary-600">
-                    ${Number(cotizacionParaPago.total).toFixed(2)}
-                  </span>
-                </div>
-                <p className="text-sm text-lab-neutral-500 mt-2">
-                  {cotizacionParaPago.detalles?.length || 0} examen(es) incluido(s)
-                </p>
-              </div>
-
-              {/* Opciones de pago */}
-              <div className="space-y-4">
-                {/* Opción Online */}
-                <button
-                  onClick={() => handleConfirmarMetodoPago('ONLINE')}
-                  disabled={procesandoPago}
-                  className="w-full p-4 border-2 border-lab-neutral-200 rounded-lg hover:border-lab-primary-500 transition-colors text-left group disabled:opacity-50"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
-                      <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lab-neutral-900">Pagar en Línea</h3>
-                      <p className="text-sm text-lab-neutral-600 mt-1">
-                        Paga con tarjeta de crédito o débito de forma segura. Podrás agendar tu cita inmediatamente después del pago.
-                      </p>
-                      <span className="inline-flex items-center text-xs text-blue-600 mt-2">
-                        <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                        Pago seguro con PayPhone
-                      </span>
-                    </div>
-                    <svg className="w-5 h-5 text-lab-neutral-400 group-hover:text-lab-primary-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </button>
-
-                {/* Opción Ventanilla */}
-                <button
-                  onClick={() => handleConfirmarMetodoPago('VENTANILLA')}
-                  disabled={procesandoPago}
-                  className="w-full p-4 border-2 border-lab-neutral-200 rounded-lg hover:border-lab-primary-500 transition-colors text-left group disabled:opacity-50"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 bg-amber-100 rounded-lg group-hover:bg-amber-200 transition-colors">
-                      <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lab-neutral-900">Pagar en Ventanilla</h3>
-                      <p className="text-sm text-lab-neutral-600 mt-1">
-                        Agenda tu cita ahora y paga cuando llegues al laboratorio. Acepta efectivo, tarjeta o transferencia.
-                      </p>
-                      <span className="inline-flex items-center text-xs text-amber-600 mt-2">
-                        <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Paga al llegar al laboratorio
-                      </span>
-                    </div>
-                    <svg className="w-5 h-5 text-lab-neutral-400 group-hover:text-lab-primary-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-lab-neutral-200">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setShowMetodoPagoModal(false)
-                  setCotizacionParaPago(null)
-                }}
-                disabled={procesandoPago}
-              >
-                Cancelar
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

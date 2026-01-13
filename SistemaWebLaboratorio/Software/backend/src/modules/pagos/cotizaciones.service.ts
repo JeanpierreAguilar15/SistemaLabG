@@ -173,7 +173,8 @@ export class CotizacionesService {
     const fecha_expiracion = new Date();
     fecha_expiracion.setDate(fecha_expiracion.getDate() + 30);
 
-    // Crear cotización con detalles en transacción
+    // Crear cotizacion con detalles en transaccion
+    // Se configura automaticamente para pago en ventanilla
     const cotizacion = await this.prisma.$transaction(async (tx) => {
       const nuevaCotizacion = await tx.cotizacion.create({
         data: {
@@ -183,7 +184,9 @@ export class CotizacionesService {
           subtotal: new Decimal(subtotal.toFixed(2)),
           descuento: new Decimal(descuento.toFixed(2)),
           total: new Decimal(total.toFixed(2)),
-          estado: 'PENDIENTE',
+          estado: 'PENDIENTE_PAGO_VENTANILLA',
+          metodo_pago_seleccionado: 'VENTANILLA',
+          fecha_seleccion_pago: new Date(),
           observaciones: data.observaciones,
           detalles: {
             create: examenesConPrecios.map((item) => ({
