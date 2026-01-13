@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +18,8 @@ import { ComunicacionesService } from '../../comunicaciones/comunicaciones.servi
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -778,6 +781,8 @@ export class AuthService {
    * Genera un código de 6 dígitos y envía email con diseño profesional
    */
   async forgotPassword(email: string, ipAddress?: string) {
+    this.logger.log(`[ForgotPassword] Solicitud recibida para: ${email}`);
+
     // Buscar usuario por email
     const usuario = await this.prisma.usuario.findUnique({
       where: { email },
@@ -785,13 +790,17 @@ export class AuthService {
 
     // Por seguridad, siempre respondemos lo mismo aunque no exista el usuario
     if (!usuario) {
+      this.logger.warn(`[ForgotPassword] Usuario no encontrado: ${email}`);
       return {
         message: 'Si el correo existe en nuestro sistema, recibirás un código de recuperación',
       };
     }
 
+    this.logger.log(`[ForgotPassword] Usuario encontrado: ${usuario.nombres} (ID: ${usuario.codigo_usuario})`);
+
     // Verificar que la cuenta esté activa
     if (!usuario.activo) {
+      this.logger.warn(`[ForgotPassword] Cuenta inactiva para: ${email}`);
       return {
         message: 'Si el correo existe en nuestro sistema, recibirás un código de recuperación',
       };
@@ -829,11 +838,18 @@ export class AuthService {
     });
 
     // Enviar email con diseño profesional
-    await this.comunicacionesService.sendPasswordRecoveryEmail(
+    this.logger.log(`[ForgotPassword] Enviando código ${codigo} a ${usuario.email}...`);
+    const emailResult = await this.comunicacionesService.sendPasswordRecoveryEmail(
       { email: usuario.email, nombres: usuario.nombres },
       codigo,
       expiresInMinutes,
     );
+
+    if (emailResult.success) {
+      this.logger.log(`[ForgotPassword] Email enviado exitosamente a ${usuario.email} - MessageId: ${emailResult.messageId}`);
+    } else {
+      this.logger.error(`[ForgotPassword] ERROR al enviar email a ${usuario.email}: ${emailResult.message}`);
+    }
 
     // Log de actividad
     await this.logActivity(
