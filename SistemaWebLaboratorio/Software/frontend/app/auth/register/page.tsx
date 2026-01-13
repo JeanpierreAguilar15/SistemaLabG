@@ -57,15 +57,15 @@ export default function RegisterPage() {
     }
 
     if (formData.password.length < 8) {
-      newErrors.password = 'La contrasena debe tener al menos 8 caracteres'
+      newErrors.password = 'La contraseña debe tener al menos 8 caracteres'
     }
 
     if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(formData.password)) {
-      newErrors.password = 'La contrasena debe incluir mayusculas, minusculas y numeros'
+      newErrors.password = 'La contraseña debe incluir mayúsculas, minúsculas y números'
     }
 
     if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Las contrasenas no coinciden'
+      newErrors.confirmPassword = 'Las contraseñas no coinciden'
     }
 
     setErrors(newErrors)
@@ -139,7 +139,7 @@ export default function RegisterPage() {
             <p className="text-lab-neutral-500 mt-1">
               ¿Ya tienes una cuenta?{' '}
               <Link href="/auth/login" className="text-lab-primary-600 hover:text-lab-primary-700 font-medium hover:underline">
-                Inicia sesion
+                Inicia sesión
               </Link>
             </p>
           </div>
@@ -251,7 +251,7 @@ export default function RegisterPage() {
 
             {/* Password */}
             <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-lab-neutral-700 font-medium text-sm">Contrasena *</Label>
+              <Label htmlFor="password" className="text-lab-neutral-700 font-medium text-sm">Contraseña *</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -312,13 +312,13 @@ export default function RegisterPage() {
               )}
 
               {!formData.password && (
-                <p className="text-xs text-lab-neutral-500">Minimo 8 caracteres, incluye mayusculas, minusculas y numeros</p>
+                <p className="text-xs text-lab-neutral-500">Mínimo 8 caracteres, incluye mayúsculas, minúsculas y números</p>
               )}
             </div>
 
             {/* Confirm Password */}
             <div className="space-y-1.5">
-              <Label htmlFor="confirmPassword" className="text-lab-neutral-700 font-medium text-sm">Confirmar Contrasena *</Label>
+              <Label htmlFor="confirmPassword" className="text-lab-neutral-700 font-medium text-sm">Confirmar Contraseña *</Label>
               <Input
                 id="confirmPassword"
                 type={showPassword ? 'text' : 'password'}
@@ -337,7 +337,7 @@ export default function RegisterPage() {
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Las contrasenas coinciden
+                  Las contraseñas coinciden
                 </p>
               )}
             </div>

@@ -170,10 +170,10 @@ export class AuthService {
 
       return {
         maxIntentos: maxIntentosConfig ? parseInt(maxIntentosConfig.valor) : 5,
-        minutosBloqueo: minutosBloqueoConfig ? parseInt(minutosBloqueoConfig.valor) : 5,
+        minutosBloqueo: minutosBloqueoConfig ? parseInt(minutosBloqueoConfig.valor) : 360, // 6 horas por defecto
       };
     } catch {
-      return { maxIntentos: 5, minutosBloqueo: 5 };
+      return { maxIntentos: 5, minutosBloqueo: 360 }; // 6 horas por defecto
     }
   }
 
@@ -237,12 +237,24 @@ export class AuthService {
         // Continuar con el login normal (no lanzar error)
       } else {
         // Calcular tiempo restante
-        const tiempoRestante = Math.ceil(
+        const tiempoRestanteMinutos = Math.ceil(
           minutosBloqueo -
           (new Date().getTime() - new Date(usuario.fecha_bloqueo!).getTime()) / (1000 * 60)
         );
 
-        // Registrar intento fallido - cuenta bloqueada
+        // Formatear tiempo restante (mostrar horas si es más de 60 minutos)
+        let tiempoRestanteStr: string;
+        if (tiempoRestanteMinutos >= 60) {
+          const horas = Math.floor(tiempoRestanteMinutos / 60);
+          const minutos = tiempoRestanteMinutos % 60;
+          tiempoRestanteStr = minutos > 0
+            ? `${horas} hora(s) y ${minutos} minuto(s)`
+            : `${horas} hora(s)`;
+        } else {
+          tiempoRestanteStr = `${tiempoRestanteMinutos} minuto(s)`;
+        }
+
+        // Registrar intento fallido - cuenta inactiva temporalmente
         await this.securityLogging.logLoginAttempt({
           identificador: identifier,
           ipAddress: ipAddress || 'unknown',
@@ -252,7 +264,7 @@ export class AuthService {
           codigoUsuario: usuario.codigo_usuario,
         });
         throw new UnauthorizedException(
-          `Cuenta bloqueada temporalmente. Intente nuevamente en ${tiempoRestante} minuto(s)`,
+          `Cuenta inactiva temporalmente por seguridad. Intente nuevamente en ${tiempoRestanteStr}`,
         );
       }
     }

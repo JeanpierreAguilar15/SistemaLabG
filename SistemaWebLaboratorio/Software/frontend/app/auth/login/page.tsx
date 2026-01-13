@@ -24,7 +24,6 @@ export default function LoginPage() {
   const [isBlocked, setIsBlocked] = useState(false)
   const [blockTimeRemaining, setBlockTimeRemaining] = useState(0)
   const [failedAttempts, setFailedAttempts] = useState(0)
-  const [rememberMe, setRememberMe] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -114,7 +113,7 @@ export default function LoginPage() {
           setBlockTimeRemaining(blockSeconds)
         }
       } else {
-        setError('Error al iniciar sesion. Por favor intenta de nuevo.')
+        setError('Error al iniciar sesión. Por favor intenta de nuevo.')
       }
     } finally {
       setLoading(false)
@@ -146,7 +145,7 @@ export default function LoginPage() {
               </div>
               <span className="text-2xl font-bold text-lab-primary-700">Laboratorio Franz</span>
             </div>
-            <h1 className="text-3xl font-bold text-lab-neutral-900 mt-6">Iniciar Sesion</h1>
+            <h1 className="text-3xl font-bold text-lab-neutral-900 mt-6">Iniciar Sesión</h1>
             <p className="text-lab-neutral-500 mt-2">
               ¿No tienes una cuenta?{' '}
               <Link href="/auth/register" className="text-lab-primary-600 hover:text-lab-primary-700 font-medium hover:underline">
@@ -178,7 +177,7 @@ export default function LoginPage() {
                     </div>
                   </div>
                   <div className="flex-1">
-                    <p className="font-semibold text-red-800">Cuenta bloqueada temporalmente</p>
+                    <p className="font-semibold text-red-800">Cuenta inactiva temporalmente</p>
                     <p className="text-sm text-red-600 mt-1">Demasiados intentos fallidos. Intente en:</p>
                     <p className="text-2xl font-bold text-red-700 mt-1 font-mono">{formatTimeRemaining(blockTimeRemaining)}</p>
                   </div>
@@ -207,7 +206,7 @@ export default function LoginPage() {
                 <svg className="w-4 h-4 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span>Inicio de sesion exitoso. Redirigiendo...</span>
+                <span>Inicio de sesión exitoso. Redirigiendo...</span>
               </div>
             )}
 
@@ -238,7 +237,7 @@ export default function LoginPage() {
             {/* Password Field */}
             <div className="space-y-2">
               <Label htmlFor="password" className="text-lab-neutral-700 font-medium">
-                Contrasena
+                Contraseña
               </Label>
               <div className="relative">
                 <Input
@@ -276,22 +275,13 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-lab-neutral-300 text-lab-primary-600 focus:ring-lab-primary-500"
-                />
-                <span className="text-sm text-lab-neutral-600">Recordarme</span>
-              </label>
+            {/* Forgot Password */}
+            <div className="flex items-center justify-end">
               <Link
                 href="/auth/forgot-password"
                 className="text-sm text-lab-primary-600 hover:text-lab-primary-700 hover:underline font-medium"
               >
-                ¿Olvidaste tu contrasena?
+                ¿Olvidaste tu contraseña?
               </Link>
             </div>
 
@@ -319,9 +309,9 @@ export default function LoginPage() {
                   <span>Acceso concedido</span>
                 </div>
               ) : isBlocked ? (
-                <span>Cuenta bloqueada</span>
+                <span>Cuenta inactiva</span>
               ) : (
-                'Iniciar Sesion'
+                'Iniciar Sesión'
               )}
             </Button>
           </form>

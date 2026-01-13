@@ -42,8 +42,35 @@ export class SystemConfigController {
   @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener todas las configuraciones (Solo Admin)' })
-  findAll() {
-    return this.systemConfigService.findAll();
+  findAll(@Query('grupo') grupo?: string) {
+    return this.systemConfigService.findAll(false, grupo);
+  }
+
+  @Get('grupos')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener lista de grupos de configuracion' })
+  getGrupos() {
+    return this.systemConfigService.getGrupos();
+  }
+
+  @Get('grupo/:grupo')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener configuraciones por grupo' })
+  findByGrupo(@Param('grupo') grupo: string) {
+    return this.systemConfigService.findByGrupo(grupo);
+  }
+
+  @Post('initialize-login')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Inicializar configuraciones de login por defecto' })
+  initializeLoginDefaults() {
+    return this.systemConfigService.initializeLoginDefaults();
   }
 
   @Get('public')

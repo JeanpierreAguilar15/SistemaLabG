@@ -439,7 +439,7 @@ export default function ConfigurationPage() {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-lab-neutral-900">Seguridad de Login</h2>
-              <p className="text-sm text-lab-neutral-600">Bloqueo temporal de cuentas</p>
+              <p className="text-sm text-lab-neutral-600">Inactivacion temporal de cuentas</p>
             </div>
           </div>
           <div className="space-y-4">
@@ -465,13 +465,13 @@ export default function ConfigurationPage() {
               </div>
             </div>
             <div>
-              <Label htmlFor="minutosBloqueo">Minutos de bloqueo</Label>
+              <Label htmlFor="minutosBloqueo">Minutos de inactividad</Label>
               <div className="flex gap-2 mt-1">
                 <Input
                   id="minutosBloqueo"
                   type="number"
                   min="1"
-                  max="60"
+                  max="720"
                   value={minutosBloqueoInput}
                   onChange={(e) => setMinutosBloqueoInput(e.target.value)}
                   className="flex-1"
@@ -487,14 +487,19 @@ export default function ConfigurationPage() {
             </div>
             <div className="bg-lab-info-50 border border-lab-info-200 rounded-lg p-3 mt-2">
               <p className="text-xs text-lab-info-800">
-                Después de <strong>{securityConfig.maxIntentos}</strong> intentos fallidos,
-                la cuenta se bloqueará por <strong>{securityConfig.minutosBloqueo}</strong> minutos.
+                Despues de <strong>{securityConfig.maxIntentos}</strong> intentos fallidos,
+                la cuenta quedara inactiva por <strong>
+                  {securityConfig.minutosBloqueo >= 60
+                    ? `${Math.floor(securityConfig.minutosBloqueo / 60)} hora(s)${securityConfig.minutosBloqueo % 60 > 0 ? ` y ${securityConfig.minutosBloqueo % 60} minuto(s)` : ''}`
+                    : `${securityConfig.minutosBloqueo} minutos`
+                  }
+                </strong>.
               </p>
             </div>
             {blockedUsers.length > 0 && (
               <div className="mt-4">
                 <p className="text-sm font-medium text-lab-neutral-700 mb-2">
-                  Cuentas bloqueadas ({blockedUsers.length})
+                  Cuentas inactivas ({blockedUsers.length})
                 </p>
                 <div className="space-y-2 max-h-32 overflow-y-auto">
                   {blockedUsers.map((user) => (
@@ -508,7 +513,7 @@ export default function ConfigurationPage() {
                         variant="outline"
                         size="sm"
                       >
-                        Desbloquear
+                        Reactivar
                       </Button>
                     </div>
                   ))}

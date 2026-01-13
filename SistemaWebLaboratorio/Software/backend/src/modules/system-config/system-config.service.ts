@@ -35,12 +35,105 @@ export class SystemConfigService {
     return config;
   }
 
-  async findAll(isPublicOnly: boolean = false) {
-    const where = isPublicOnly ? { es_publico: true } : {};
+  async findAll(isPublicOnly: boolean = false, grupo?: string) {
+    const where: any = {};
+    if (isPublicOnly) {
+      where.es_publico = true;
+    }
+    if (grupo) {
+      where.grupo = grupo;
+    }
     return this.prisma.configuracionSistema.findMany({
       where,
+      orderBy: [{ grupo: 'asc' }, { clave: 'asc' }],
+    });
+  }
+
+  async findByGrupo(grupo: string) {
+    return this.prisma.configuracionSistema.findMany({
+      where: { grupo },
+      orderBy: { clave: 'asc' },
+    });
+  }
+
+  async getGrupos() {
+    const configs = await this.prisma.configuracionSistema.findMany({
+      select: { grupo: true },
+      distinct: ['grupo'],
       orderBy: { grupo: 'asc' },
     });
+    return configs.map((c) => c.grupo);
+  }
+
+  async getValue(clave: string, defaultValue?: string): Promise<string> {
+    try {
+      const config = await this.prisma.configuracionSistema.findUnique({
+        where: { clave },
+      });
+      return config?.valor ?? defaultValue ?? '';
+    } catch {
+      return defaultValue ?? '';
+    }
+  }
+
+  async getNumberValue(clave: string, defaultValue: number): Promise<number> {
+    const value = await this.getValue(clave);
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? defaultValue : parsed;
+  }
+
+  /**
+   * Inicializar configuraciones de login por defecto
+   */
+  async initializeLoginDefaults() {
+    const defaults = [
+      {
+        clave: 'LOGIN_MAX_INTENTOS',
+        valor: '5',
+        descripcion: 'Numero maximo de intentos de login fallidos antes de inactivar la cuenta',
+        grupo: 'LOGIN',
+        tipo_dato: 'NUMBER',
+        es_publico: false,
+      },
+      {
+        clave: 'LOGIN_MINUTOS_BLOQUEO',
+        valor: '360',
+        descripcion: 'Minutos de inactividad de cuenta despues de exceder intentos fallidos (360 = 6 horas)',
+        grupo: 'LOGIN',
+        tipo_dato: 'NUMBER',
+        es_publico: false,
+      },
+      {
+        clave: 'RECUPERACION_CODIGO_MINUTOS',
+        valor: '5',
+        descripcion: 'Minutos de validez del codigo de recuperacion de contrasena',
+        grupo: 'LOGIN',
+        tipo_dato: 'NUMBER',
+        es_publico: false,
+      },
+      {
+        clave: 'RECUPERACION_MAX_SOLICITUDES_HORA',
+        valor: '3',
+        descripcion: 'Maximo de solicitudes de recuperacion de contrasena por hora',
+        grupo: 'LOGIN',
+        tipo_dato: 'NUMBER',
+        es_publico: false,
+      },
+    ];
+
+    for (const config of defaults) {
+      const existing = await this.prisma.configuracionSistema.findUnique({
+        where: { clave: config.clave },
+      });
+
+      if (!existing) {
+        await this.prisma.configuracionSistema.create({
+          data: config,
+        });
+      }
+    }
+
+    return { message: 'Configuraciones de login inicializadas' };
   }
 
   async findOne(id: number) {

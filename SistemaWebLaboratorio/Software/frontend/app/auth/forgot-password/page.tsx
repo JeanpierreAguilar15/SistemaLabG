@@ -126,12 +126,12 @@ export default function ForgotPasswordPage() {
     e.preventDefault()
 
     if (newPassword !== confirmPassword) {
-      setError('Las contrasenas no coinciden')
+      setError('Las contraseñas no coinciden')
       return
     }
 
     if (newPassword.length < 8) {
-      setError('La contrasena debe tener al menos 8 caracteres')
+      setError('La contraseña debe tener al menos 8 caracteres')
       return
     }
 
@@ -140,7 +140,7 @@ export default function ForgotPasswordPage() {
     const hasNumber = /[0-9]/.test(newPassword)
 
     if (!hasUppercase || !hasLowercase || !hasNumber) {
-      setError('La contrasena debe incluir mayuscula, minuscula y numero')
+      setError('La contraseña debe incluir mayuscula, minuscula y numero')
       return
     }
 
@@ -158,7 +158,7 @@ export default function ForgotPasswordPage() {
       if (err instanceof ApiError) {
         setError(err.message)
       } else {
-        setError('Error al actualizar la contrasena')
+        setError('Error al actualizar la contraseña')
       }
     } finally {
       setLoading(false)
@@ -221,7 +221,7 @@ export default function ForgotPasswordPage() {
             <p className="text-lab-neutral-500 mt-2">
               {step === 'email' && 'Ingresa tu correo electronico'}
               {step === 'code' && 'Ingresa el codigo de verificacion'}
-              {step === 'password' && 'Crea tu nueva contrasena'}
+              {step === 'password' && 'Crea tu nueva contraseña'}
             </p>
           </div>
 
@@ -453,20 +453,20 @@ export default function ForgotPasswordPage() {
                         }`}
                       />
                       {confirmPassword && newPassword !== confirmPassword && (
-                        <p className="text-xs text-red-500">Las contrasenas no coinciden</p>
+                        <p className="text-xs text-red-500">Las contraseñas no coinciden</p>
                       )}
                       {confirmPassword && newPassword === confirmPassword && (
                         <p className="text-xs text-green-600 flex items-center gap-1">
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
-                          Las contrasenas coinciden
+                          Las contraseñas coinciden
                         </p>
                       )}
                     </div>
 
                     <div className="bg-lab-neutral-50 p-3 rounded-lg text-xs text-lab-neutral-600">
-                      <p className="font-medium mb-1">La contrasena debe tener:</p>
+                      <p className="font-medium mb-1">La contraseña debe tener:</p>
                       <ul className="space-y-1">
                         <li className={`flex items-center gap-1 ${newPassword.length >= 8 ? 'text-green-600' : ''}`}>
                           {newPassword.length >= 8 ? '>' : 'o'} Al menos 8 caracteres
@@ -493,7 +493,7 @@ export default function ForgotPasswordPage() {
                           <span>Actualizando...</span>
                         </div>
                       ) : (
-                        'Actualizar contrasena'
+                        'Actualizar contraseña'
                       )}
                     </Button>
                   </>
@@ -510,7 +510,7 @@ export default function ForgotPasswordPage() {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Volver al inicio de sesion
+                Volver al inicio de sesión
               </Link>
             </div>
           </div>
@@ -579,7 +579,7 @@ export default function ForgotPasswordPage() {
             Recupera tu Acceso
           </h2>
           <p className="text-lg text-white/80 text-center max-w-md">
-            No te preocupes, te ayudaremos a restablecer tu contrasena de forma segura.
+            No te preocupes, te ayudaremos a restablecer tu contraseña de forma segura.
           </p>
 
           {/* Steps info */}
@@ -607,8 +607,8 @@ export default function ForgotPasswordPage() {
                 3
               </div>
               <div>
-                <p className="font-medium text-sm">Crea nueva contrasena</p>
-                <p className="text-xs text-white/60">Elige una contrasena segura</p>
+                <p className="font-medium text-sm">Crea nueva contraseña</p>
+                <p className="text-xs text-white/60">Elige una contraseña segura</p>
               </div>
             </div>
           </div>
