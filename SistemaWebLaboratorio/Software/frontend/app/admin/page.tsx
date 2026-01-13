@@ -39,6 +39,14 @@ interface DashboardStats {
     name: string
     date: Date
   }>
+  recentPatients: Array<{
+    id: number
+    cedula: string
+    nombre: string
+    fecha: Date
+    hora: string | null
+    examenes: string
+  }>
 }
 
 interface LoteAbierto {
@@ -64,14 +72,18 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [lotesAbiertos, setLotesAbiertos] = useState<LoteAbierto[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadStats()
-    loadLotesAbiertos()
-  }, [])
+    if (accessToken) {
+      loadStats()
+      loadLotesAbiertos()
+    }
+  }, [accessToken])
 
   const loadStats = async () => {
     try {
+      setError(null)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/dashboard/stats`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -81,9 +93,12 @@ export default function AdminDashboard() {
       if (response.ok) {
         const data = await response.json()
         setStats(data)
+      } else {
+        setError('Error al cargar las estadisticas del dashboard')
       }
     } catch (error) {
       console.error('Error loading stats:', error)
+      setError('Error de conexion. Verifique su red e intente nuevamente.')
     } finally {
       setLoading(false)
     }
@@ -123,9 +138,29 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-lab-neutral-900">Panel de Administración</h1>
+        <h1 className="text-3xl font-bold text-lab-neutral-900">Panel de Administracion</h1>
         <p className="text-lab-neutral-600 mt-1">Resumen general del sistema</p>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-red-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">{error}</p>
+            </div>
+            <button
+              onClick={() => { setLoading(true); loadStats(); loadLotesAbiertos(); }}
+              className="ml-4 px-3 py-1 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -248,37 +283,46 @@ export default function AdminDashboard() {
 
       {/* Business Insights Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Últimos Exámenes */}
+        {/* Últimos Pacientes Atendidos */}
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200">
           <div className="px-6 py-4 border-b border-lab-neutral-200">
-            <h2 className="text-lg font-semibold text-lab-neutral-900">Últimos Exámenes Agregados</h2>
-            <p className="text-sm text-lab-neutral-600 mt-1">5 exámenes más recientes del catálogo</p>
+            <h2 className="text-lg font-semibold text-lab-neutral-900">Ultimos Pacientes Atendidos</h2>
+            <p className="text-sm text-lab-neutral-600 mt-1">5 pacientes mas recientes con citas completadas</p>
           </div>
           <div className="p-6">
-            {stats?.recentExams && stats.recentExams.length > 0 ? (
+            {stats?.recentPatients && stats.recentPatients.length > 0 ? (
               <div className="space-y-3">
-                {stats.recentExams.map((exam, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-lab-neutral-50 rounded-lg hover:bg-lab-neutral-100 transition-colors">
+                {stats.recentPatients.map((patient) => (
+                  <div key={patient.id} className="flex items-center justify-between p-3 bg-lab-neutral-50 rounded-lg hover:bg-lab-neutral-100 transition-colors">
                     <div className="flex items-center space-x-3 flex-1">
-                      <div className="w-10 h-10 bg-lab-primary-100 rounded-lg flex items-center justify-center">
-                        <svg className="w-5 h-5 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      <div className="w-10 h-10 bg-lab-success-100 rounded-full flex items-center justify-center">
+                        <svg className="w-5 h-5 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-lab-neutral-900 truncate">{exam.name}</p>
-                        <p className="text-xs text-lab-neutral-600 font-mono">{exam.code}</p>
+                        <p className="text-sm font-medium text-lab-neutral-900 truncate">{patient.nombre}</p>
+                        <p className="text-xs text-lab-neutral-600">CI: {patient.cedula}</p>
+                        <p className="text-xs text-lab-neutral-500 truncate">{patient.examenes}</p>
                       </div>
                     </div>
-                    <div className="text-xs text-lab-neutral-500 ml-2">
-                      {new Date(exam.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                    <div className="text-right ml-2">
+                      <p className="text-xs text-lab-neutral-500">
+                        {new Date(patient.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                      </p>
+                      {patient.hora && (
+                        <p className="text-xs text-lab-neutral-400">{patient.hora}</p>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="text-center py-8 text-lab-neutral-500">
-                <p>No hay exámenes disponibles</p>
+                <svg className="w-12 h-12 mx-auto text-lab-neutral-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <p>No hay pacientes atendidos recientemente</p>
               </div>
             )}
           </div>
@@ -440,7 +484,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-green-600 font-medium">{lote.dias_restantes} dias restantes</p>
+                  <p className="text-xs text-green-600 font-medium">{lote.dias_restantes} dias restante(s)</p>
                   <p className="text-xs text-green-500">
                     {lote.porcentaje_uso}% usado ({lote.pruebas_realizadas}/{lote.capacidad_pruebas})
                   </p>
@@ -459,7 +503,7 @@ export default function AdminDashboard() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <a
+        <Link
           href="/admin/usuarios"
           className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6 hover:border-lab-primary-300 hover:shadow-md transition-all"
         >
@@ -479,9 +523,9 @@ export default function AdminDashboard() {
               <p className="text-xs text-lab-neutral-600 mt-1">Crear, editar y administrar usuarios</p>
             </div>
           </div>
-        </a>
+        </Link>
 
-        <a
+        <Link
           href="/admin/examenes"
           className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6 hover:border-lab-secondary-300 hover:shadow-md transition-all"
         >
@@ -497,13 +541,13 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-lab-neutral-900">Gestionar Exámenes</h3>
-              <p className="text-xs text-lab-neutral-600 mt-1">Agregar y configurar exámenes</p>
+              <h3 className="text-sm font-semibold text-lab-neutral-900">Gestionar Examenes</h3>
+              <p className="text-xs text-lab-neutral-600 mt-1">Agregar y configurar examenes</p>
             </div>
           </div>
-        </a>
+        </Link>
 
-        <a
+        <Link
           href="/admin/auditoria"
           className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6 hover:border-lab-info-300 hover:shadow-md transition-all"
         >
@@ -519,11 +563,11 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-lab-neutral-900">Ver Auditoría</h3>
+              <h3 className="text-sm font-semibold text-lab-neutral-900">Ver Auditoria</h3>
               <p className="text-xs text-lab-neutral-600 mt-1">Revisar logs y actividad del sistema</p>
             </div>
           </div>
-        </a>
+        </Link>
       </div>
     </div>
   )

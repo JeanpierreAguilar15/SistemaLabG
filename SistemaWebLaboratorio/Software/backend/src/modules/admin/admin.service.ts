@@ -1232,6 +1232,7 @@ export class AdminService {
         approvedQuotations,
         pendingQuotations,
         recentExams,
+        recentPatients,
       ] = await Promise.all([
         // Usuarios
         this.prisma.usuario.count(),
@@ -1299,6 +1300,39 @@ export class AdminService {
           orderBy: { fecha_creacion: 'desc' },
           take: 5,
         }),
+
+        // Últimos pacientes atendidos (citas completadas)
+        this.prisma.cita.findMany({
+          where: { estado: 'COMPLETADA' },
+          select: {
+            codigo_cita: true,
+            fecha_creacion: true,
+            usuario: {
+              select: {
+                codigo_usuario: true,
+                cedula: true,
+                nombres: true,
+                apellidos: true,
+              },
+            },
+            slot: {
+              select: {
+                fecha: true,
+                hora_inicio: true,
+              },
+            },
+            examenes_cita: {
+              select: {
+                examen: {
+                  select: { nombre: true },
+                },
+              },
+              take: 2,
+            },
+          },
+          orderBy: { fecha_actualizacion: 'desc' },
+          take: 5,
+        }),
       ]);
 
       return {
@@ -1340,6 +1374,14 @@ export class AdminService {
           name: exam.nombre,
           date: exam.fecha_creacion,
         })),
+        recentPatients: recentPatients.map(cita => ({
+          id: cita.codigo_cita,
+          cedula: cita.usuario.cedula,
+          nombre: `${cita.usuario.nombres} ${cita.usuario.apellidos}`,
+          fecha: cita.slot?.fecha || cita.fecha_creacion,
+          hora: cita.slot?.hora_inicio || null,
+          examenes: cita.examenes_cita.map(ec => ec.examen.nombre).join(', ') || 'Sin examenes',
+        })),
       };
     } catch (error) {
       this.logger.error('Error getting dashboard stats:', error);
@@ -1353,6 +1395,7 @@ export class AdminService {
         revenue: { monthly: 0, total: 0 },
         quotations: { total: 0, approved: 0, pending: 0, conversionRate: 0 },
         recentExams: [],
+        recentPatients: [],
       };
     }
   }
