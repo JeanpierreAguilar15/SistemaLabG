@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { authApi, ApiError } from '@/lib/api'
 
 type Step = 'email' | 'code' | 'password'
@@ -47,7 +46,7 @@ export default function ForgotPasswordPage() {
 
     try {
       await authApi.forgotPassword(email)
-      setSuccess('Si el correo existe, recibirás un código de 6 dígitos.')
+      setSuccess('Si el correo existe, recibiras un codigo de 6 digitos.')
       setStep('code')
       setResendCooldown(60)
     } catch (err) {
@@ -101,7 +100,7 @@ export default function ForgotPasswordPage() {
     const fullCode = code.join('')
 
     if (fullCode.length !== 6) {
-      setError('Ingresa el código completo de 6 dígitos')
+      setError('Ingresa el codigo completo de 6 digitos')
       return
     }
 
@@ -110,14 +109,13 @@ export default function ForgotPasswordPage() {
 
     try {
       await authApi.verifyRecoveryCode(email, fullCode)
-      // Clear success message and move to password step
       setSuccess('')
       setStep('password')
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)
       } else {
-        setError('Código inválido o expirado')
+        setError('Codigo invalido o expirado')
       }
     } finally {
       setLoading(false)
@@ -128,12 +126,12 @@ export default function ForgotPasswordPage() {
     e.preventDefault()
 
     if (newPassword !== confirmPassword) {
-      setError('Las contraseñas no coinciden')
+      setError('Las contrasenas no coinciden')
       return
     }
 
     if (newPassword.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres')
+      setError('La contrasena debe tener al menos 8 caracteres')
       return
     }
 
@@ -142,7 +140,7 @@ export default function ForgotPasswordPage() {
     const hasNumber = /[0-9]/.test(newPassword)
 
     if (!hasUppercase || !hasLowercase || !hasNumber) {
-      setError('La contraseña debe incluir mayúscula, minúscula y número')
+      setError('La contrasena debe incluir mayuscula, minuscula y numero')
       return
     }
 
@@ -152,7 +150,7 @@ export default function ForgotPasswordPage() {
     try {
       const fullCode = code.join('')
       await authApi.resetPassword(email, fullCode, newPassword)
-      setSuccess('Contraseña actualizada correctamente')
+      setSuccess('Contrasena actualizada correctamente')
       setTimeout(() => {
         router.push('/auth/login')
       }, 2000)
@@ -160,7 +158,7 @@ export default function ForgotPasswordPage() {
       if (err instanceof ApiError) {
         setError(err.message)
       } else {
-        setError('Error al actualizar la contraseña')
+        setError('Error al actualizar la contrasena')
       }
     } finally {
       setLoading(false)
@@ -175,11 +173,11 @@ export default function ForgotPasswordPage() {
 
     try {
       await authApi.forgotPassword(email)
-      setSuccess('Código reenviado exitosamente')
+      setSuccess('Codigo reenviado exitosamente')
       setResendCooldown(60)
       setCode(['', '', '', '', '', ''])
     } catch (err) {
-      setError('Error al reenviar el código')
+      setError('Error al reenviar el codigo')
     } finally {
       setLoading(false)
     }
@@ -195,7 +193,7 @@ export default function ForgotPasswordPage() {
     if (/[0-9]/.test(newPassword)) strength++
     if (/[^A-Za-z0-9]/.test(newPassword)) strength++
 
-    if (strength <= 2) return { strength: 33, label: 'Débil', color: 'bg-red-500' }
+    if (strength <= 2) return { strength: 33, label: 'Debil', color: 'bg-red-500' }
     if (strength <= 3) return { strength: 66, label: 'Media', color: 'bg-yellow-500' }
     return { strength: 100, label: 'Fuerte', color: 'bg-green-500' }
   }
@@ -203,81 +201,69 @@ export default function ForgotPasswordPage() {
   const passwordStrength = getPasswordStrength()
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-lab-primary-50 via-white to-lab-success-50 p-4">
-      <div
-        className={`w-full max-w-md space-y-6 transition-opacity duration-500 ${
-          mounted ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
-        {/* Logo y Header */}
-        <div className="text-center space-y-2">
-          <div className="flex justify-center mb-4">
-            <div className="bg-lab-primary-600 text-white rounded-2xl p-4 shadow-lg">
-              <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-              </svg>
+    <div className="min-h-screen flex">
+      {/* Left Side - Form */}
+      <div className={`w-full lg:w-1/2 flex flex-col justify-center px-8 md:px-16 lg:px-24 bg-white transition-opacity duration-500 ${
+        mounted ? 'opacity-100' : 'opacity-0'
+      }`}>
+        <div className="max-w-md w-full mx-auto">
+          {/* Logo */}
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-lab-primary-600 text-white rounded-xl p-2.5 shadow-md">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+              </div>
+              <span className="text-2xl font-bold text-lab-primary-700">Laboratorio Franz</span>
             </div>
+            <h1 className="text-3xl font-bold text-lab-neutral-900 mt-6">Recuperar Contrasena</h1>
+            <p className="text-lab-neutral-500 mt-2">
+              {step === 'email' && 'Ingresa tu correo electronico'}
+              {step === 'code' && 'Ingresa el codigo de verificacion'}
+              {step === 'password' && 'Crea tu nueva contrasena'}
+            </p>
           </div>
-          <h1 className="text-3xl font-bold text-lab-neutral-900">Recuperar Contraseña</h1>
-          <p className="text-lab-neutral-600">
-            {step === 'email' && 'Ingresa tu correo electrónico'}
-            {step === 'code' && 'Ingresa el código de verificación'}
-            {step === 'password' && 'Crea tu nueva contraseña'}
-          </p>
-        </div>
 
-        {/* Progress Steps */}
-        <div className="flex items-center justify-center gap-2">
-          {['email', 'code', 'password'].map((s, i) => (
-            <div key={s} className="flex items-center">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
-                  step === s
-                    ? 'bg-lab-primary-600 text-white'
-                    : ['email', 'code', 'password'].indexOf(step) > i
-                    ? 'bg-green-500 text-white'
-                    : 'bg-lab-neutral-200 text-lab-neutral-500'
-                }`}
-              >
-                {['email', 'code', 'password'].indexOf(step) > i ? (
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  i + 1
+          {/* Progress Steps */}
+          <div className="flex items-center justify-center gap-2 mb-8">
+            {['email', 'code', 'password'].map((s, i) => (
+              <div key={s} className="flex items-center">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                    step === s
+                      ? 'bg-lab-primary-600 text-white'
+                      : ['email', 'code', 'password'].indexOf(step) > i
+                      ? 'bg-green-500 text-white'
+                      : 'bg-lab-neutral-200 text-lab-neutral-500'
+                  }`}
+                >
+                  {['email', 'code', 'password'].indexOf(step) > i ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    i + 1
+                  )}
+                </div>
+                {i < 2 && (
+                  <div
+                    className={`w-16 h-1 mx-2 transition-all rounded-full ${
+                      ['email', 'code', 'password'].indexOf(step) > i
+                        ? 'bg-green-500'
+                        : 'bg-lab-neutral-200'
+                    }`}
+                  />
                 )}
               </div>
-              {i < 2 && (
-                <div
-                  className={`w-12 h-1 mx-1 transition-all ${
-                    ['email', 'code', 'password'].indexOf(step) > i
-                      ? 'bg-green-500'
-                      : 'bg-lab-neutral-200'
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
-        {/* Card */}
-        <Card className="border-lab-neutral-200 shadow-xl">
-          <CardHeader>
-            <CardTitle>
-              {step === 'email' && 'Ingresa tu correo'}
-              {step === 'code' && 'Código de verificación'}
-              {step === 'password' && 'Nueva contraseña'}
-            </CardTitle>
-            <CardDescription>
-              {step === 'email' && 'Te enviaremos un código de 6 dígitos'}
-              {step === 'code' && `Enviamos un código a ${email}`}
-              {step === 'password' && 'Debe tener al menos 8 caracteres'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          {/* Form Content */}
+          <div className="space-y-6">
             {/* Error Message */}
             {error && (
-              <div className="mb-4 p-3 rounded-lg bg-lab-danger-50 border border-lab-danger-200 text-lab-danger-700 text-sm flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -287,7 +273,7 @@ export default function ForgotPasswordPage() {
 
             {/* Success Message */}
             {success && step !== 'password' && (
-              <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm flex items-center gap-2">
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
@@ -297,9 +283,9 @@ export default function ForgotPasswordPage() {
 
             {/* Step 1: Email */}
             {step === 'email' && (
-              <form onSubmit={handleEmailSubmit} className="space-y-4">
+              <form onSubmit={handleEmailSubmit} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Correo Electrónico</Label>
+                  <Label htmlFor="email" className="text-lab-neutral-700 font-medium">Correo Electronico</Label>
                   <div className="relative">
                     <Input
                       id="email"
@@ -309,7 +295,7 @@ export default function ForgotPasswordPage() {
                       onChange={(e) => setEmail(e.target.value)}
                       required
                       disabled={loading}
-                      className="pl-10"
+                      className="h-12 pl-10 bg-lab-neutral-50 border-lab-neutral-200"
                     />
                     <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -317,17 +303,17 @@ export default function ForgotPasswordPage() {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full h-11" disabled={loading}>
+                <Button type="submit" className="w-full h-12 text-base font-semibold bg-lab-primary-600 hover:bg-lab-primary-700" disabled={loading}>
                   {loading ? (
                     <div className="flex items-center gap-2">
                       <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      Enviando...
+                      <span>Enviando...</span>
                     </div>
                   ) : (
-                    'Enviar código'
+                    'Enviar codigo'
                   )}
                 </Button>
               </form>
@@ -335,10 +321,11 @@ export default function ForgotPasswordPage() {
 
             {/* Step 2: Code */}
             {step === 'code' && (
-              <form onSubmit={handleCodeSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Código de 6 dígitos</Label>
-                  <div className="flex justify-center gap-2" onPaste={handleCodePaste}>
+              <form onSubmit={handleCodeSubmit} className="space-y-5">
+                <div className="space-y-3">
+                  <Label className="text-lab-neutral-700 font-medium">Codigo de 6 digitos</Label>
+                  <p className="text-sm text-lab-neutral-500">Enviamos un codigo a {email}</p>
+                  <div className="flex justify-center gap-3" onPaste={handleCodePaste}>
                     {code.map((digit, index) => (
                       <Input
                         key={index}
@@ -349,24 +336,24 @@ export default function ForgotPasswordPage() {
                         value={digit}
                         onChange={(e) => handleCodeChange(index, e.target.value)}
                         onKeyDown={(e) => handleCodeKeyDown(index, e)}
-                        className="w-12 h-14 text-center text-2xl font-bold"
+                        className="w-12 h-14 text-center text-2xl font-bold bg-lab-neutral-50 border-lab-neutral-200"
                         disabled={loading}
                       />
                     ))}
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full h-11" disabled={loading || code.join('').length !== 6}>
+                <Button type="submit" className="w-full h-12 text-base font-semibold bg-lab-primary-600 hover:bg-lab-primary-700" disabled={loading || code.join('').length !== 6}>
                   {loading ? (
                     <div className="flex items-center gap-2">
                       <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      Verificando...
+                      <span>Verificando...</span>
                     </div>
                   ) : (
-                    'Verificar código'
+                    'Verificar codigo'
                   )}
                 </Button>
 
@@ -382,8 +369,8 @@ export default function ForgotPasswordPage() {
                     }`}
                   >
                     {resendCooldown > 0
-                      ? `Reenviar código en ${resendCooldown}s`
-                      : '¿No recibiste el código? Reenviar'}
+                      ? `Reenviar codigo en ${resendCooldown}s`
+                      : 'No recibiste el codigo? Reenviar'}
                   </button>
                 </div>
               </form>
@@ -391,7 +378,7 @@ export default function ForgotPasswordPage() {
 
             {/* Step 3: New Password */}
             {step === 'password' && (
-              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <form onSubmit={handlePasswordSubmit} className="space-y-5">
                 {success && (
                   <div className="p-4 rounded-lg bg-green-50 border border-green-200 text-center">
                     <svg className="w-12 h-12 text-green-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -405,21 +392,18 @@ export default function ForgotPasswordPage() {
                 {!success && (
                   <>
                     <div className="space-y-2">
-                      <Label htmlFor="newPassword">Nueva Contraseña</Label>
+                      <Label htmlFor="newPassword" className="text-lab-neutral-700 font-medium">Nueva Contrasena</Label>
                       <div className="relative">
                         <Input
                           id="newPassword"
                           type={showPassword ? 'text' : 'password'}
-                          placeholder="••••••••"
+                          placeholder="********"
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
                           required
                           disabled={loading}
-                          className="pl-10 pr-10"
+                          className="h-12 pr-10 bg-lab-neutral-50 border-lab-neutral-200"
                         />
-                        <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
@@ -438,14 +422,10 @@ export default function ForgotPasswordPage() {
                         </button>
                       </div>
 
-                      {/* Password Strength Indicator */}
                       {newPassword && (
                         <div className="space-y-1">
                           <div className="h-2 bg-lab-neutral-200 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full transition-all ${passwordStrength.color}`}
-                              style={{ width: `${passwordStrength.strength}%` }}
-                            />
+                            <div className={`h-full transition-all ${passwordStrength.color}`} style={{ width: `${passwordStrength.strength}%` }} />
                           </div>
                           <p className={`text-xs ${
                             passwordStrength.strength <= 33 ? 'text-red-500' :
@@ -458,62 +438,62 @@ export default function ForgotPasswordPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirmar Contraseña</Label>
-                      <div className="relative">
-                        <Input
-                          id="confirmPassword"
-                          type={showPassword ? 'text' : 'password'}
-                          placeholder="••••••••"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          required
-                          disabled={loading}
-                          className={`pl-10 ${
-                            confirmPassword && newPassword !== confirmPassword
-                              ? 'border-red-300'
-                              : confirmPassword && newPassword === confirmPassword
-                              ? 'border-green-300'
-                              : ''
-                          }`}
-                        />
-                        <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                      </div>
+                      <Label htmlFor="confirmPassword" className="text-lab-neutral-700 font-medium">Confirmar Contrasena</Label>
+                      <Input
+                        id="confirmPassword"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="********"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        disabled={loading}
+                        className={`h-12 bg-lab-neutral-50 border-lab-neutral-200 ${
+                          confirmPassword && newPassword !== confirmPassword ? 'border-red-300' :
+                          confirmPassword && newPassword === confirmPassword ? 'border-green-300' : ''
+                        }`}
+                      />
                       {confirmPassword && newPassword !== confirmPassword && (
-                        <p className="text-xs text-red-500">Las contraseñas no coinciden</p>
+                        <p className="text-xs text-red-500">Las contrasenas no coinciden</p>
+                      )}
+                      {confirmPassword && newPassword === confirmPassword && (
+                        <p className="text-xs text-green-600 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Las contrasenas coinciden
+                        </p>
                       )}
                     </div>
 
                     <div className="bg-lab-neutral-50 p-3 rounded-lg text-xs text-lab-neutral-600">
-                      <p className="font-medium mb-1">La contraseña debe tener:</p>
+                      <p className="font-medium mb-1">La contrasena debe tener:</p>
                       <ul className="space-y-1">
                         <li className={`flex items-center gap-1 ${newPassword.length >= 8 ? 'text-green-600' : ''}`}>
-                          {newPassword.length >= 8 ? '✓' : '○'} Al menos 8 caracteres
+                          {newPassword.length >= 8 ? '>' : 'o'} Al menos 8 caracteres
                         </li>
                         <li className={`flex items-center gap-1 ${/[A-Z]/.test(newPassword) ? 'text-green-600' : ''}`}>
-                          {/[A-Z]/.test(newPassword) ? '✓' : '○'} Una letra mayúscula
+                          {/[A-Z]/.test(newPassword) ? '>' : 'o'} Una letra mayuscula
                         </li>
                         <li className={`flex items-center gap-1 ${/[a-z]/.test(newPassword) ? 'text-green-600' : ''}`}>
-                          {/[a-z]/.test(newPassword) ? '✓' : '○'} Una letra minúscula
+                          {/[a-z]/.test(newPassword) ? '>' : 'o'} Una letra minuscula
                         </li>
                         <li className={`flex items-center gap-1 ${/[0-9]/.test(newPassword) ? 'text-green-600' : ''}`}>
-                          {/[0-9]/.test(newPassword) ? '✓' : '○'} Un número
+                          {/[0-9]/.test(newPassword) ? '>' : 'o'} Un numero
                         </li>
                       </ul>
                     </div>
 
-                    <Button type="submit" className="w-full h-11" disabled={loading}>
+                    <Button type="submit" className="w-full h-12 text-base font-semibold bg-lab-primary-600 hover:bg-lab-primary-700" disabled={loading}>
                       {loading ? (
                         <div className="flex items-center gap-2">
                           <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                           </svg>
-                          Actualizando...
+                          <span>Actualizando...</span>
                         </div>
                       ) : (
-                        'Actualizar contraseña'
+                        'Actualizar contrasena'
                       )}
                     </Button>
                   </>
@@ -522,7 +502,7 @@ export default function ForgotPasswordPage() {
             )}
 
             {/* Back to Login */}
-            <div className="mt-4 text-center">
+            <div className="text-center pt-4">
               <Link
                 href="/auth/login"
                 className="text-sm text-lab-primary-600 hover:text-lab-primary-700 hover:underline flex items-center justify-center gap-1"
@@ -530,16 +510,113 @@ export default function ForgotPasswordPage() {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Volver al inicio de sesión
+                Volver al inicio de sesion
               </Link>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Footer */}
-        <p className="text-center text-sm text-lab-neutral-500">
-          © 2025 Laboratorio Clínico Franz. Todos los derechos reservados.
-        </p>
+          {/* Footer */}
+          <div className="mt-8 pt-6 border-t border-lab-neutral-200">
+            <p className="text-center text-xs text-lab-neutral-400">
+              Copyright 2025 Laboratorio Clinico Franz.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Side - Image */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-lab-primary-600 via-lab-primary-700 to-lab-primary-900 overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+              <pattern id="grid-forgot" width="10" height="10" patternUnits="userSpaceOnUse">
+                <path d="M 10 0 L 0 0 0 10" fill="none" stroke="white" strokeWidth="0.5"/>
+              </pattern>
+            </defs>
+            <rect width="100" height="100" fill="url(#grid-forgot)" />
+          </svg>
+        </div>
+
+        {/* Floating Elements */}
+        <div className="absolute top-20 left-20 w-20 h-20 bg-white/10 rounded-full blur-xl animate-pulse"></div>
+        <div className="absolute bottom-40 right-20 w-32 h-32 bg-lab-primary-400/20 rounded-full blur-2xl animate-pulse delay-700"></div>
+
+        {/* Content */}
+        <div className="relative z-10 flex flex-col items-center justify-center w-full p-12 text-white">
+          {/* Lock/Security Illustration */}
+          <div className="relative mb-8">
+            <div className="w-56 h-56 relative">
+              <svg className="w-full h-full" viewBox="0 0 200 200" fill="none">
+                {/* Base shadow */}
+                <ellipse cx="100" cy="180" rx="50" ry="12" fill="white" fillOpacity="0.2"/>
+                {/* Lock body */}
+                <rect x="60" y="90" width="80" height="70" rx="10" fill="white" fillOpacity="0.95"/>
+                {/* Lock shackle */}
+                <path d="M75 90 L75 65 Q75 40 100 40 Q125 40 125 65 L125 90" stroke="white" strokeWidth="12" fill="none" strokeLinecap="round"/>
+                {/* Keyhole */}
+                <circle cx="100" cy="120" r="12" fill="#2563eb"/>
+                <rect x="96" y="120" width="8" height="20" rx="2" fill="#2563eb"/>
+                {/* Sparkles */}
+                <g fill="white" fillOpacity="0.6">
+                  <circle cx="45" cy="70" r="3"/>
+                  <circle cx="155" cy="80" r="4"/>
+                  <circle cx="50" cy="140" r="2"/>
+                  <circle cx="160" cy="130" r="3"/>
+                </g>
+                {/* Key icon floating */}
+                <g transform="translate(140, 50) rotate(45)">
+                  <rect x="0" y="0" width="30" height="10" rx="5" fill="white" fillOpacity="0.8"/>
+                  <rect x="25" y="-3" width="5" height="8" rx="1" fill="white" fillOpacity="0.8"/>
+                  <rect x="32" y="-3" width="5" height="8" rx="1" fill="white" fillOpacity="0.8"/>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          {/* Text */}
+          <h2 className="text-3xl font-bold text-center mb-4">
+            Recupera tu Acceso
+          </h2>
+          <p className="text-lg text-white/80 text-center max-w-md">
+            No te preocupes, te ayudaremos a restablecer tu contrasena de forma segura.
+          </p>
+
+          {/* Steps info */}
+          <div className="mt-8 space-y-4 w-full max-w-sm">
+            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                1
+              </div>
+              <div>
+                <p className="font-medium text-sm">Ingresa tu correo</p>
+                <p className="text-xs text-white/60">Te enviaremos un codigo</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                2
+              </div>
+              <div>
+                <p className="font-medium text-sm">Verifica tu identidad</p>
+                <p className="text-xs text-white/60">Ingresa el codigo de 6 digitos</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                3
+              </div>
+              <div>
+                <p className="font-medium text-sm">Crea nueva contrasena</p>
+                <p className="text-xs text-white/60">Elige una contrasena segura</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Decorative circles */}
+        <div className="absolute -bottom-20 -left-20 w-64 h-64 border border-white/10 rounded-full"></div>
+        <div className="absolute -top-10 -right-10 w-40 h-40 border border-white/10 rounded-full"></div>
       </div>
     </div>
   )
