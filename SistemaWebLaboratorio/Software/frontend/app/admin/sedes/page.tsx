@@ -37,8 +37,10 @@ export default function LocationsManagement() {
   })
 
   useEffect(() => {
-    loadLocations()
-  }, [])
+    if (accessToken) {
+      loadLocations()
+    }
+  }, [accessToken])
 
   useEffect(() => {
     if (message) {
@@ -164,7 +166,7 @@ export default function LocationsManagement() {
         )
 
         if (response.ok) {
-          setMessage({ type: 'success', text: '✅ Sede actualizada correctamente' })
+          setMessage({ type: 'success', text: 'Sede actualizada correctamente' })
           loadLocations()
           handleCloseModal()
         } else {
@@ -186,7 +188,7 @@ export default function LocationsManagement() {
         })
 
         if (response.ok) {
-          setMessage({ type: 'success', text: '✅ Sede creada correctamente' })
+          setMessage({ type: 'success', text: 'Sede creada correctamente' })
           loadLocations()
           handleCloseModal()
         } else {
@@ -217,7 +219,7 @@ export default function LocationsManagement() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: '✅ Sede eliminada correctamente' })
+        setMessage({ type: 'success', text: 'Sede eliminada correctamente' })
         loadLocations()
       } else {
         const error = await response.json()

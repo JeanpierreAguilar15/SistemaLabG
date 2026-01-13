@@ -32,8 +32,10 @@ export default function ServicesManagement() {
   })
 
   useEffect(() => {
-    loadServices()
-  }, [])
+    if (accessToken) {
+      loadServices()
+    }
+  }, [accessToken])
 
   useEffect(() => {
     if (message) {
@@ -141,7 +143,7 @@ export default function ServicesManagement() {
         )
 
         if (response.ok) {
-          setMessage({ type: 'success', text: '✅ Servicio actualizado correctamente' })
+          setMessage({ type: 'success', text: 'Servicio actualizado correctamente' })
           loadServices()
           handleCloseModal()
         } else {
@@ -163,7 +165,7 @@ export default function ServicesManagement() {
         })
 
         if (response.ok) {
-          setMessage({ type: 'success', text: '✅ Servicio creado correctamente' })
+          setMessage({ type: 'success', text: 'Servicio creado correctamente' })
           loadServices()
           handleCloseModal()
         } else {
@@ -194,7 +196,7 @@ export default function ServicesManagement() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: '✅ Servicio eliminado correctamente' })
+        setMessage({ type: 'success', text: 'Servicio eliminado correctamente' })
         loadServices()
       } else {
         const error = await response.json()

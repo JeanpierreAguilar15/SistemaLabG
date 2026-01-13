@@ -183,7 +183,7 @@ export default function MovimientosStockPage() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: '✅ Movimiento registrado correctamente' })
+        setMessage({ type: 'success', text: 'Movimiento registrado correctamente' })
         handleCloseForm()
         loadMovimientos()
         loadItems() // Reload items to update stock_actual

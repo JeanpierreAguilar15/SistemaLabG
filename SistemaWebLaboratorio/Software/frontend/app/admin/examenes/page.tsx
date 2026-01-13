@@ -73,9 +73,11 @@ export default function ExamenesPage() {
   })
 
   useEffect(() => {
-    loadExamenes()
-    loadCategorias()
-  }, [])
+    if (accessToken) {
+      loadExamenes()
+      loadCategorias()
+    }
+  }, [accessToken])
 
   useEffect(() => {
     if (message) {
@@ -263,7 +265,7 @@ export default function ExamenesPage() {
             })
           }
 
-          setMessage({ type: 'success', text: '✅ Examen creado! Los pacientes ya pueden verlo en Cotizaciones' })
+          setMessage({ type: 'success', text: 'Examen creado! Los pacientes ya pueden verlo en Cotizaciones' })
           loadExamenes()
           handleCloseModal()
         } else {

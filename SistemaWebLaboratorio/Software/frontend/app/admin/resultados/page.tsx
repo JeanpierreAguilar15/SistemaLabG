@@ -60,8 +60,10 @@ export default function ResultadosAdminPage() {
   const [isEditingPdf, setIsEditingPdf] = useState(false)
 
   useEffect(() => {
-    loadResultados()
-  }, [])
+    if (accessToken) {
+      loadResultados()
+    }
+  }, [accessToken])
 
   useEffect(() => {
     if (message) {
@@ -204,8 +206,8 @@ export default function ResultadosAdminPage() {
 
       if (response.ok) {
         const successMessage = isEditingPdf
-          ? '✅ PDF reemplazado correctamente'
-          : '✅ PDF subido y resultado validado correctamente'
+          ? 'PDF reemplazado correctamente'
+          : 'PDF subido y resultado validado correctamente'
         setMessage({ type: 'success', text: successMessage })
         handleCloseUploadModal()
         loadResultados()

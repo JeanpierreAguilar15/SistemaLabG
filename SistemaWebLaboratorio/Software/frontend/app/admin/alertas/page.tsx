@@ -144,7 +144,7 @@ export default function AlertasStockPage() {
       )
       const data = await response.json()
       if (response.ok && data.success) {
-        setMessage({ type: 'success', text: '✅ Mensaje de prueba enviado correctamente a WhatsApp' })
+        setMessage({ type: 'success', text: 'Mensaje de prueba enviado correctamente a WhatsApp' })
       } else {
         setMessage({ type: 'error', text: data.message || 'Error al enviar mensaje de prueba' })
       }
@@ -167,7 +167,7 @@ export default function AlertasStockPage() {
       )
       const data = await response.json()
       if (response.ok) {
-        setMessage({ type: 'success', text: `✅ Alertas de stock enviadas: ${data.enviados || 0} items` })
+        setMessage({ type: 'success', text: `Alertas de stock enviadas: ${data.enviados || 0} items` })
       } else {
         setMessage({ type: 'error', text: data.message || 'Error al enviar alertas de stock' })
       }
@@ -190,7 +190,7 @@ export default function AlertasStockPage() {
       )
       const data = await response.json()
       if (response.ok) {
-        setMessage({ type: 'success', text: `✅ Alertas de vencimiento enviadas: ${data.enviados || 0} lotes` })
+        setMessage({ type: 'success', text: `Alertas de vencimiento enviadas: ${data.enviados || 0} lotes` })
       } else {
         setMessage({ type: 'error', text: data.message || 'Error al enviar alertas de vencimiento' })
       }
@@ -213,7 +213,7 @@ export default function AlertasStockPage() {
       )
       const data = await response.json()
       if (response.ok) {
-        setMessage({ type: 'success', text: '✅ Todas las alertas han sido enviadas por WhatsApp' })
+        setMessage({ type: 'success', text: 'Todas las alertas han sido enviadas por WhatsApp' })
       } else {
         setMessage({ type: 'error', text: data.message || 'Error al enviar alertas' })
       }

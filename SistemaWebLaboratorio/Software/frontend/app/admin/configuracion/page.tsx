@@ -76,10 +76,12 @@ export default function ConfigurationPage() {
   const [savingSecurity, setSavingSecurity] = useState(false)
 
   useEffect(() => {
-    loadConfigurations()
-    loadSystemStats()
-    loadSecurityConfig()
-  }, [])
+    if (accessToken) {
+      loadConfigurations()
+      loadSystemStats()
+      loadSecurityConfig()
+    }
+  }, [accessToken])
 
   const loadSecurityConfig = async () => {
     try {

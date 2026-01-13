@@ -194,7 +194,7 @@ export default function PackagesManagement() {
       if (response.ok) {
         setMessage({
           type: 'success',
-          text: editingPackage ? '✅ Paquete actualizado correctamente' : '✅ Paquete creado correctamente',
+          text: editingPackage ? 'Paquete actualizado correctamente' : 'Paquete creado correctamente',
         })
         handleCloseForm()
         loadPackages()
@@ -219,7 +219,7 @@ export default function PackagesManagement() {
       })
 
       if (response.ok || response.status === 204) {
-        setMessage({ type: 'success', text: '✅ Paquete desactivado correctamente' })
+        setMessage({ type: 'success', text: 'Paquete desactivado correctamente' })
         loadPackages()
       } else {
         const error = await response.json()
