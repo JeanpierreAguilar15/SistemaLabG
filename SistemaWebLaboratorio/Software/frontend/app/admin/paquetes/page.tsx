@@ -57,6 +57,11 @@ export default function PackagesManagement() {
     activo: true,
     examenes: [] as number[],
   })
+  const [confirmToggle, setConfirmToggle] = useState<{
+    show: boolean
+    packageId: number | null
+    packageName: string
+  }>({ show: false, packageId: null, packageName: '' })
 
   useEffect(() => {
     setMounted(true)
@@ -207,11 +212,19 @@ export default function PackagesManagement() {
     }
   }
 
-  const handleDelete = async (codigo_paquete: number) => {
-    if (!confirm('¿Estás seguro de que deseas desactivar este paquete?')) return
+  const handleDelete = (codigo_paquete: number, nombre: string) => {
+    setConfirmToggle({
+      show: true,
+      packageId: codigo_paquete,
+      packageName: nombre,
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!confirmToggle.packageId) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/packages/${codigo_paquete}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/packages/${confirmToggle.packageId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -226,7 +239,9 @@ export default function PackagesManagement() {
         setMessage({ type: 'error', text: error.message || 'Error al desactivar paquete' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexion al servidor' })
+    } finally {
+      setConfirmToggle({ show: false, packageId: null, packageName: '' })
     }
   }
 
@@ -453,6 +468,46 @@ export default function PackagesManagement() {
         </div>
       )}
 
+      {/* Confirm Toggle Modal */}
+      {confirmToggle.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto bg-lab-warning-100 rounded-full mb-4">
+                <svg className="w-6 h-6 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-lab-neutral-900 text-center mb-2">
+                Confirmar Desactivacion
+              </h3>
+              <p className="text-sm text-lab-neutral-600 text-center mb-6">
+                Esta seguro de que desea desactivar el paquete <span className="font-semibold">"{confirmToggle.packageName}"</span>?
+                <br />
+                <span className="text-lab-neutral-500 text-xs mt-2 block">
+                  El paquete quedara inactivo y no sera visible para los pacientes.
+                </span>
+              </p>
+              <div className="flex space-x-3">
+                <Button
+                  onClick={() => setConfirmToggle({ show: false, packageId: null, packageName: '' })}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={confirmDelete}
+                  className="flex-1 bg-lab-warning-600 hover:bg-lab-warning-700"
+                >
+                  Desactivar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Packages Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {packages.map((pkg) => (
@@ -520,7 +575,7 @@ export default function PackagesManagement() {
                   Editar
                 </Button>
                 <Button
-                  onClick={() => handleDelete(pkg.codigo_paquete)}
+                  onClick={() => handleDelete(pkg.codigo_paquete, pkg.nombre)}
                   variant="outline"
                   size="sm"
                   className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"

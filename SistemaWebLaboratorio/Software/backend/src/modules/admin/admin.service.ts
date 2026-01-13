@@ -999,6 +999,20 @@ export class AdminService {
   async createPackage(data: any, adminId: number) {
     const { examenes, ...packageData } = data;
 
+    // Validar nombre único (case insensitive)
+    const existingPackage = await this.prisma.paquete.findFirst({
+      where: {
+        nombre: { equals: packageData.nombre, mode: 'insensitive' },
+      },
+    });
+
+    if (existingPackage) {
+      throw new BadRequestException(
+        `Ya existe un paquete con el nombre "${existingPackage.nombre}". ` +
+        'Los nombres de paquetes deben ser unicos.'
+      );
+    }
+
     const package_ = await this.prisma.paquete.create({
       data: {
         ...packageData,
@@ -1039,6 +1053,23 @@ export class AdminService {
     }
 
     const { examenes, ...packageData } = data;
+
+    // Validar nombre único si se está actualizando (case insensitive)
+    if (packageData.nombre && packageData.nombre !== package_.nombre) {
+      const existingPackage = await this.prisma.paquete.findFirst({
+        where: {
+          nombre: { equals: packageData.nombre, mode: 'insensitive' },
+          codigo_paquete: { not: codigo_paquete },
+        },
+      });
+
+      if (existingPackage) {
+        throw new BadRequestException(
+          `Ya existe un paquete con el nombre "${existingPackage.nombre}". ` +
+          'Los nombres de paquetes deben ser unicos.'
+        );
+      }
+    }
 
     // Si se proporcionan exámenes, actualizar la relación
     if (examenes !== undefined) {
