@@ -82,6 +82,15 @@ export class AdminService {
       throw new NotFoundException('Rol no encontrado');
     }
 
+    // Proteger rol de administrador del sistema (nivel 10 o nombre ADMIN)
+    const isSystemAdmin = role.nivel_acceso === 10 || role.nombre.toUpperCase() === 'ADMIN';
+    if (isSystemAdmin && data.activo === false) {
+      throw new BadRequestException(
+        'No se puede desactivar el rol de administrador del sistema. ' +
+        'Este rol es necesario para el funcionamiento del sistema.'
+      );
+    }
+
     // Si se va a DESACTIVAR el rol, verificar que no tenga usuarios asignados
     if (data.activo === false && role.activo && role._count.usuarios > 0 && !force) {
       throw new BadRequestException(
@@ -117,6 +126,15 @@ export class AdminService {
 
     if (!role) {
       throw new NotFoundException('Rol no encontrado');
+    }
+
+    // Proteger rol de administrador del sistema
+    const isSystemAdmin = role.nivel_acceso === 10 || role.nombre.toUpperCase() === 'ADMIN';
+    if (isSystemAdmin) {
+      throw new BadRequestException(
+        'No se puede eliminar el rol de administrador del sistema. ' +
+        'Este rol es necesario para el funcionamiento del sistema.'
+      );
     }
 
     if (role._count.usuarios > 0) {
