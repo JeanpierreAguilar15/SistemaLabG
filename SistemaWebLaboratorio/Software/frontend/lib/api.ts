@@ -90,6 +90,25 @@ export const authApi = {
 
   me: (token: string) =>
     request<{ user: any }>('/auth/me', { token }),
+
+  // Password Recovery
+  forgotPassword: (email: string) =>
+    request<{ message: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  verifyRecoveryCode: (email: string, codigo: string) =>
+    request<{ message: string; valid: boolean }>('/auth/verify-recovery-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, codigo }),
+    }),
+
+  resetPassword: (email: string, codigo: string, newPassword: string) =>
+    request<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, codigo, newPassword }),
+    }),
 }
 
 // Users
