@@ -41,6 +41,11 @@ export default function UsersManagement() {
   const [showModal, setShowModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [confirmDeactivate, setConfirmDeactivate] = useState<{
+    show: boolean
+    userId: number | null
+    appointmentCount: number
+  }>({ show: false, userId: null, appointmentCount: 0 })
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -244,23 +249,46 @@ export default function UsersManagement() {
     setShowModal(true)
   }
 
-  const toggleUserStatus = async (codigo_usuario: number) => {
+  const toggleUserStatus = async (codigo_usuario: number, force: boolean = false) => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/admin/users/${codigo_usuario}/toggle-status`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      )
+      const url = force
+        ? `${process.env.NEXT_PUBLIC_API_URL}/admin/users/${codigo_usuario}/toggle-status?force=true`
+        : `${process.env.NEXT_PUBLIC_API_URL}/admin/users/${codigo_usuario}/toggle-status`
+
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
 
       if (response.ok) {
+        const result = await response.json()
+        if (force) {
+          setMessage({
+            type: 'success',
+            text: 'Usuario desactivado y citas canceladas correctamente',
+          })
+        }
         loadUsers()
+        setConfirmDeactivate({ show: false, userId: null, appointmentCount: 0 })
+      } else {
+        const error = await response.json()
+        // Check if it's the pending appointments error
+        const appointmentMatch = error.message?.match(/tiene (\d+) cita\(s\) pendiente\(s\)/)
+        if (appointmentMatch) {
+          setConfirmDeactivate({
+            show: true,
+            userId: codigo_usuario,
+            appointmentCount: parseInt(appointmentMatch[1]),
+          })
+        } else {
+          setMessage({ type: 'error', text: error.message || 'Error al cambiar estado' })
+        }
       }
     } catch (error) {
       console.error('Error toggling user status:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
 
@@ -677,6 +705,42 @@ export default function UsersManagement() {
                 <Button type="submit">{editingUser ? 'Actualizar' : 'Crear'} Usuario</Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Deactivating User with Appointments */}
+      {confirmDeactivate.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-lab-warning-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-lab-neutral-900">
+                Confirmar desactivación
+              </h3>
+            </div>
+            <p className="text-lab-neutral-600 mb-6">
+              Este usuario tiene <span className="font-semibold text-lab-warning-600">{confirmDeactivate.appointmentCount} cita(s) pendiente(s)</span>.
+              Si continúa, las citas serán canceladas automáticamente.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => setConfirmDeactivate({ show: false, userId: null, appointmentCount: 0 })}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="bg-lab-danger-600 hover:bg-lab-danger-700 text-white"
+                onClick={() => confirmDeactivate.userId && toggleUserStatus(confirmDeactivate.userId, true)}
+              >
+                Desactivar y cancelar citas
+              </Button>
+            </div>
           </div>
         </div>
       )}

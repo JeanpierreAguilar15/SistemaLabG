@@ -285,13 +285,44 @@ export class UsersService {
     };
   }
 
-  async toggleStatus(codigo_usuario: number, adminId?: number) {
+  async toggleStatus(codigo_usuario: number, adminId?: number, force: boolean = false) {
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
     });
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Si vamos a DESACTIVAR, verificar citas pendientes
+    if (user.activo) {
+      const citasPendientes = await this.prisma.cita.count({
+        where: {
+          codigo_paciente: codigo_usuario,
+          estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+        },
+      });
+
+      if (citasPendientes > 0 && !force) {
+        throw new BadRequestException(
+          `No se puede desactivar: el usuario tiene ${citasPendientes} cita(s) pendiente(s). ` +
+          `Cancele las citas primero o use force=true para desactivar de todos modos.`
+        );
+      }
+
+      // Si force=true, cancelar las citas automaticamente
+      if (citasPendientes > 0 && force) {
+        await this.prisma.cita.updateMany({
+          where: {
+            codigo_paciente: codigo_usuario,
+            estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+          },
+          data: {
+            estado: 'CANCELADA',
+            observaciones_internas: 'Cancelada automaticamente al desactivar usuario',
+          },
+        });
+      }
     }
 
     const updatedUser = await this.prisma.usuario.update({

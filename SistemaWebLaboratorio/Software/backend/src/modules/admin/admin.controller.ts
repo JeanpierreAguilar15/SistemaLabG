@@ -110,8 +110,9 @@ export class AdminController {
   async toggleUserStatus(
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
+    @Query('force') force?: string,
   ) {
-    return this.usersService.toggleStatus(id, adminId);
+    return this.usersService.toggleStatus(id, adminId, force === 'true');
   }
 
   @Post('users/:id/reset-password')
