@@ -19,9 +19,6 @@ export * from './price.dto';
 // Category DTOs
 export * from './category.dto';
 
-// Package DTOs
-export * from './package.dto';
-
 // Inventory DTOs
 export * from './inventory.dto';
 

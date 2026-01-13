@@ -43,8 +43,6 @@ import {
   UpdatePriceDto,
   CreateCategoryDto,
   UpdateCategoryDto,
-  CreatePackageDto,
-  UpdatePackageDto,
   CreateInventoryItemDto,
   UpdateInventoryItemDto,
   CreateSupplierDto,
@@ -379,44 +377,6 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.adminService.deleteExamCategory(id, adminId);
-  }
-
-  // ==================== PAQUETES ====================
-
-  @Get('packages')
-  async getAllPackages() {
-    return this.adminService.getAllPackages();
-  }
-
-  @Get('packages/:id')
-  async getPackageById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getPackageById(id);
-  }
-
-  @Post('packages')
-  @HttpCode(HttpStatus.CREATED)
-  async createPackage(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Body() data: CreatePackageDto,
-  ) {
-    return this.adminService.createPackage(data, adminId);
-  }
-
-  @Put('packages/:id')
-  async updatePackage(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() data: UpdatePackageDto,
-  ) {
-    return this.adminService.updatePackage(id, data, adminId);
-  }
-
-  @Delete('packages/:id')
-  async deletePackage(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.adminService.deletePackage(id, adminId);
   }
 
   // ==================== INVENTARIO ====================

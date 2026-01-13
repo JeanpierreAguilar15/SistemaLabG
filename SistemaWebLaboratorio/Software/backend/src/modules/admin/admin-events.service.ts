@@ -38,11 +38,6 @@ export enum AdminEventType {
   CATEGORY_UPDATED = 'admin.category.updated',
   CATEGORY_DELETED = 'admin.category.deleted',
 
-  // Paquetes
-  PACKAGE_CREATED = 'admin.package.created',
-  PACKAGE_UPDATED = 'admin.package.updated',
-  PACKAGE_DELETED = 'admin.package.deleted',
-
   // Inventario
   INVENTORY_ITEM_CREATED = 'admin.inventory.created',
   INVENTORY_ITEM_UPDATED = 'admin.inventory.updated',
@@ -290,45 +285,6 @@ export class AdminEventsService {
     this.emitEvent(AdminEventType.LOCATION_DELETED, {
       entityType: 'location',
       entityId: locationId,
-      action: 'deleted',
-      userId: adminId,
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  // Paquetes
-  emitPackageCreated(packageId: number, adminId: number, data?: any, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.PACKAGE_CREATED, {
-      entityType: 'package',
-      entityId: packageId,
-      action: 'created',
-      userId: adminId,
-      data,
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  emitPackageUpdated(packageId: number, adminId: number, data?: any, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.PACKAGE_UPDATED, {
-      entityType: 'package',
-      entityId: packageId,
-      action: 'updated',
-      userId: adminId,
-      data,
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  emitPackageDeleted(packageId: number, adminId: number, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.PACKAGE_DELETED, {
-      entityType: 'package',
-      entityId: packageId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
