@@ -1,5 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { PrismaModule } from '../prisma/prisma.module';
+import { PrismaModule } from '@prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
 import { AdminEventsListener } from './listeners/admin-events.listener';
 import { SecurityLoggingService } from './services/security-logging.service';

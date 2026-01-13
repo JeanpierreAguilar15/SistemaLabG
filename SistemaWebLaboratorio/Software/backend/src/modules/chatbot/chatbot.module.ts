@@ -1,6 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { PrismaModule } from '../../prisma/prisma.module';
+import { PrismaModule } from '@prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
 import { ChatbotService } from './services/chatbot.service';
 import { ChatbotLoggingService } from './services/chatbot-logging.service';

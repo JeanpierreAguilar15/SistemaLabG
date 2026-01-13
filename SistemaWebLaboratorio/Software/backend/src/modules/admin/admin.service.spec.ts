@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminService } from './admin.service';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '@prisma/prisma.service';
 import { AdminEventsService } from './admin-events.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 

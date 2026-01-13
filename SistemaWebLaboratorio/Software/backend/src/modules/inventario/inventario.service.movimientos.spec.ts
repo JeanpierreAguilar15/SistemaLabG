@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { InventarioService } from './inventario.service';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '@prisma/prisma.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TipoMovimiento } from './dto/movimiento.dto';
 

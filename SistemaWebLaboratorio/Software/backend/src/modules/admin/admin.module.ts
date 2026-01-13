@@ -3,7 +3,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminEventsService } from './admin-events.service';
-import { PrismaModule } from '../../prisma/prisma.module';
+import { PrismaModule } from '@prisma/prisma.module';
 import { UsersModule } from '../users/users.module';
 import { InventarioModule } from '../inventario/inventario.module';
 
