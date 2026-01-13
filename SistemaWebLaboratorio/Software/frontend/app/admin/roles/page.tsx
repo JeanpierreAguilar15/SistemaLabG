@@ -37,6 +37,16 @@ export default function RolesManagement() {
   const [showPermissionsModal, setShowPermissionsModal] = useState(false)
   const [selectedPermissions, setSelectedPermissions] = useState<RolePermissions | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{ show: boolean; roleId: number | null; roleName: string }>({
+    show: false,
+    roleId: null,
+    roleName: '',
+  })
+  const [confirmDeactivate, setConfirmDeactivate] = useState<{
+    show: boolean
+    roleId: number | null
+    userCount: number
+  }>({ show: false, roleId: null, userCount: 0 })
   const [formData, setFormData] = useState<RoleFormData>({
     nombre: '',
     descripcion: '',
@@ -45,9 +55,11 @@ export default function RolesManagement() {
   })
 
   useEffect(() => {
-    loadRoles()
-    loadPermissions()
-  }, [])
+    if (accessToken) {
+      loadRoles()
+      loadPermissions()
+    }
+  }, [accessToken])
 
   useEffect(() => {
     if (message) {
@@ -189,15 +201,26 @@ export default function RolesManagement() {
         )
 
         if (response.ok) {
-          setMessage({ type: 'success', text: '✅ Rol actualizado correctamente' })
+          setMessage({ type: 'success', text: 'Rol actualizado correctamente' })
           loadRoles()
           handleCloseModal()
         } else {
           const error = await response.json()
-          setMessage({
-            type: 'error',
-            text: error.message || 'Error al actualizar el rol',
-          })
+          // Check if it's the users assigned error when deactivating
+          const usersMatch = error.message?.match(/tiene (\d+) usuario\(s\) asignado\(s\)/)
+          if (usersMatch && !formData.activo) {
+            setConfirmDeactivate({
+              show: true,
+              roleId: editingRole.codigo_rol,
+              userCount: parseInt(usersMatch[1]),
+            })
+            handleCloseModal()
+          } else {
+            setMessage({
+              type: 'error',
+              text: error.message || 'Error al actualizar el rol',
+            })
+          }
         }
       } else {
         // Crear nuevo rol
@@ -211,7 +234,7 @@ export default function RolesManagement() {
         })
 
         if (response.ok) {
-          setMessage({ type: 'success', text: '✅ Rol creado correctamente' })
+          setMessage({ type: 'success', text: 'Rol creado correctamente' })
           loadRoles()
           handleCloseModal()
         } else {
@@ -228,13 +251,15 @@ export default function RolesManagement() {
     }
   }
 
-  const handleDelete = async (roleId: number, roleName: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar el rol "${roleName}"?\n\nNOTA: No se puede eliminar un rol que tenga usuarios asignados.`)) {
-      return
-    }
+  const handleDeleteClick = (roleId: number, roleName: string) => {
+    setConfirmDelete({ show: true, roleId, roleName })
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!confirmDelete.roleId) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/roles/${roleId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/roles/${confirmDelete.roleId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -242,7 +267,7 @@ export default function RolesManagement() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: '✅ Rol eliminado correctamente' })
+        setMessage({ type: 'success', text: 'Rol eliminado correctamente' })
         loadRoles()
       } else {
         const error = await response.json()
@@ -254,6 +279,42 @@ export default function RolesManagement() {
     } catch (error) {
       console.error('Error deleting role:', error)
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setConfirmDelete({ show: false, roleId: null, roleName: '' })
+    }
+  }
+
+  const handleForceDeactivate = async () => {
+    if (!confirmDeactivate.roleId) return
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/roles/${confirmDeactivate.roleId}?force=true`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ activo: false }),
+        }
+      )
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Rol desactivado correctamente' })
+        loadRoles()
+      } else {
+        const error = await response.json()
+        setMessage({
+          type: 'error',
+          text: error.message || 'Error al desactivar el rol',
+        })
+      }
+    } catch (error) {
+      console.error('Error deactivating role:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+    } finally {
+      setConfirmDeactivate({ show: false, roleId: null, userCount: 0 })
     }
   }
 
@@ -464,7 +525,7 @@ export default function RolesManagement() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(role.codigo_rol, role.nombre)}
+                          onClick={() => handleDeleteClick(role.codigo_rol, role.nombre)}
                           className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
                           title="Eliminar rol"
                         >
@@ -681,6 +742,90 @@ export default function RolesManagement() {
                   className="w-full sm:w-auto bg-lab-primary-600 hover:bg-lab-primary-700"
                 >
                   Cerrar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Delete */}
+      {confirmDelete.show && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setConfirmDelete({ show: false, roleId: null, roleName: '' })}></div>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex-shrink-0 w-10 h-10 bg-lab-danger-100 rounded-full flex items-center justify-center">
+                    <svg className="w-6 h-6 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-lab-neutral-900">Eliminar Rol</h3>
+                </div>
+                <p className="text-lab-neutral-600">
+                  ¿Estás seguro de que deseas eliminar el rol <span className="font-semibold">"{confirmDelete.roleName}"</span>?
+                </p>
+                <p className="text-sm text-lab-neutral-500 mt-2">
+                  Nota: No se puede eliminar un rol que tenga usuarios asignados.
+                </p>
+              </div>
+              <div className="bg-lab-neutral-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <Button
+                  onClick={handleDeleteConfirm}
+                  className="w-full sm:w-auto sm:ml-3 bg-lab-danger-600 hover:bg-lab-danger-700 text-white"
+                >
+                  Eliminar
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setConfirmDelete({ show: false, roleId: null, roleName: '' })}
+                  className="mt-3 w-full sm:mt-0 sm:w-auto"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Force Deactivate */}
+      {confirmDeactivate.show && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setConfirmDeactivate({ show: false, roleId: null, userCount: 0 })}></div>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex-shrink-0 w-10 h-10 bg-lab-warning-100 rounded-full flex items-center justify-center">
+                    <svg className="w-6 h-6 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-lab-neutral-900">Confirmar Desactivación</h3>
+                </div>
+                <p className="text-lab-neutral-600">
+                  Este rol tiene <span className="font-semibold text-lab-warning-600">{confirmDeactivate.userCount} usuario(s) asignado(s)</span>.
+                </p>
+                <p className="text-sm text-lab-neutral-500 mt-2">
+                  Los usuarios mantendrán este rol pero quedará inactivo. Considere reasignar los usuarios a otro rol antes de desactivar.
+                </p>
+              </div>
+              <div className="bg-lab-neutral-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <Button
+                  onClick={handleForceDeactivate}
+                  className="w-full sm:w-auto sm:ml-3 bg-lab-warning-600 hover:bg-lab-warning-700 text-white"
+                >
+                  Desactivar de todos modos
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setConfirmDeactivate({ show: false, roleId: null, userCount: 0 })}
+                  className="mt-3 w-full sm:mt-0 sm:w-auto"
+                >
+                  Cancelar
                 </Button>
               </div>
             </div>

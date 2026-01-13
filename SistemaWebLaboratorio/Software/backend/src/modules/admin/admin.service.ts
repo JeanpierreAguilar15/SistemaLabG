@@ -68,13 +68,26 @@ export class AdminService {
     return role;
   }
 
-  async updateRole(codigo_rol: number, data: Prisma.RolUpdateInput, adminId: number) {
+  async updateRole(codigo_rol: number, data: Prisma.RolUpdateInput, adminId: number, force: boolean = false) {
     const role = await this.prisma.rol.findUnique({
       where: { codigo_rol },
+      include: {
+        _count: {
+          select: { usuarios: true },
+        },
+      },
     });
 
     if (!role) {
       throw new NotFoundException('Rol no encontrado');
+    }
+
+    // Si se va a DESACTIVAR el rol, verificar que no tenga usuarios asignados
+    if (data.activo === false && role.activo && role._count.usuarios > 0 && !force) {
+      throw new BadRequestException(
+        `No se puede desactivar: el rol tiene ${role._count.usuarios} usuario(s) asignado(s). ` +
+        `Reasigne los usuarios a otro rol primero o use force=true para desactivar de todos modos.`
+      );
     }
 
     const updatedRole = await this.prisma.rol.update({

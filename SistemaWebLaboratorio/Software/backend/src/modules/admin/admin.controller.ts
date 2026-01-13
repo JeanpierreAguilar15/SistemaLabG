@@ -164,8 +164,9 @@ export class AdminController {
     @CurrentUser('codigo_usuario') adminId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateRoleDto,
+    @Query('force') force?: string,
   ) {
-    return this.adminService.updateRole(id, data, adminId);
+    return this.adminService.updateRole(id, data, adminId, force === 'true');
   }
 
   @Delete('roles/:id')
