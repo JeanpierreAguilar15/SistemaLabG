@@ -94,11 +94,11 @@ export class AdminService {
         );
       }
 
-      // No permitir cambiar el nombre del rol de administrador
-      if (data.nombre && (data.nombre as string).toUpperCase() !== 'ADMIN') {
+      // No permitir cambiar el nombre del rol de administrador (ni siquiera mayusculas/minusculas)
+      if (data.nombre && (data.nombre as string) !== role.nombre) {
         throw new BadRequestException(
           'No se puede cambiar el nombre del rol de administrador del sistema. ' +
-          'El nombre "ADMIN" es requerido para el funcionamiento del sistema.'
+          'El nombre debe permanecer exactamente como "ADMIN".'
         );
       }
 
