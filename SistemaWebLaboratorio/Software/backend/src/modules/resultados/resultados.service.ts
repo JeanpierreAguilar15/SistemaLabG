@@ -6,7 +6,7 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '@prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { WhatsAppService } from '../comunicaciones/whatsapp.service';

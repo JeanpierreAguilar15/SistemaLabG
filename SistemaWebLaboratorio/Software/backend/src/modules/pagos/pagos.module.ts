@@ -6,7 +6,7 @@ import { CotizacionesService } from './cotizaciones.service';
 import { PagosService } from './pagos.service';
 import { CotizacionPdfService } from './cotizacion-pdf.service';
 import { PayPhoneService } from './payphone.service';
-import { PrismaModule } from '../prisma/prisma.module';
+import { PrismaModule } from '@prisma/prisma.module';
 
 @Module({
   imports: [PrismaModule, ConfigModule],
