@@ -74,12 +74,9 @@ export default function CitasAdminPage() {
     fechaFinGeneracion: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0]
   })
   const [deletingSlots, setDeletingSlots] = useState(false)
-
-  // ... (existing code)
+  const [confirmDeleteSlots, setConfirmDeleteSlots] = useState(false)
 
   const handleDeleteSlots = async () => {
-    if (!confirm('¿Estás seguro de eliminar los slots vacíos en este rango de fechas? Esta acción no se puede deshacer.')) return
-
     setDeletingSlots(true)
     try {
       const params = new URLSearchParams({
@@ -106,10 +103,9 @@ export default function CitasAdminPage() {
       setMessage({ type: 'error', text: error.message || 'Error al eliminar slots' })
     } finally {
       setDeletingSlots(false)
+      setConfirmDeleteSlots(false)
     }
   }
-
-  // ... (existing code)
 
   const [systemConfigs, setSystemConfigs] = useState<any[]>([])
 
@@ -554,12 +550,61 @@ export default function CitasAdminPage() {
 
               <div className="flex gap-2 mt-6">
                 <Button onClick={handleSaveConfig} disabled={savingConfig} className="flex-1">
-                  {savingConfig ? 'Guardando...' : 'Guardar Configuración'}
+                  {savingConfig ? 'Guardando...' : 'Guardar Configuracion'}
                 </Button>
                 <Button onClick={handleGenerateSlots} disabled={generatingSlots} variant="secondary" className="flex-1">
                   {generatingSlots ? 'Generando...' : 'Generar Disponibilidad'}
                 </Button>
               </div>
+
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <Button
+                  onClick={() => setConfirmDeleteSlots(true)}
+                  variant="outline"
+                  className="w-full text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                >
+                  Eliminar Slots Vacios del Rango
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Slots Modal */}
+      {confirmDeleteSlots && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-lab-danger-100 rounded-full mb-4">
+              <svg className="w-6 h-6 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-lab-neutral-900 text-center mb-2">
+              Confirmar Eliminacion de Slots
+            </h3>
+            <p className="text-sm text-lab-neutral-600 text-center mb-4">
+              Esta seguro de eliminar los slots vacios entre <span className="font-semibold">{tempConfig.fechaInicioGeneracion}</span> y <span className="font-semibold">{tempConfig.fechaFinGeneracion}</span>?
+            </p>
+            <p className="text-xs text-lab-warning-600 text-center mb-6 bg-lab-warning-50 p-2 rounded">
+              Solo se eliminaran slots sin citas agendadas. Esta accion no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => setConfirmDeleteSlots(false)}
+                variant="outline"
+                className="flex-1"
+                disabled={deletingSlots}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleDeleteSlots}
+                className="flex-1 bg-lab-danger-600 hover:bg-lab-danger-700"
+                disabled={deletingSlots}
+              >
+                {deletingSlots ? 'Eliminando...' : 'Eliminar Slots'}
+              </Button>
             </div>
           </div>
         </div>
