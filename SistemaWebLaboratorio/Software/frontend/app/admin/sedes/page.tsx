@@ -35,6 +35,11 @@ export default function LocationsManagement() {
     email: '',
     activo: true,
   })
+  const [confirmDelete, setConfirmDelete] = useState<{
+    show: boolean
+    locationId: number | null
+    locationName: string
+  }>({ show: false, locationId: null, locationName: '' })
 
   useEffect(() => {
     if (accessToken) {
@@ -205,33 +210,44 @@ export default function LocationsManagement() {
     }
   }
 
-  const handleDelete = async (locationId: number, locationName: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar la sede "${locationName}"?`)) {
-      return
-    }
+  const handleDeleteClick = (locationId: number, locationName: string) => {
+    setConfirmDelete({ show: true, locationId, locationName })
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!confirmDelete.locationId) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/locations/${locationId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/locations/${confirmDelete.locationId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Sede eliminada correctamente' })
+        setMessage({ type: 'success', text: 'Sede desactivada correctamente' })
         loadLocations()
       } else {
         const error = await response.json()
         setMessage({
           type: 'error',
-          text: error.message || 'Error al eliminar la sede',
+          text: error.message || 'Error al desactivar la sede',
         })
       }
     } catch (error) {
       console.error('Error deleting location:', error)
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexion al servidor' })
+    } finally {
+      setConfirmDelete({ show: false, locationId: null, locationName: '' })
     }
+  }
+
+  const handleDeleteCancel = () => {
+    setConfirmDelete({ show: false, locationId: null, locationName: '' })
   }
 
   if (loading) {
@@ -398,14 +414,14 @@ export default function LocationsManagement() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleDelete(location.codigo_sede, location.nombre)}
+                onClick={() => handleDeleteClick(location.codigo_sede, location.nombre)}
                 className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
-                title="Eliminar sede"
+                title="Desactivar sede"
               >
                 <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
-                Eliminar
+                Desactivar
               </Button>
             </div>
           </div>
@@ -557,6 +573,72 @@ export default function LocationsManagement() {
                   </Button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Delete Confirmation */}
+      {confirmDelete.show && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              onClick={handleDeleteCancel}
+            ></div>
+
+            {/* Modal panel */}
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-lab-danger-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <svg
+                      className="h-6 w-6 text-lab-danger-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                    <h3 className="text-lg leading-6 font-medium text-lab-neutral-900">
+                      Desactivar Sede
+                    </h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-lab-neutral-500">
+                        ¿Esta seguro de que desea desactivar la sede{' '}
+                        <span className="font-semibold text-lab-neutral-700">
+                          "{confirmDelete.locationName}"
+                        </span>
+                        ? Esta accion marcara la sede como inactiva.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-lab-neutral-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <Button
+                  onClick={handleDeleteConfirm}
+                  className="w-full sm:w-auto sm:ml-3 bg-lab-danger-600 hover:bg-lab-danger-700"
+                >
+                  Desactivar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDeleteCancel}
+                  className="mt-3 w-full sm:mt-0 sm:w-auto"
+                >
+                  Cancelar
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -344,6 +344,20 @@ export class AdminService {
   }
 
   async createLocation(data: Prisma.SedeCreateInput, adminId: number) {
+    // Validar nombre único (case insensitive)
+    const existingLocation = await this.prisma.sede.findFirst({
+      where: {
+        nombre: { equals: data.nombre as string, mode: 'insensitive' },
+      },
+    });
+
+    if (existingLocation) {
+      throw new BadRequestException(
+        `Ya existe una sede con el nombre "${existingLocation.nombre}". ` +
+        'Los nombres de sedes deben ser únicos.'
+      );
+    }
+
     const location = await this.prisma.sede.create({
       data,
     });
@@ -367,6 +381,23 @@ export class AdminService {
       throw new NotFoundException('Sede no encontrada');
     }
 
+    // Validar nombre único si se está actualizando el nombre (case insensitive)
+    if (data.nombre) {
+      const existingLocation = await this.prisma.sede.findFirst({
+        where: {
+          nombre: { equals: data.nombre as string, mode: 'insensitive' },
+          codigo_sede: { not: codigo_sede },
+        },
+      });
+
+      if (existingLocation) {
+        throw new BadRequestException(
+          `Ya existe una sede con el nombre "${existingLocation.nombre}". ` +
+          'Los nombres de sedes deben ser únicos.'
+        );
+      }
+    }
+
     const updatedLocation = await this.prisma.sede.update({
       where: { codigo_sede },
       data,
@@ -385,10 +416,47 @@ export class AdminService {
   async deleteLocation(codigo_sede: number, adminId: number) {
     const location = await this.prisma.sede.findUnique({
       where: { codigo_sede },
+      include: {
+        _count: {
+          select: { horarios: true, slots: true },
+        },
+      },
     });
 
     if (!location) {
       throw new NotFoundException('Sede no encontrada');
+    }
+
+    // Verificar si tiene horarios activos
+    const horariosActivos = await this.prisma.horarioAtencion.count({
+      where: {
+        codigo_sede,
+        activo: true,
+      },
+    });
+
+    if (horariosActivos > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar: la sede tiene ${horariosActivos} horario(s) de atención activo(s). ` +
+        'Desactive los horarios primero.'
+      );
+    }
+
+    // Verificar si tiene citas pendientes
+    const citasPendientes = await this.prisma.cita.count({
+      where: {
+        slot: {
+          codigo_sede,
+        },
+        estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+      },
+    });
+
+    if (citasPendientes > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar: la sede tiene ${citasPendientes} cita(s) pendiente(s). ` +
+        'Cancele o complete las citas primero.'
+      );
     }
 
     // Desactivar en lugar de eliminar
