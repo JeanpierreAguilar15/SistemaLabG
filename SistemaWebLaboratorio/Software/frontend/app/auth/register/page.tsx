@@ -18,6 +18,8 @@ export default function RegisterPage() {
     apellidos: '',
     email: '',
     telefono: '',
+    fecha_nacimiento: '',
+    genero: '',
     password: '',
     confirmPassword: '',
   })
@@ -233,20 +235,52 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Telefono */}
+            {/* Row 3: Telefono & Genero */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="telefono" className="text-lab-neutral-700 font-medium text-sm">Telefono (opcional)</Label>
+                <Input
+                  id="telefono"
+                  type="tel"
+                  placeholder="0987654321"
+                  maxLength={10}
+                  value={formData.telefono}
+                  onChange={(e) => handleChange('telefono', e.target.value)}
+                  disabled={loading || success}
+                  className={`h-11 bg-lab-neutral-50 border-lab-neutral-200 ${errors.telefono ? 'border-red-300' : ''}`}
+                />
+                {errors.telefono && <p className="text-xs text-red-600">{errors.telefono}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="genero" className="text-lab-neutral-700 font-medium text-sm">Genero (opcional)</Label>
+                <select
+                  id="genero"
+                  value={formData.genero}
+                  onChange={(e) => handleChange('genero', e.target.value)}
+                  disabled={loading || success}
+                  className="w-full h-11 px-3 rounded-md bg-lab-neutral-50 border border-lab-neutral-200 text-lab-neutral-900 text-sm focus:outline-none focus:ring-2 focus:ring-lab-primary-500 focus:border-transparent"
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="MASCULINO">Masculino</option>
+                  <option value="FEMENINO">Femenino</option>
+                  <option value="OTRO">Otro</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Fecha de Nacimiento */}
             <div className="space-y-1.5">
-              <Label htmlFor="telefono" className="text-lab-neutral-700 font-medium text-sm">Telefono (opcional)</Label>
+              <Label htmlFor="fecha_nacimiento" className="text-lab-neutral-700 font-medium text-sm">Fecha de Nacimiento (opcional)</Label>
               <Input
-                id="telefono"
-                type="tel"
-                placeholder="0987654321"
-                maxLength={10}
-                value={formData.telefono}
-                onChange={(e) => handleChange('telefono', e.target.value)}
+                id="fecha_nacimiento"
+                type="date"
+                value={formData.fecha_nacimiento}
+                onChange={(e) => handleChange('fecha_nacimiento', e.target.value)}
                 disabled={loading || success}
-                className={`h-11 bg-lab-neutral-50 border-lab-neutral-200 ${errors.telefono ? 'border-red-300' : ''}`}
+                max={new Date().toISOString().split('T')[0]}
+                className="h-11 bg-lab-neutral-50 border-lab-neutral-200"
               />
-              {errors.telefono && <p className="text-xs text-red-600">{errors.telefono}</p>}
             </div>
 
             {/* Password */}

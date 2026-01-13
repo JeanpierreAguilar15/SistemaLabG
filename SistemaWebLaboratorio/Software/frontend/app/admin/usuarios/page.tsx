@@ -60,14 +60,22 @@ export default function UsersManagement() {
     direccion: '',
     codigo_rol: '',
     password: '',
-    contacto_emergencia_nombre: '',
-    contacto_emergencia_telefono: '',
   })
 
   useEffect(() => {
-    loadUsers()
-    loadRoles()
-  }, [pagination.page, searchTerm, filterRole, filterActive])
+    if (accessToken) {
+      loadUsers()
+      loadRoles()
+    }
+  }, [accessToken, pagination.page, searchTerm, filterRole, filterActive])
+
+  // Auto-clear messages after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
 
   const loadUsers = async () => {
     try {
@@ -122,13 +130,13 @@ export default function UsersManagement() {
 
     // 1. Validar cédula ecuatoriana
     if (!validateCedulaEcuador(formData.cedula)) {
-      setMessage({ type: 'error', text: '❌ La cédula ingresada no es válida. Verifique que sea una cédula ecuatoriana correcta.' })
+      setMessage({ type: 'error', text: 'La cédula ingresada no es válida. Verifique que sea una cédula ecuatoriana correcta.' })
       return
     }
 
     // 2. Validar email
     if (!validateEmail(formData.email)) {
-      setMessage({ type: 'error', text: '❌ El email ingresado no es válido.' })
+      setMessage({ type: 'error', text: 'El email ingresado no es válido.' })
       return
     }
 
@@ -136,43 +144,25 @@ export default function UsersManagement() {
     if (formData.telefono && !validatePhoneEcuador(formData.telefono)) {
       setMessage({
         type: 'error',
-        text: '❌ El teléfono debe ser un número ecuatoriano válido (Ej: 0999999999 o +593999999999)'
+        text: 'El teléfono debe ser un número ecuatoriano válido (Ej: 0999999999 o +593999999999)'
       })
       return
     }
 
     // 4. Validar fecha de nacimiento no sea futura
     if (formData.fecha_nacimiento && !validateDateNotFuture(formData.fecha_nacimiento)) {
-      setMessage({ type: 'error', text: '❌ La fecha de nacimiento no puede ser una fecha futura.' })
+      setMessage({ type: 'error', text: 'La fecha de nacimiento no puede ser una fecha futura.' })
       return
     }
 
     // 5. Validar que nombres y apellidos tengan al menos 2 caracteres
     if (formData.nombres.trim().length < 2) {
-      setMessage({ type: 'error', text: '❌ Los nombres deben tener al menos 2 caracteres.' })
+      setMessage({ type: 'error', text: 'Los nombres deben tener al menos 2 caracteres.' })
       return
     }
 
     if (formData.apellidos.trim().length < 2) {
-      setMessage({ type: 'error', text: '❌ Los apellidos deben tener al menos 2 caracteres.' })
-      return
-    }
-
-    // 6. Validar contacto de emergencia (si nombre presente, teléfono requerido)
-    if (formData.contacto_emergencia_nombre && !formData.contacto_emergencia_telefono) {
-      setMessage({
-        type: 'error',
-        text: '❌ Si ingresa un contacto de emergencia, debe proporcionar el teléfono.'
-      })
-      return
-    }
-
-    // 7. Validar teléfono de emergencia (si está presente)
-    if (formData.contacto_emergencia_telefono && !validatePhoneEcuador(formData.contacto_emergencia_telefono)) {
-      setMessage({
-        type: 'error',
-        text: '❌ El teléfono de emergencia debe ser un número ecuatoriano válido.'
-      })
+      setMessage({ type: 'error', text: 'Los apellidos deben tener al menos 2 caracteres.' })
       return
     }
 
@@ -186,12 +176,6 @@ export default function UsersManagement() {
       genero: formData.genero || null,
       direccion: formData.direccion ? formData.direccion.trim() : null,
       codigo_rol: parseInt(formData.codigo_rol),
-      ...(formData.contacto_emergencia_nombre && {
-        contacto_emergencia_nombre: formData.contacto_emergencia_nombre.trim(),
-      }),
-      ...(formData.contacto_emergencia_telefono && {
-        contacto_emergencia_telefono: formData.contacto_emergencia_telefono.trim(),
-      }),
       ...(!editingUser && { password: formData.password }), // Solo en crear
     }
 
@@ -230,7 +214,7 @@ export default function UsersManagement() {
         })
 
         if (response.ok) {
-          setMessage({ type: 'success', text: '✅ Usuario creado correctamente' })
+          setMessage({ type: 'success', text: 'Usuario creado correctamente' })
           loadUsers()
           handleCloseModal()
         } else {
@@ -256,8 +240,6 @@ export default function UsersManagement() {
       direccion: user.direccion || '',
       codigo_rol: user.rol.codigo_rol.toString(),
       password: '',
-      contacto_emergencia_nombre: '',
-      contacto_emergencia_telefono: '',
     })
     setShowModal(true)
   }
@@ -296,8 +278,6 @@ export default function UsersManagement() {
       direccion: '',
       codigo_rol: '',
       password: '',
-      contacto_emergencia_nombre: '',
-      contacto_emergencia_telefono: '',
     })
   }
 
@@ -661,9 +641,9 @@ export default function UsersManagement() {
                     className="w-full h-10 px-3 rounded-md border border-lab-neutral-300"
                   >
                     <option value="">Seleccionar...</option>
-                    <option value="Masculino">Masculino</option>
-                    <option value="Femenino">Femenino</option>
-                    <option value="Otro">Otro</option>
+                    <option value="MASCULINO">Masculino</option>
+                    <option value="FEMENINO">Femenino</option>
+                    <option value="OTRO">Otro</option>
                   </select>
                 </div>
               </div>
@@ -688,31 +668,6 @@ export default function UsersManagement() {
                   className="w-full px-3 py-2 rounded-md border border-lab-neutral-300"
                   placeholder="Calle principal y secundaria, Quito"
                 />
-              </div>
-
-              <div className="border-t border-lab-neutral-200 pt-4 mt-4">
-                <h3 className="text-sm font-semibold text-lab-neutral-900 mb-3">Contacto de Emergencia (Opcional)</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="contacto_emergencia_nombre">Nombre</Label>
-                    <Input
-                      id="contacto_emergencia_nombre"
-                      value={formData.contacto_emergencia_nombre}
-                      onChange={(e) => setFormData({ ...formData, contacto_emergencia_nombre: e.target.value })}
-                      placeholder="María Pérez"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="contacto_emergencia_telefono">Teléfono</Label>
-                    <Input
-                      id="contacto_emergencia_telefono"
-                      value={formData.contacto_emergencia_telefono}
-                      onChange={(e) => setFormData({ ...formData, contacto_emergencia_telefono: e.target.value })}
-                      placeholder="0999999999"
-                    />
-                  </div>
-                </div>
               </div>
 
               <div className="flex justify-end space-x-3 pt-4 border-t border-lab-neutral-200">
