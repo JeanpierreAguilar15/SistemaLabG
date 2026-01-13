@@ -567,12 +567,28 @@ export class AdminService {
 
   async createExam(data: any, adminId: number) {
     // Verificar que el codigo_interno no exista
-    const existingExam = await this.prisma.examen.findUnique({
+    const existingByCode = await this.prisma.examen.findUnique({
       where: { codigo_interno: data.codigo_interno },
     });
 
-    if (existingExam) {
-      throw new BadRequestException('El código interno ya existe');
+    if (existingByCode) {
+      throw new BadRequestException(
+        `Ya existe un examen con el codigo interno "${data.codigo_interno}".`
+      );
+    }
+
+    // Validar nombre único (case insensitive)
+    const existingByName = await this.prisma.examen.findFirst({
+      where: {
+        nombre: { equals: data.nombre, mode: 'insensitive' },
+      },
+    });
+
+    if (existingByName) {
+      throw new BadRequestException(
+        `Ya existe un examen con el nombre "${existingByName.nombre}". ` +
+        'Los nombres de examenes deben ser unicos.'
+      );
     }
 
     const exam = await this.prisma.examen.create({
@@ -603,12 +619,31 @@ export class AdminService {
 
     // Si se está actualizando el codigo_interno, validar que no exista
     if (data.codigo_interno && data.codigo_interno !== exam.codigo_interno) {
-      const existingExam = await this.prisma.examen.findUnique({
+      const existingByCode = await this.prisma.examen.findUnique({
         where: { codigo_interno: data.codigo_interno },
       });
 
-      if (existingExam) {
-        throw new BadRequestException('El código interno ya existe');
+      if (existingByCode) {
+        throw new BadRequestException(
+          `Ya existe un examen con el codigo interno "${data.codigo_interno}".`
+        );
+      }
+    }
+
+    // Validar nombre único si se está actualizando (case insensitive)
+    if (data.nombre && data.nombre !== exam.nombre) {
+      const existingByName = await this.prisma.examen.findFirst({
+        where: {
+          nombre: { equals: data.nombre, mode: 'insensitive' },
+          codigo_examen: { not: codigo_examen },
+        },
+      });
+
+      if (existingByName) {
+        throw new BadRequestException(
+          `Ya existe un examen con el nombre "${existingByName.nombre}". ` +
+          'Los nombres de examenes deben ser unicos.'
+        );
       }
     }
 
@@ -637,6 +672,36 @@ export class AdminService {
 
     if (!exam) {
       throw new NotFoundException('Examen no encontrado');
+    }
+
+    // Verificar si el examen está en paquetes activos
+    const paquetesActivos = await this.prisma.paqueteExamen.count({
+      where: {
+        codigo_examen,
+        paquete: { activo: true },
+      },
+    });
+
+    if (paquetesActivos > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar: el examen esta incluido en ${paquetesActivos} paquete(s) activo(s). ` +
+        'Retire el examen de los paquetes o desactive los paquetes primero.'
+      );
+    }
+
+    // Verificar si tiene resultados pendientes
+    const resultadosPendientes = await this.prisma.resultado.count({
+      where: {
+        codigo_examen,
+        estado: 'EN_PROCESO',
+      },
+    });
+
+    if (resultadosPendientes > 0) {
+      throw new BadRequestException(
+        `No se puede desactivar: el examen tiene ${resultadosPendientes} resultado(s) pendiente(s) de procesar. ` +
+        'Complete o cancele los resultados primero.'
+      );
     }
 
     // Desactivar en lugar de eliminar

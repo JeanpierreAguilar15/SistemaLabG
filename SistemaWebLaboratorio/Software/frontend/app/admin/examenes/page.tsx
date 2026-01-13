@@ -55,6 +55,20 @@ export default function ExamenesPage() {
     descripcion: '',
   })
 
+  // Confirmation modal states
+  const [confirmToggle, setConfirmToggle] = useState<{
+    show: boolean
+    examId: number | null
+    examName: string
+    isActive: boolean
+  }>({ show: false, examId: null, examName: '', isActive: false })
+
+  const [confirmDeleteCategoria, setConfirmDeleteCategoria] = useState<{
+    show: boolean
+    categoriaId: number | null
+    categoriaName: string
+  }>({ show: false, categoriaId: null, categoriaName: '' })
+
   // Form state
   const [formData, setFormData] = useState({
     codigo_interno: '',
@@ -298,29 +312,54 @@ export default function ExamenesPage() {
     setShowModal(true)
   }
 
-  const handleToggleActive = async (codigo_examen: number, isActive: boolean) => {
-    const action = isActive ? 'desactivar' : 'activar'
-    if (!confirm(`¿Estás seguro de que deseas ${action} este examen?`)) return
+  const handleToggleClick = (examen: Examen) => {
+    setConfirmToggle({
+      show: true,
+      examId: examen.codigo_examen,
+      examName: examen.nombre,
+      isActive: examen.activo,
+    })
+  }
+
+  const handleToggleConfirm = async () => {
+    if (!confirmToggle.examId) return
+
+    const action = confirmToggle.isActive ? 'desactivar' : 'activar'
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exams/${codigo_examen}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/exams/${confirmToggle.examId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
 
       if (response.ok) {
         setExamenes((prevExamenes) =>
           prevExamenes.map((examen) =>
-            examen.codigo_examen === codigo_examen
-              ? { ...examen, activo: !isActive }
+            examen.codigo_examen === confirmToggle.examId
+              ? { ...examen, activo: !confirmToggle.isActive }
               : examen
           )
         )
-        setMessage({ type: 'success', text: `Examen ${isActive ? 'desactivado' : 'activado'} correctamente` })
+        setMessage({
+          type: 'success',
+          text: `Examen ${confirmToggle.isActive ? 'desactivado' : 'activado'} correctamente`,
+        })
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || `Error al ${action} examen` })
       }
     } catch (error) {
       setMessage({ type: 'error', text: `Error al ${action} examen` })
+    } finally {
+      setConfirmToggle({ show: false, examId: null, examName: '', isActive: false })
     }
+  }
+
+  const handleToggleCancel = () => {
+    setConfirmToggle({ show: false, examId: null, examName: '', isActive: false })
   }
 
   const handleCloseModal = () => {
@@ -406,25 +445,42 @@ export default function ExamenesPage() {
     }
   }
 
-  const handleDeleteCategoria = async (codigo_categoria: number) => {
-    if (!confirm('¿Está seguro de eliminar esta categoría?')) return
+  const handleDeleteCategoriaClick = (categoria: Categoria) => {
+    setConfirmDeleteCategoria({
+      show: true,
+      categoriaId: categoria.codigo_categoria,
+      categoriaName: categoria.nombre,
+    })
+  }
+
+  const handleDeleteCategoriaConfirm = async () => {
+    if (!confirmDeleteCategoria.categoriaId) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exam-categories/${codigo_categoria}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/exam-categories/${confirmDeleteCategoria.categoriaId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Categoría eliminada correctamente' })
+        setMessage({ type: 'success', text: 'Categoria eliminada correctamente' })
         loadCategorias()
       } else {
         const error = await response.json()
-        setMessage({ type: 'error', text: error.message || 'Error al eliminar categoría' })
+        setMessage({ type: 'error', text: error.message || 'Error al eliminar categoria' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexion al servidor' })
+    } finally {
+      setConfirmDeleteCategoria({ show: false, categoriaId: null, categoriaName: '' })
     }
+  }
+
+  const handleDeleteCategoriaCancel = () => {
+    setConfirmDeleteCategoria({ show: false, categoriaId: null, categoriaName: '' })
   }
 
   const filteredExamenes = examenes.filter(
@@ -589,7 +645,7 @@ export default function ExamenesPage() {
                                 ? 'text-lab-danger-600 hover:text-lab-danger-700'
                                 : 'text-lab-success-600 hover:text-lab-success-700'
                             }
-                            onClick={() => handleToggleActive(examen.codigo_examen, examen.activo)}
+                            onClick={() => handleToggleClick(examen)}
                           >
                             {examen.activo ? 'Desactivar' : 'Activar'}
                           </Button>
@@ -650,9 +706,9 @@ export default function ExamenesPage() {
                             size="sm"
                             variant="outline"
                             className="text-lab-danger-600 hover:text-lab-danger-700"
-                            onClick={() => handleDeleteCategoria(cat.codigo_categoria)}
+                            onClick={() => handleDeleteCategoriaClick(cat)}
                             disabled={examenesEnCategoria > 0}
-                            title={examenesEnCategoria > 0 ? 'No se puede eliminar una categoría con exámenes' : ''}
+                            title={examenesEnCategoria > 0 ? 'No se puede eliminar una categoria con examenes' : ''}
                           >
                             Eliminar
                           </Button>
@@ -950,9 +1006,138 @@ export default function ExamenesPage() {
                 <Button type="button" variant="outline" onClick={handleCloseCategoriaModal}>
                   Cancelar
                 </Button>
-                <Button type="submit">{editingCategoria ? 'Actualizar' : 'Crear'} Categoría</Button>
+                <Button type="submit">{editingCategoria ? 'Actualizar' : 'Crear'} Categoria</Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Toggle Exam Confirmation */}
+      {confirmToggle.show && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              onClick={handleToggleCancel}
+            ></div>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div
+                    className={`mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full sm:mx-0 sm:h-10 sm:w-10 ${
+                      confirmToggle.isActive ? 'bg-lab-danger-100' : 'bg-lab-success-100'
+                    }`}
+                  >
+                    <svg
+                      className={`h-6 w-6 ${confirmToggle.isActive ? 'text-lab-danger-600' : 'text-lab-success-600'}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                    <h3 className="text-lg leading-6 font-medium text-lab-neutral-900">
+                      {confirmToggle.isActive ? 'Desactivar' : 'Activar'} Examen
+                    </h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-lab-neutral-500">
+                        ¿Esta seguro de que desea {confirmToggle.isActive ? 'desactivar' : 'activar'} el examen{' '}
+                        <span className="font-semibold text-lab-neutral-700">"{confirmToggle.examName}"</span>?
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-lab-neutral-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <Button
+                  onClick={handleToggleConfirm}
+                  className={`w-full sm:w-auto sm:ml-3 ${
+                    confirmToggle.isActive
+                      ? 'bg-lab-danger-600 hover:bg-lab-danger-700'
+                      : 'bg-lab-success-600 hover:bg-lab-success-700'
+                  }`}
+                >
+                  {confirmToggle.isActive ? 'Desactivar' : 'Activar'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleToggleCancel}
+                  className="mt-3 w-full sm:mt-0 sm:w-auto"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Delete Categoria Confirmation */}
+      {confirmDeleteCategoria.show && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              onClick={handleDeleteCategoriaCancel}
+            ></div>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-lab-danger-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <svg
+                      className="h-6 w-6 text-lab-danger-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </div>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                    <h3 className="text-lg leading-6 font-medium text-lab-neutral-900">Eliminar Categoria</h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-lab-neutral-500">
+                        ¿Esta seguro de que desea eliminar la categoria{' '}
+                        <span className="font-semibold text-lab-neutral-700">
+                          "{confirmDeleteCategoria.categoriaName}"
+                        </span>
+                        ? Esta accion no se puede deshacer.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-lab-neutral-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <Button
+                  onClick={handleDeleteCategoriaConfirm}
+                  className="w-full sm:w-auto sm:ml-3 bg-lab-danger-600 hover:bg-lab-danger-700"
+                >
+                  Eliminar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDeleteCategoriaCancel}
+                  className="mt-3 w-full sm:mt-0 sm:w-auto"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}
