@@ -17,6 +17,9 @@ export class ComunicacionesService {
     const user = this.configService.get<string>('SMTP_USER');
     const pass = this.configService.get<string>('SMTP_PASS');
 
+    // Debug: mostrar qué variables se encontraron
+    this.logger.debug(`SMTP Config - Host: ${host ? 'SET' : 'MISSING'}, Port: ${port ? port : 'MISSING'}, User: ${user ? 'SET' : 'MISSING'}, Pass: ${pass ? 'SET' : 'MISSING'}`);
+
     if (host && port && user && pass) {
       this.transporter = nodemailer.createTransport({
         host,
@@ -27,7 +30,16 @@ export class ComunicacionesService {
           pass,
         },
       });
-      this.logger.log('SMTP Transporter initialized');
+      this.logger.log(`SMTP Transporter initialized - Host: ${host}, Port: ${port}, User: ${user}`);
+
+      // Verificar conexión SMTP
+      this.transporter.verify((error, success) => {
+        if (error) {
+          this.logger.error('SMTP Connection FAILED:', error.message);
+        } else {
+          this.logger.log('SMTP Connection VERIFIED - Ready to send emails');
+        }
+      });
     } else {
       this.logger.warn(
         'SMTP credentials not found. Email sending will be disabled or logged only.',
@@ -193,22 +205,26 @@ export class ComunicacionesService {
       </html>
     `;
 
+    this.logger.log(`>>> Attempting to send recovery email to ${user.email} with code ${code}`);
+
     if (!this.transporter) {
-      this.logger.warn(`[MOCK EMAIL] Recovery code ${code} to ${user.email}`);
+      this.logger.warn(`[MOCK EMAIL] Recovery code ${code} to ${user.email} - NO TRANSPORTER`);
       this.logger.debug(`Reset link: ${resetLink}`);
       return;
     }
 
     try {
-      await this.transporter.sendMail({
+      this.logger.log(`>>> Transporter exists, sending email now...`);
+      const result = await this.transporter.sendMail({
         from: '"Laboratorio Franz" <' + this.configService.get('SMTP_USER') + '>',
         to: user.email,
         subject: `🔐 Código de Verificación: ${code} - Laboratorio Franz`,
         html,
       });
-      this.logger.log(`Recovery email sent to ${user.email}`);
-    } catch (error) {
-      this.logger.error(`Error sending recovery email to ${user.email}`, error);
+      this.logger.log(`Recovery email SENT to ${user.email} - MessageId: ${result.messageId}`);
+    } catch (error: any) {
+      this.logger.error(`ERROR sending recovery email to ${user.email}: ${error.message}`);
+      this.logger.error(`Full error:`, error);
     }
   }
 
