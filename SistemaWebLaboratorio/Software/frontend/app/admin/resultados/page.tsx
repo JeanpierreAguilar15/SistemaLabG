@@ -465,8 +465,6 @@ export default function ResultadosAdminPage() {
                   <th className="text-left p-4 font-semibold text-lab-neutral-900">Fecha</th>
                   <th className="text-left p-4 font-semibold text-lab-neutral-900">Paciente</th>
                   <th className="text-left p-4 font-semibold text-lab-neutral-900">Examen</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Valor</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Nivel</th>
                   <th className="text-left p-4 font-semibold text-lab-neutral-900">Estado</th>
                   <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
                 </tr>
@@ -489,14 +487,6 @@ export default function ResultadosAdminPage() {
                     <td className="p-4">
                       <div className="font-medium text-lab-neutral-900">{resultado.examen?.nombre}</div>
                       <div className="text-sm text-lab-neutral-600">{resultado.examen?.codigo_interno}</div>
-                    </td>
-                    <td className="p-4 font-semibold text-lab-neutral-900">
-                      {resultado.valor_numerico ? `${resultado.valor_numerico} ${resultado.unidad_medida || ''}` : resultado.valor_texto}
-                    </td>
-                    <td className="p-4">
-                      <span className={`text-xs px-2 py-1 rounded ${getNivelBadge(resultado.nivel)}`}>
-                        {resultado.nivel}
-                      </span>
                     </td>
                     <td className="p-4">
                       <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(resultado.estado)}`}>

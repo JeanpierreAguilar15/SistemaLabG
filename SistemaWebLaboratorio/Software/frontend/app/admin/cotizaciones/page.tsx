@@ -153,7 +153,7 @@ export default function CotizacionesAdminPage() {
         return 'bg-amber-100 text-amber-800'
       case 'PAGADA':
         return 'bg-lab-success-100 text-lab-success-800'
-      case 'APROBADA':
+      case 'ACEPTADA':
         return 'bg-lab-success-100 text-lab-success-800'
       case 'RECHAZADA':
         return 'bg-lab-danger-100 text-lab-danger-800'
@@ -172,8 +172,8 @@ export default function CotizacionesAdminPage() {
         return 'Pago en Ventanilla'
       case 'PAGADA':
         return 'Pagada'
-      case 'APROBADA':
-        return 'Aprobada'
+      case 'ACEPTADA':
+        return 'Aceptada'
       case 'RECHAZADA':
         return 'Rechazada'
       case 'EXPIRADA':
@@ -434,8 +434,8 @@ export default function CotizacionesAdminPage() {
                   >
                     Rechazar
                   </Button>
-                  <Button onClick={() => handleUpdateEstado(selectedCotizacion.codigo_cotizacion, 'APROBADA')}>
-                    Aprobar
+                  <Button onClick={() => handleUpdateEstado(selectedCotizacion.codigo_cotizacion, 'ACEPTADA')}>
+                    Aceptar
                   </Button>
                 </div>
               )}

@@ -197,10 +197,8 @@ export default function CitasPage() {
       const servicio = servicios.find(s => s.nombre === selectedCita.servicio);
       const codigoServicio = servicio ? servicio.codigo_servicio : '';
 
-      const fechaDesde = `${fecha}T00:00:00`
-      const fechaHasta = `${fecha}T23:59:59`
-
-      let url = `${process.env.NEXT_PUBLIC_API_URL}/agenda/slots/available?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`
+      // Usar el parámetro 'fecha' que espera el backend (YYYY-MM-DD)
+      let url = `${process.env.NEXT_PUBLIC_API_URL}/agenda/slots/available?fecha=${fecha}`
       if (codigoServicio) {
         url += `&codigo_servicio=${codigoServicio}`
       }

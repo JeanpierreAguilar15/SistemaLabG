@@ -117,7 +117,8 @@ export class AgendaService {
       const currentDate = new Date(currentIterDate);
 
       // Saltar fines de semana (0 = Domingo, 6 = Sábado)
-      const dayOfWeek = currentDate.getUTCDay();
+      // Usar getDay() en vez de getUTCDay() para evitar problemas de zona horaria
+      const dayOfWeek = currentDate.getDay();
       if (dayOfWeek === 0 || dayOfWeek === 6) {
         currentIterDate.setDate(currentIterDate.getDate() + 1);
         continue;
