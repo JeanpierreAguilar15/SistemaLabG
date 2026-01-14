@@ -39,13 +39,13 @@ export class LabResultsInterpreterService {
   private readonly apiKey: string;
   private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-  // Modelos en orden de preferencia (más modelos para fallback cuando se agotan cuotas)
+  // Modelos en orden de preferencia (actualizados enero 2025)
+  // Nota: gemini-1.5-* fueron retirados en abril 2025
   private readonly models = [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-8b',
-    'gemini-1.5-pro',
+    'gemini-2.5-flash',       // Modelo principal recomendado
+    'gemini-2.5-flash-lite',  // Alternativa más económica
+    'gemini-2.0-flash',       // Fallback (se retira marzo 2026)
+    'gemini-2.0-flash-lite',  // Fallback económico
   ];
 
   private readonly maxRetries = 2;
