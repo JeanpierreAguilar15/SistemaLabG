@@ -26,6 +26,38 @@ function extractTimeString(time: Date): string {
 }
 
 /**
+ * Formatea una fecha de PostgreSQL correctamente sin problemas de timezone
+ * PostgreSQL DATE se almacena como YYYY-MM-DD y Prisma puede convertirlo con offset
+ */
+function formatearFechaSlot(fecha: Date | string): { fechaStr: string; diaSemana: string; fechaISO: string } {
+    const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+
+    // Si es un string, parsearlo directamente
+    let fechaDate: Date;
+    if (typeof fecha === 'string') {
+        // Formato YYYY-MM-DD
+        const [year, month, day] = fecha.split('T')[0].split('-').map(Number);
+        fechaDate = new Date(year, month - 1, day);
+    } else {
+        // Si es Date, usar UTC para evitar offset
+        const isoStr = fecha.toISOString().split('T')[0];
+        const [year, month, day] = isoStr.split('-').map(Number);
+        fechaDate = new Date(year, month - 1, day);
+    }
+
+    const diaSemana = diasSemana[fechaDate.getDay()];
+    const dia = fechaDate.getDate().toString().padStart(2, '0');
+    const mes = (fechaDate.getMonth() + 1).toString().padStart(2, '0');
+    const fechaISO = `${fechaDate.getFullYear()}-${mes}-${dia}`;
+
+    return {
+        fechaStr: `${dia}/${mes}`,
+        diaSemana,
+        fechaISO
+    };
+}
+
+/**
  * Examen seleccionado para cotización
  */
 interface ExamenSeleccionado {
@@ -208,20 +240,20 @@ export class ChatbotAgendaService {
         state.servicioNombre = servicioSeleccionado.nombre;
         this.conversationStates.set(sessionId, state);
 
-        const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
         const listaFechas = slotsDisponibles.slice(0, 7).map((slot, idx) => {
-            const fecha = new Date(slot.fecha);
-            const diaSemana = diasSemana[fecha.getDay()];
-            const fechaStr = fecha.toLocaleDateString('es', { day: '2-digit', month: '2-digit' });
+            const { diaSemana, fechaStr } = formatearFechaSlot(slot.fecha);
             return `${idx + 1}. ${diaSemana} ${fechaStr}`;
         }).join('\n');
 
         return {
             mensaje: `Has seleccionado: ${servicioSeleccionado.nombre}\n\nFechas disponibles:\n\n${listaFechas}\n\nEscribe el numero de la fecha.`,
-            opciones: slotsDisponibles.slice(0, 7).map(s => ({
-                fecha: new Date(s.fecha).toISOString().split('T')[0],
-                disponibles: s._count.codigo_slot,
-            })),
+            opciones: slotsDisponibles.slice(0, 7).map(s => {
+                const { fechaISO } = formatearFechaSlot(s.fecha);
+                return {
+                    fecha: fechaISO,
+                    disponibles: s._count.codigo_slot,
+                };
+            }),
             accion: 'SELECCIONAR_FECHA',
         };
     }
@@ -256,46 +288,54 @@ export class ChatbotAgendaService {
             orderBy: { fecha: 'asc' },
         });
 
-        let fechaSeleccionada: Date | undefined;
+        let fechaSeleccionadaISO: string | undefined;
 
         // Intentar por número
         const numero = parseInt(input);
         if (!isNaN(numero) && numero > 0 && numero <= fechasDisponibles.length) {
-            fechaSeleccionada = new Date(fechasDisponibles[numero - 1].fecha);
+            const { fechaISO } = formatearFechaSlot(fechasDisponibles[numero - 1].fecha);
+            fechaSeleccionadaISO = fechaISO;
         } else {
             // Intentar por día de la semana
-            const diasPatrones = [
-                { patron: /dom(ingo)?/i, dia: 0 },
-                { patron: /lun(es)?/i, dia: 1 },
-                { patron: /mar(tes)?/i, dia: 2 },
-                { patron: /mi[eé]r?(coles)?/i, dia: 3 },
-                { patron: /jue(ves)?/i, dia: 4 },
-                { patron: /vie(rnes)?/i, dia: 5 },
-                { patron: /s[aá]b(ado)?/i, dia: 6 },
-            ];
+            const diasNombres: Record<number, RegExp> = {
+                0: /dom(ingo)?/i,
+                1: /lun(es)?/i,
+                2: /mar(tes)?/i,
+                3: /mi[eé]r?(coles)?/i,
+                4: /jue(ves)?/i,
+                5: /vie(rnes)?/i,
+                6: /s[aá]b(ado)?/i,
+            };
 
-            for (const { patron, dia } of diasPatrones) {
-                if (patron.test(input)) {
-                    fechaSeleccionada = fechasDisponibles.find(f =>
-                        new Date(f.fecha).getDay() === dia
-                    )?.fecha as Date | undefined;
+            for (const f of fechasDisponibles) {
+                const { fechaISO } = formatearFechaSlot(f.fecha);
+                const [year, month, day] = fechaISO.split('-').map(Number);
+                const fechaDate = new Date(year, month - 1, day);
+                const diaSemana = fechaDate.getDay();
+
+                if (diasNombres[diaSemana]?.test(input)) {
+                    fechaSeleccionadaISO = fechaISO;
                     break;
                 }
             }
         }
 
-        if (!fechaSeleccionada) {
+        if (!fechaSeleccionadaISO) {
             return {
                 mensaje: `No entendí la fecha. Por favor, escribe el número (1-${fechasDisponibles.length}) o el día de la semana.`,
                 accion: 'SELECCIONAR_FECHA_RETRY',
             };
         }
 
+        // Convertir ISO string a fecha para la consulta de Prisma
+        const [year, month, day] = fechaSeleccionadaISO.split('-').map(Number);
+        const fechaParaConsulta = new Date(Date.UTC(year, month - 1, day));
+
         // Buscar slots disponibles para esa fecha
         const slots = await this.prisma.slot.findMany({
             where: {
                 codigo_servicio: state.servicioId,
-                fecha: fechaSeleccionada,
+                fecha: fechaParaConsulta,
                 activo: true,
                 cupos_disponibles: { gt: 0 },
             },
@@ -329,17 +369,17 @@ export class ChatbotAgendaService {
         if (slotsManana > 0) turnosDisponibles.push('MANANA');
         if (slotsTarde > 0) turnosDisponibles.push('TARDE');
 
-        // Actualizar estado
+        // Actualizar estado - guardar la fecha en formato ISO
         state.step = 'SELECCIONAR_TURNO';
-        state.fecha = fechaSeleccionada.toISOString().split('T')[0];
+        state.fecha = fechaSeleccionadaISO;
         state.turnosDisponibles = turnosDisponibles;
         this.conversationStates.set(sessionId, state);
 
-        const fechaFormateada = new Date(fechaSeleccionada).toLocaleDateString('es-EC', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long'
-        });
+        // Formatear la fecha para mostrar al usuario
+        const fechaDate = new Date(year, month - 1, day);
+        const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+        const diasSemanaLargo = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+        const fechaFormateada = `${diasSemanaLargo[fechaDate.getDay()]} ${day} de ${meses[month - 1]}`;
 
         // Construir opciones de turno dinámicamente
         const opcionesTurno = turnosDisponibles.map((turno, idx) => {
@@ -904,19 +944,17 @@ export class ChatbotAgendaService {
         const total = state.examenesSeleccionados?.reduce((sum, e) => sum + Number(e.precio), 0) || 0;
         const resumenExamenes = state.examenesSeleccionados?.map(e => `  - ${e.nombre}`).join('\n') || '';
 
-        const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
         const listaFechas = slotsDisponibles.slice(0, 7).map((slot, idx) => {
-            const fecha = new Date(slot.fecha);
-            const diaSemana = diasSemana[fecha.getDay()];
-            const fechaStr = fecha.toLocaleDateString('es', { day: '2-digit', month: '2-digit' });
+            const { diaSemana, fechaStr } = formatearFechaSlot(slot.fecha);
             return `${idx + 1}. ${diaSemana} ${fechaStr}`;
         }).join('\n');
 
         return {
             mensaje: `Examenes seleccionados:\n${resumenExamenes}\nTotal: $${total}\n\nFechas disponibles:\n\n${listaFechas}\n\nEscribe el numero de la fecha.`,
-            opciones: slotsDisponibles.slice(0, 7).map(s => ({
-                fecha: new Date(s.fecha).toISOString().split('T')[0],
-            })),
+            opciones: slotsDisponibles.slice(0, 7).map(s => {
+                const { fechaISO } = formatearFechaSlot(s.fecha);
+                return { fecha: fechaISO };
+            }),
             accion: 'SELECCIONAR_FECHA',
         };
     }
