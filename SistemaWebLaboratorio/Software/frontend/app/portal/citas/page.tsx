@@ -37,6 +37,38 @@ interface Slot {
   cupos_disponibles: number
 }
 
+// Helper para obtener hora como número (para agrupar)
+const getHourNumber = (isoString: string): number => {
+  const formatTimeHelper = (s: string): string => {
+    if (!s) return ''
+    if (s.includes('T')) {
+      const date = new Date(s)
+      return date.toLocaleTimeString('es-EC', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'UTC'
+      })
+    }
+    return s.substring(0, 5)
+  }
+  const timeStr = formatTimeHelper(isoString)
+  return parseInt(timeStr.split(':')[0], 10)
+}
+
+// Helper para agrupar slots por hora
+const groupSlotsByHour = (slots: Slot[]): Map<number, Slot[]> => {
+  const grouped = new Map<number, Slot[]>()
+  slots.forEach(slot => {
+    const hour = getHourNumber(slot.hora_inicio)
+    if (!grouped.has(hour)) {
+      grouped.set(hour, [])
+    }
+    grouped.get(hour)!.push(slot)
+  })
+  return grouped
+}
+
 export default function CitasPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const searchParams = useSearchParams()
@@ -64,6 +96,9 @@ export default function CitasPage() {
 
   // Para cancelar
   const [motivoCancelacion, setMotivoCancelacion] = useState('')
+
+  // Para expandir horas
+  const [expandedHour, setExpandedHour] = useState<number | null>(null)
 
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
@@ -746,6 +781,7 @@ export default function CitasPage() {
                     setReprogramarSlot('')
                     setSlotsReprogramar([])
                     setSelectedCita(null)
+                    setExpandedHour(null)
                   }}
                   className="text-lab-neutral-400 hover:text-lab-neutral-600"
                 >
@@ -770,31 +806,142 @@ export default function CitasPage() {
                     id="nueva_fecha"
                     type="date"
                     value={reprogramarFecha}
-                    onChange={(e) => setReprogramarFecha(e.target.value)}
+                    onChange={(e) => {
+                      setReprogramarFecha(e.target.value)
+                      setReprogramarSlot('')
+                      setExpandedHour(null)
+                    }}
                     min={new Date().toISOString().split('T')[0]}
                   />
                 </div>
 
                 {reprogramarFecha && slotsReprogramar.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     <Label>Nuevo Horario *</Label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {slotsReprogramar.map((slot) => (
-                        <button
-                          key={slot.codigo_slot}
-                          onClick={() => setReprogramarSlot(slot.codigo_slot.toString())}
-                          className={`p-3 rounded-lg border-2 text-sm font-medium transition-colors ${reprogramarSlot === slot.codigo_slot.toString()
-                            ? 'border-lab-primary-500 bg-lab-primary-50 text-lab-primary-700'
-                            : 'border-lab-neutral-200 hover:border-lab-primary-300'
-                            }`}
-                        >
-                          {formatTime(slot.hora_inicio)}
-                          <span className="block text-xs text-lab-neutral-500 mt-1">
-                            {slot.cupos_disponibles} cupos
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+
+                    {/* Mañana (antes de 12:00) */}
+                    {slotsReprogramar.some(s => getHourNumber(s.hora_inicio) < 12) && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                          </svg>
+                          <span className="text-sm font-medium text-lab-neutral-700">Mañana</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {Array.from(groupSlotsByHour(slotsReprogramar.filter(s => getHourNumber(s.hora_inicio) < 12))).map(([hour, slots]) => (
+                            <div key={hour} className="relative">
+                              <button
+                                onClick={() => setExpandedHour(expandedHour === hour ? null : hour)}
+                                className={`py-2 px-4 text-sm font-medium rounded-lg border-2 transition-all ${
+                                  expandedHour === hour || slots.some(s => s.codigo_slot.toString() === reprogramarSlot)
+                                    ? 'bg-lab-primary-100 text-lab-primary-700 border-lab-primary-400'
+                                    : 'bg-white text-lab-neutral-700 border-lab-neutral-200 hover:border-lab-primary-400 hover:bg-lab-primary-50'
+                                }`}
+                              >
+                                {hour.toString().padStart(2, '0')}:00
+                                <span className="ml-1 text-xs text-lab-neutral-400">({slots.length})</span>
+                                <svg className={`inline-block w-4 h-4 ml-1 transition-transform ${expandedHour === hour ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                              {expandedHour === hour && (
+                                <div className="absolute top-full left-0 mt-1 bg-white border border-lab-neutral-200 rounded-lg shadow-lg p-2 z-10 min-w-[120px]">
+                                  {slots.map((slot) => (
+                                    <button
+                                      key={slot.codigo_slot}
+                                      onClick={() => {
+                                        setReprogramarSlot(slot.codigo_slot.toString())
+                                        setExpandedHour(null)
+                                      }}
+                                      className={`block w-full py-1.5 px-3 text-sm font-medium rounded transition-all mb-1 last:mb-0 ${
+                                        reprogramarSlot === slot.codigo_slot.toString()
+                                          ? 'bg-lab-primary-600 text-white'
+                                          : 'text-lab-neutral-700 hover:bg-lab-primary-50'
+                                      }`}
+                                    >
+                                      {formatTime(slot.hora_inicio)}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tarde (12:00 o después) */}
+                    {slotsReprogramar.some(s => getHourNumber(s.hora_inicio) >= 12) && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                          </svg>
+                          <span className="text-sm font-medium text-lab-neutral-700">Tarde</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {Array.from(groupSlotsByHour(slotsReprogramar.filter(s => getHourNumber(s.hora_inicio) >= 12))).map(([hour, slots]) => (
+                            <div key={hour} className="relative">
+                              <button
+                                onClick={() => setExpandedHour(expandedHour === hour ? null : hour)}
+                                className={`py-2 px-4 text-sm font-medium rounded-lg border-2 transition-all ${
+                                  expandedHour === hour || slots.some(s => s.codigo_slot.toString() === reprogramarSlot)
+                                    ? 'bg-lab-primary-100 text-lab-primary-700 border-lab-primary-400'
+                                    : 'bg-white text-lab-neutral-700 border-lab-neutral-200 hover:border-lab-primary-400 hover:bg-lab-primary-50'
+                                }`}
+                              >
+                                {hour.toString().padStart(2, '0')}:00
+                                <span className="ml-1 text-xs text-lab-neutral-400">({slots.length})</span>
+                                <svg className={`inline-block w-4 h-4 ml-1 transition-transform ${expandedHour === hour ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                              {expandedHour === hour && (
+                                <div className="absolute top-full left-0 mt-1 bg-white border border-lab-neutral-200 rounded-lg shadow-lg p-2 z-10 min-w-[120px]">
+                                  {slots.map((slot) => (
+                                    <button
+                                      key={slot.codigo_slot}
+                                      onClick={() => {
+                                        setReprogramarSlot(slot.codigo_slot.toString())
+                                        setExpandedHour(null)
+                                      }}
+                                      className={`block w-full py-1.5 px-3 text-sm font-medium rounded transition-all mb-1 last:mb-0 ${
+                                        reprogramarSlot === slot.codigo_slot.toString()
+                                          ? 'bg-lab-primary-600 text-white'
+                                          : 'text-lab-neutral-700 hover:bg-lab-primary-50'
+                                      }`}
+                                    >
+                                      {formatTime(slot.hora_inicio)}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Resumen de selección */}
+                    {reprogramarSlot && (
+                      <div className="bg-lab-primary-50 border border-lab-primary-200 rounded-lg p-3">
+                        <p className="text-sm font-medium text-lab-primary-900">Nuevo horario seleccionado:</p>
+                        <p className="text-lg font-bold text-lab-primary-700">
+                          {formatTime(slotsReprogramar.find(s => s.codigo_slot.toString() === reprogramarSlot)?.hora_inicio || '')}
+                          {' - '}
+                          {new Date(reprogramarFecha + 'T12:00:00').toLocaleDateString('es-EC', {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long'
+                          })}
+                        </p>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-lab-neutral-500 text-center">
+                      {slotsReprogramar.length} horario{slotsReprogramar.length !== 1 ? 's' : ''} disponible{slotsReprogramar.length !== 1 ? 's' : ''}
+                    </p>
                   </div>
                 )}
 
@@ -813,6 +960,7 @@ export default function CitasPage() {
                       setReprogramarSlot('')
                       setSlotsReprogramar([])
                       setSelectedCita(null)
+                      setExpandedHour(null)
                     }}
                   >
                     Cancelar

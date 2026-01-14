@@ -1088,7 +1088,7 @@ export class AgendaService {
       resultadosEnProceso,
       cotizacionesPendientes,
       proximasCitas,
-      resultadosRecientes,
+      cotizacionesRecientes,
     ] = await Promise.all([
       // Citas próximas (30 días)
       this.prisma.cita.count({
@@ -1144,16 +1144,23 @@ export class AgendaService {
         take: 3,
       }),
 
-      // Resultados recientes (máximo 3)
-      this.prisma.resultado.findMany({
+      // Cotizaciones recientes (máximo 3)
+      this.prisma.cotizacion.findMany({
         where: {
-          muestra: { codigo_paciente: codigoPaciente },
+          codigo_paciente: codigoPaciente,
         },
         include: {
-          examen: true,
-          muestra: true,
+          detalles: {
+            include: {
+              examen: {
+                select: {
+                  nombre: true,
+                },
+              },
+            },
+          },
         },
-        orderBy: { fecha_resultado: 'desc' },
+        orderBy: { fecha_cotizacion: 'desc' },
         take: 3,
       }),
     ]);
@@ -1173,11 +1180,13 @@ export class AgendaService {
         sede: cita.slot.sede.nombre,
         estado: cita.estado,
       })),
-      resultadosRecientes: resultadosRecientes.map((resultado) => ({
-        codigo_resultado: resultado.codigo_resultado,
-        examen: resultado.examen.nombre,
-        fecha: resultado.fecha_resultado,
-        estado: resultado.estado,
+      cotizacionesRecientes: cotizacionesRecientes.map((cotizacion) => ({
+        codigo_cotizacion: cotizacion.codigo_cotizacion,
+        numero_cotizacion: cotizacion.numero_cotizacion,
+        fecha: cotizacion.fecha_cotizacion,
+        estado: cotizacion.estado,
+        total: cotizacion.total,
+        numExamenes: cotizacion.detalles?.length || 0,
       })),
     };
   }

@@ -153,6 +153,24 @@ export class CotizacionesController {
     return this.cotizacionesService.puedeAgendarCita(id);
   }
 
+  @Post(':id/seleccionar-pago')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Seleccionar método de pago para cotización (Paciente)',
+    description: 'Permite al paciente elegir pagar en línea o en ventanilla',
+  })
+  @ApiResponse({ status: 200, description: 'Método de pago seleccionado' })
+  @ApiResponse({ status: 400, description: 'Estado de cotización no válido' })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  async seleccionarMetodoPago(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('metodo_pago') metodo_pago: 'ONLINE' | 'VENTANILLA',
+    @CurrentUser('codigo_usuario') codigo_paciente: number,
+  ) {
+    return this.cotizacionesService.seleccionarMetodoPago(id, metodo_pago, codigo_paciente);
+  }
+
   // ==================== COTIZACIONES (Admin) ====================
 
   @Get('admin/all')

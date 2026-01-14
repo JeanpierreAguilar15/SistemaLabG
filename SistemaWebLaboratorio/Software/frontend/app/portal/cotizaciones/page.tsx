@@ -369,6 +369,7 @@ export default function CotizacionesPage() {
   const getAccionesDisponibles = (cotizacion: Cotizacion) => {
     const acciones = {
       puedeAgendarCita: false,
+      puedeSeleccionarPago: false,
       tieneCita: !!cotizacion.cita,
     }
 
@@ -377,7 +378,38 @@ export default function CotizacionesPage() {
       acciones.puedeAgendarCita = true
     }
 
+    // Puede seleccionar método de pago si está en PENDIENTE
+    if (cotizacion.estado === 'PENDIENTE') {
+      acciones.puedeSeleccionarPago = true
+    }
+
     return acciones
+  }
+
+  const handleSeleccionarPagoVentanilla = async (cotizacion: Cotizacion) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/${cotizacion.codigo_cotizacion}/seleccionar-pago`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ metodo_pago: 'VENTANILLA' }),
+        }
+      )
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Has seleccionado pagar en ventanilla. Ahora puedes agendar tu cita.' })
+        loadCotizaciones()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al seleccionar método de pago' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión' })
+    }
   }
 
   const examenesFiltrados = useMemo(() => {
@@ -654,6 +686,13 @@ export default function CotizacionesPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                       </Button>
+
+                      {/* Boton para seleccionar pago en ventanilla (cotizaciones antiguas en PENDIENTE) */}
+                      {acciones.puedeSeleccionarPago && (
+                        <Button size="sm" variant="outline" onClick={() => handleSeleccionarPagoVentanilla(cotizacion)}>
+                          Pagar en Ventanilla
+                        </Button>
+                      )}
 
                       {/* Boton para agendar cita */}
                       {acciones.puedeAgendarCita && (

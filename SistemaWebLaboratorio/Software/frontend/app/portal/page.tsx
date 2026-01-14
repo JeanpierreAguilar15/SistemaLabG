@@ -23,11 +23,13 @@ interface ProximaCita {
   estado: string
 }
 
-interface ResultadoReciente {
-  codigo_resultado: number
-  examen: string
+interface CotizacionReciente {
+  codigo_cotizacion: number
+  numero_cotizacion: string
   fecha: string
   estado: string
+  total: number
+  numExamenes: number
 }
 
 export default function DashboardPage() {
@@ -42,7 +44,7 @@ export default function DashboardPage() {
     cotizacionesPendientes: 0,
   })
   const [proximasCitas, setProximasCitas] = useState<ProximaCita[]>([])
-  const [resultadosRecientes, setResultadosRecientes] = useState<ResultadoReciente[]>([])
+  const [cotizacionesRecientes, setCotizacionesRecientes] = useState<CotizacionReciente[]>([])
 
   useEffect(() => {
     setGreeting(getGreeting())
@@ -59,7 +61,7 @@ export default function DashboardPage() {
         const data = await response.json()
         setStats(data.stats)
         setProximasCitas(data.proximasCitas || [])
-        setResultadosRecientes(data.resultadosRecientes || [])
+        setCotizacionesRecientes(data.cotizacionesRecientes || [])
       }
     } catch (error) {
       console.error('Error loading dashboard:', error)
@@ -274,67 +276,82 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Recent Results */}
+        {/* Recent Cotizaciones */}
         <Card className="border-lab-neutral-200">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Resultados Recientes</CardTitle>
-                <CardDescription>Tus últimos resultados de laboratorio</CardDescription>
+                <CardTitle>Mis Cotizaciones</CardTitle>
+                <CardDescription>Tus cotizaciones recientes</CardDescription>
               </div>
-              <Link href="/portal/resultados">
+              <Link href="/portal/cotizaciones">
                 <Button variant="ghost" size="sm">
-                  Ver todos
+                  Ver todas
                 </Button>
               </Link>
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {resultadosRecientes.length === 0 ? (
+              {cotizacionesRecientes.length === 0 ? (
                 <div className="text-center py-8 text-lab-neutral-500">
                   <svg className="mx-auto h-12 w-12 text-lab-neutral-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
                   </svg>
-                  <p>No tienes resultados aún</p>
+                  <p>No tienes cotizaciones aún</p>
                 </div>
               ) : (
-                resultadosRecientes.map((resultado) => {
-                  const isCompleted = resultado.estado === 'COMPLETADO'
+                cotizacionesRecientes.map((cotizacion) => {
+                  const getEstadoStyle = (estado: string) => {
+                    switch (estado) {
+                      case 'PAGADA':
+                        return { bg: 'bg-lab-success-50 border-lab-success-200', icon: 'bg-lab-success-600', badge: 'lab-badge-success' }
+                      case 'PENDIENTE_PAGO_VENTANILLA':
+                        return { bg: 'bg-amber-50 border-amber-200', icon: 'bg-amber-600', badge: 'bg-amber-100 text-amber-800' }
+                      case 'PENDIENTE':
+                        return { bg: 'bg-lab-warning-50 border-lab-warning-200', icon: 'bg-lab-warning-600', badge: 'lab-badge-warning' }
+                      case 'EXPIRADA':
+                        return { bg: 'bg-lab-neutral-50 border-lab-neutral-200', icon: 'bg-lab-neutral-400', badge: 'lab-badge-neutral' }
+                      default:
+                        return { bg: 'bg-lab-neutral-50 border-lab-neutral-200', icon: 'bg-lab-neutral-600', badge: 'lab-badge-neutral' }
+                    }
+                  }
+                  const getEstadoLabel = (estado: string) => {
+                    switch (estado) {
+                      case 'PAGADA': return 'Pagada'
+                      case 'PENDIENTE_PAGO_VENTANILLA': return 'Por Pagar'
+                      case 'PENDIENTE': return 'Pendiente'
+                      case 'EXPIRADA': return 'Expirada'
+                      default: return estado
+                    }
+                  }
+                  const estilo = getEstadoStyle(cotizacion.estado)
                   return (
-                    <div key={resultado.codigo_resultado} className={`flex items-center justify-between p-4 rounded-lg ${isCompleted ? 'bg-lab-success-50 border border-lab-success-200' : 'bg-lab-warning-50 border border-lab-warning-200'}`}>
+                    <div key={cotizacion.codigo_cotizacion} className={`flex items-center justify-between p-4 rounded-lg border ${estilo.bg}`}>
                       <div className="flex items-center space-x-3">
-                        <div className={`${isCompleted ? 'bg-lab-success-600' : 'bg-lab-warning-600'} text-white rounded-lg p-2`}>
+                        <div className={`${estilo.icon} text-white rounded-lg p-2`}>
                           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            {isCompleted ? (
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            ) : (
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            )}
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
                           </svg>
                         </div>
                         <div>
-                          <h4 className="font-semibold text-lab-neutral-900">{resultado.examen}</h4>
+                          <h4 className="font-semibold text-lab-neutral-900">{cotizacion.numero_cotizacion}</h4>
                           <p className="text-sm text-lab-neutral-600">
-                            {isCompleted ? formatDate(new Date(resultado.fecha)) : 'En proceso'}
+                            {cotizacion.numExamenes} examen{cotizacion.numExamenes !== 1 ? 'es' : ''} • ${Number(cotizacion.total).toFixed(2)}
                           </p>
                         </div>
                       </div>
-                      {isCompleted ? (
-                        <Button size="sm" variant="outline">
-                          Descargar
-                        </Button>
-                      ) : (
-                        <span className="lab-badge-warning">Procesando</span>
-                      )}
+                      <span className={`text-xs px-2 py-1 rounded ${estilo.badge}`}>
+                        {getEstadoLabel(cotizacion.estado)}
+                      </span>
                     </div>
                   )
                 })
               )}
 
-              <Link href="/portal/resultados">
+              <Link href="/portal/cotizaciones">
                 <Button variant="outline" className="w-full">
-                  Ver Todos los Resultados
+                  Nueva Cotización
                 </Button>
               </Link>
             </div>
