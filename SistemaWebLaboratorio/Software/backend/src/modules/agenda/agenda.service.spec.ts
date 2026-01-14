@@ -139,6 +139,7 @@ describe('AgendaService', () => {
     it('should create appointment successfully', async () => {
       const citaData = {
         codigo_slot: 1,
+        codigo_cotizacion: 1,
         observaciones: 'Test observation',
       };
 
@@ -193,6 +194,7 @@ describe('AgendaService', () => {
     it('should throw BadRequestException if slot has no capacity', async () => {
       const citaData = {
         codigo_slot: 1,
+        codigo_cotizacion: 1,
       };
 
       const mockSlot = {
@@ -223,6 +225,7 @@ describe('AgendaService', () => {
     it('should throw BadRequestException if patient already has appointment in same slot', async () => {
       const citaData = {
         codigo_slot: 1,
+        codigo_cotizacion: 1,
       };
 
       const mockSlot = {
@@ -261,6 +264,7 @@ describe('AgendaService', () => {
     it('should throw BadRequestException if patient has conflicting appointment at same time', async () => {
       const citaData = {
         codigo_slot: 1,
+        codigo_cotizacion: 1,
       };
 
       const mockSlot = {
@@ -368,6 +372,7 @@ describe('AgendaService', () => {
     it('should handle concurrent appointments with transaction isolation', async () => {
       const citaData = {
         codigo_slot: 1,
+        codigo_cotizacion: 1,
       };
 
       const mockSlot = {

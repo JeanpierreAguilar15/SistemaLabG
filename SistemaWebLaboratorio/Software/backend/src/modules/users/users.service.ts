@@ -367,7 +367,7 @@ export class UsersService {
           },
           data: {
             estado: 'CANCELADA',
-            observaciones_internas: 'Cancelada automaticamente al desactivar usuario',
+            motivo_cancelacion: 'Cancelada automaticamente al desactivar usuario',
           },
         });
       }

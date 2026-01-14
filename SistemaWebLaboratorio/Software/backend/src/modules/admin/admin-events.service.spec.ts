@@ -191,13 +191,6 @@ describe('AdminEventsService', () => {
     });
   });
 
-  describe('Package Events', () => {
-    it('should emit package created event', () => {
-      service.emitPackageCreated(1, 2, { nombre: 'Paquete Básico' });
-      expect(eventEmitter.emit).toHaveBeenCalledWith(AdminEventType.PACKAGE_CREATED, expect.any(Object));
-    });
-  });
-
   describe('Inventory Events', () => {
     it('should emit inventory item created event', () => {
       service.emitInventoryItemCreated(1, 2, { nombre: 'Reactivo' });

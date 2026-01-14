@@ -1433,7 +1433,7 @@ export class AdminService {
           select: {
             codigo_cita: true,
             fecha_creacion: true,
-            usuario: {
+            paciente: {
               select: {
                 codigo_usuario: true,
                 cedula: true,
@@ -1447,16 +1447,20 @@ export class AdminService {
                 hora_inicio: true,
               },
             },
-            examenes_cita: {
+            cotizacion: {
               select: {
-                examen: {
-                  select: { nombre: true },
+                detalles: {
+                  select: {
+                    examen: {
+                      select: { nombre: true },
+                    },
+                  },
+                  take: 2,
                 },
               },
-              take: 2,
             },
           },
-          orderBy: { fecha_actualizacion: 'desc' },
+          orderBy: { fecha_creacion: 'desc' },
           take: 5,
         }),
       ]);
@@ -1502,11 +1506,11 @@ export class AdminService {
         })),
         recentPatients: recentPatients.map(cita => ({
           id: cita.codigo_cita,
-          cedula: cita.usuario.cedula,
-          nombre: `${cita.usuario.nombres} ${cita.usuario.apellidos}`,
+          cedula: cita.paciente.cedula,
+          nombre: `${cita.paciente.nombres} ${cita.paciente.apellidos}`,
           fecha: cita.slot?.fecha || cita.fecha_creacion,
           hora: cita.slot?.hora_inicio || null,
-          examenes: cita.examenes_cita.map(ec => ec.examen.nombre).join(', ') || 'Sin examenes',
+          examenes: cita.cotizacion?.detalles?.map(d => d.examen.nombre).join(', ') || 'Sin examenes',
         })),
       };
     } catch (error) {
