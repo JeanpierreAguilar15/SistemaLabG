@@ -168,19 +168,18 @@ export class AgendaService {
           const startStr = start.toTimeString().substring(0, 5);
           const endStr = end.toTimeString().substring(0, 5);
 
-          // Crear slot para cada servicio
-          for (const servicio of servicios) {
-            slotsToCreate.push({
-              codigo_servicio: servicio.codigo_servicio,
-              codigo_sede: sede.codigo_sede,
-              fecha: new Date(currentDate),
-              hora_inicio: new Date(`1970-01-01T${startStr}:00`),
-              hora_fin: new Date(`1970-01-01T${endStr}:00`),
-              cupos_totales: capacidad,
-              cupos_disponibles: capacidad,
-              activo: true,
-            });
-          }
+          // Crear UN SOLO slot por horario (usando el primer servicio activo)
+          // Esto permite que el slot sea usado para cualquier examen/servicio
+          slotsToCreate.push({
+            codigo_servicio: servicios[0].codigo_servicio,
+            codigo_sede: sede.codigo_sede,
+            fecha: new Date(currentDate),
+            hora_inicio: new Date(`1970-01-01T${startStr}:00`),
+            hora_fin: new Date(`1970-01-01T${endStr}:00`),
+            cupos_totales: capacidad,
+            cupos_disponibles: capacidad,
+            activo: true,
+          });
         }
 
         currentTime += durationMs;
