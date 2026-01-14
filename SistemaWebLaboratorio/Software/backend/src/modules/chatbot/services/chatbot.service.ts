@@ -438,8 +438,8 @@ export class ChatbotService implements OnModuleInit {
                 break;
             }
             case 'hablar_operador':
-                responseText = 'Puedo transferirte con un operador humano. ¿Deseas que te conecte con uno de nuestros agentes?';
-                accion = 'HANDOFF_SUGERIDO';
+                responseText = `📞 Para comunicarte con nosotros:\n\n• Telefono: (+591) 3-3456789\n• WhatsApp: +591 70012345\n\nHorario de atencion:\nLunes a Viernes: 7:00 - 19:00\nSabados: 7:00 - 13:00\n\nTambien puedes visitarnos en cualquiera de nuestras sedes.`;
+                accion = 'MOSTRAR_CONTACTO';
                 break;
             default:
                 responseText = this.getDefaultResponse();

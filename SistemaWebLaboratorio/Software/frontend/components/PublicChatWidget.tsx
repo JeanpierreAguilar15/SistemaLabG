@@ -661,16 +661,6 @@ export default function PublicChatWidget() {
                                 </button>
                             )}
 
-                            {/* Live Chat Option after showing contact info */}
-                            {chatMode === 'BOT' && showContactInfo && (
-                                <button
-                                    onClick={requestLiveChat}
-                                    className="w-full mb-3 flex items-center justify-center gap-2 py-2 px-4 bg-green-100 hover:bg-green-200 text-green-700 rounded-full text-sm transition-colors"
-                                >
-                                    <User size={16} />
-                                    Solicitar chat en vivo
-                                </button>
-                            )}
 
                             <div className="flex items-center gap-2">
                                 {/* Botón de adjuntar archivo - más visible */}
