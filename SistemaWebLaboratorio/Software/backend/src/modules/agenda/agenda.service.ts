@@ -635,6 +635,14 @@ export class AgendaService {
             sede: true,
           },
         },
+        cotizacion: {
+          select: {
+            codigo_cotizacion: true,
+            numero_cotizacion: true,
+            estado: true,
+            total: true,
+          },
+        },
       },
       orderBy: {
         slot: {
@@ -875,9 +883,17 @@ export class AgendaService {
 
   /**
    * Obtener todas las citas (Admin)
+   * IMPORTANTE: Solo muestra citas donde el paciente confirmó asistencia
+   * o la cotización ya está PAGADA
    */
   async getAllCitas(filters: any) {
-    const where: any = {};
+    const where: any = {
+      // Admin solo ve citas confirmadas por el paciente o con pago completado
+      OR: [
+        { confirmada: true },
+        { cotizacion: { estado: 'PAGADA' } },
+      ],
+    };
 
     if (filters.codigo_paciente) where.codigo_paciente = filters.codigo_paciente;
     if (filters.estado) where.estado = filters.estado;
@@ -901,6 +917,8 @@ export class AgendaService {
       include: {
         paciente: {
           select: {
+            codigo_usuario: true,
+            cedula: true,
             nombres: true,
             apellidos: true,
             email: true,
@@ -911,6 +929,14 @@ export class AgendaService {
           include: {
             servicio: true,
             sede: true,
+          },
+        },
+        cotizacion: {
+          select: {
+            codigo_cotizacion: true,
+            numero_cotizacion: true,
+            estado: true,
+            total: true,
           },
         },
       },

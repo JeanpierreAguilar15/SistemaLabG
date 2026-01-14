@@ -5,11 +5,9 @@
  *
  * Incluye:
  * - SessionProvider: Control de sesion temporizada (AC-12)
- * - SecurityProvider: Proteccion anti-debugging (SA-15)
  */
 
 import { SessionProvider } from '@/contexts/SessionContext';
-import { SecurityProvider } from '@/contexts/SecurityProvider';
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -17,11 +15,9 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <SecurityProvider>
-      <SessionProvider>
-        {children}
-      </SessionProvider>
-    </SecurityProvider>
+    <SessionProvider>
+      {children}
+    </SessionProvider>
   );
 }
 

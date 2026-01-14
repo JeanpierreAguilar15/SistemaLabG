@@ -19,6 +19,7 @@ interface Cita {
   estado: string
   confirmada: boolean
   observaciones?: string
+  cotizacion_estado?: string // PENDIENTE, PENDIENTE_PAGO_VENTANILLA, PAGADA, etc.
 }
 
 interface Servicio {
@@ -154,8 +155,9 @@ export default function CitasPage() {
           servicio: item.slot.servicio.nombre,
           sede: item.slot.sede.nombre,
           estado: item.estado,
-          confirmada: item.estado === 'CONFIRMADA', // Assuming 'CONFIRMADA' is a state or derived
-          observaciones: item.observaciones
+          confirmada: item.confirmada || item.estado === 'CONFIRMADA',
+          observaciones: item.observaciones,
+          cotizacion_estado: item.cotizacion?.estado
         }))
         setCitas(mappedCitas)
       }
@@ -386,17 +388,19 @@ export default function CitasPage() {
     setSlots([])
   }
 
-  const getEstadoBadge = (estado: string, confirmada: boolean) => {
+  const getEstadoBadge = (estado: string, confirmada: boolean, cotizacion_estado?: string) => {
     if (estado === 'CANCELADA') return 'lab-badge-danger'
     if (estado === 'COMPLETADA') return 'lab-badge-success'
-    if (confirmada) return 'lab-badge-info'
+    if (confirmada || cotizacion_estado === 'PAGADA') return 'lab-badge-info'
     return 'lab-badge-warning'
   }
 
-  const getEstadoText = (estado: string, confirmada: boolean) => {
+  const getEstadoText = (estado: string, confirmada: boolean, cotizacion_estado?: string) => {
     if (estado === 'CANCELADA') return 'Cancelada'
     if (estado === 'COMPLETADA') return 'Completada'
     if (confirmada) return 'Confirmada'
+    if (cotizacion_estado === 'PAGADA') return 'Pagada - Confirmada'
+    if (cotizacion_estado === 'PENDIENTE_PAGO_VENTANILLA') return 'Pendiente Pago'
     return 'Pendiente'
   }
 
@@ -464,18 +468,21 @@ export default function CitasPage() {
                           <p className="text-sm text-lab-neutral-500 mt-2">{cita.observaciones}</p>
                         )}
                       </div>
-                      <span className={getEstadoBadge(cita.estado, cita.confirmada)}>
-                        {getEstadoText(cita.estado, cita.confirmada)}
+                      <span className={getEstadoBadge(cita.estado, cita.confirmada, cita.cotizacion_estado)}>
+                        {getEstadoText(cita.estado, cita.confirmada, cita.cotizacion_estado)}
                       </span>
                     </div>
                     <div className="flex space-x-2 mt-3">
-                      {!cita.confirmada && (cita.estado === 'PENDIENTE' || cita.estado === 'AGENDADA') && (
+                      {/* Solo mostrar Confirmar si la cotización NO está pagada (pendiente de pago en ventanilla) */}
+                      {!cita.confirmada &&
+                       (cita.estado === 'PENDIENTE' || cita.estado === 'AGENDADA') &&
+                       cita.cotizacion_estado !== 'PAGADA' && (
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleConfirmarCita(cita.codigo_cita)}
                         >
-                          Confirmar
+                          Confirmar Asistencia
                         </Button>
                       )}
                       {(cita.estado === 'PENDIENTE' || cita.estado === 'AGENDADA') && (
@@ -536,8 +543,8 @@ export default function CitasPage() {
                       {formatDate(new Date(cita.fecha))} • {cita.hora_inicio}
                     </p>
                   </div>
-                  <span className={getEstadoBadge(cita.estado, cita.confirmada)}>
-                    {getEstadoText(cita.estado, cita.confirmada)}
+                  <span className={getEstadoBadge(cita.estado, cita.confirmada, cita.cotizacion_estado)}>
+                    {getEstadoText(cita.estado, cita.confirmada, cita.cotizacion_estado)}
                   </span>
                 </div>
               ))}

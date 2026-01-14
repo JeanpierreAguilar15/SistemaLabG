@@ -237,11 +237,12 @@ export default function CotizacionesPage() {
         // Mensaje diferente según el estado de pago
         const isPendientePago = selectedCotizacion.estado === 'PENDIENTE_PAGO_VENTANILLA'
         const mensaje = isPendientePago
-          ? 'Cita agendada exitosamente. Recuerda que debes pagar en ventanilla cuando llegues al laboratorio. La cita quedará confirmada una vez se verifique el pago.'
+          ? 'Cita agendada exitosamente. Recuerda que debes pagar en ventanilla cuando llegues al laboratorio.'
           : 'Cita agendada correctamente.'
         setMessage({ type: 'success', text: mensaje })
         setShowAgendarCitaModal(false)
-        loadCotizaciones() // Recargar para actualizar estado
+        // Redirigir a Mis Citas para que el paciente confirme asistencia
+        router.push('/portal/citas')
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.message || 'Error al agendar cita' })
