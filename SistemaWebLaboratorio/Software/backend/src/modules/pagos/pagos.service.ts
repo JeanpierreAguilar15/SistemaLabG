@@ -245,41 +245,80 @@ export class PagosService {
   }
 
   /**
-   * Actualizar estado de pago (Admin)
+   * Actualizar pago (Admin)
+   * Permite editar estado, monto, método de pago y observaciones
    */
   async updatePago(
     codigo_pago: number,
-    estado: string,
-    observaciones?: string,
+    data: {
+      estado?: string;
+      monto?: number;
+      metodo_pago?: string;
+      observaciones?: string;
+    },
   ) {
     const pago = await this.prisma.pago.findUnique({
       where: { codigo_pago },
+      include: { cotizacion: true },
     });
 
     if (!pago) {
       throw new NotFoundException('Pago no encontrado');
     }
 
-    const updated = await this.prisma.pago.update({
-      where: { codigo_pago },
-      data: {
-        estado,
-        observaciones: observaciones || pago.observaciones,
-      },
-      include: {
-        paciente: {
-          select: {
-            nombres: true,
-            apellidos: true,
-            email: true,
+    // Preparar datos para actualización
+    const updateData: any = {};
+
+    if (data.estado) {
+      updateData.estado = data.estado;
+    }
+
+    if (data.monto !== undefined && data.monto > 0) {
+      updateData.monto_total = new Decimal(data.monto.toFixed(2));
+    }
+
+    if (data.metodo_pago) {
+      updateData.metodo_pago = data.metodo_pago;
+    }
+
+    if (data.observaciones !== undefined) {
+      updateData.observaciones = data.observaciones;
+    }
+
+    // Actualizar pago
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const pagoActualizado = await tx.pago.update({
+        where: { codigo_pago },
+        data: updateData,
+        include: {
+          paciente: {
+            select: {
+              nombres: true,
+              apellidos: true,
+              email: true,
+            },
           },
+          cotizacion: true,
         },
-        cotizacion: true,
-      },
+      });
+
+      // Si el estado cambia a CONFIRMADO o COMPLETADO, actualizar cotización
+      if (
+        data.estado &&
+        ['CONFIRMADO', 'COMPLETADO'].includes(data.estado) &&
+        pago.codigo_cotizacion
+      ) {
+        await tx.cotizacion.update({
+          where: { codigo_cotizacion: pago.codigo_cotizacion },
+          data: { estado: 'PAGADA' },
+        });
+      }
+
+      return pagoActualizado;
     });
 
     this.logger.log(
-      `Pago actualizado: ${pago.numero_pago} | Nuevo estado: ${estado}`,
+      `Pago actualizado: ${pago.numero_pago} | Estado: ${data.estado || pago.estado} | Monto: $${data.monto || pago.monto_total}`,
     );
 
     return updated;

@@ -8,6 +8,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatDate } from '@/lib/utils'
 
+interface DetalleCotizacion {
+  codigo_detalle_cotizacion: number
+  cantidad: number
+  precio_unitario: number
+  total_linea: number
+  examen: {
+    codigo_examen: number
+    nombre: string
+    codigo_interno: string
+  }
+}
+
 interface Cotizacion {
   codigo_cotizacion: number
   numero_cotizacion: string
@@ -22,12 +34,7 @@ interface Cotizacion {
     apellidos: string
     email: string
   }
-  items?: Array<{
-    examen: string
-    cantidad: number
-    precio_unitario: number
-    total_linea: number
-  }>
+  detalles?: DetalleCotizacion[]
 }
 
 export default function CotizacionesAdminPage() {
@@ -39,6 +46,8 @@ export default function CotizacionesAdminPage() {
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCotizacion, setSelectedCotizacion] = useState<Cotizacion | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [confirmingPayment, setConfirmingPayment] = useState(false)
+  const [paymentObservaciones, setPaymentObservaciones] = useState('')
 
   useEffect(() => {
     loadCotizaciones()
@@ -87,9 +96,43 @@ export default function CotizacionesAdminPage() {
     }
   }
 
+  const handleConfirmarPagoVentanilla = async () => {
+    if (!selectedCotizacion) return
+
+    setConfirmingPayment(true)
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/admin/${selectedCotizacion.codigo_cotizacion}/confirmar-pago-ventanilla`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ observaciones: paymentObservaciones }),
+        }
+      )
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Pago confirmado exitosamente. La cotización ahora está PAGADA.' })
+        loadCotizaciones()
+        setShowDetailModal(false)
+        setPaymentObservaciones('')
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al confirmar pago' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al confirmar pago' })
+    } finally {
+      setConfirmingPayment(false)
+    }
+  }
+
   const handleViewDetails = (cotizacion: Cotizacion) => {
     setSelectedCotizacion(cotizacion)
     setShowDetailModal(true)
+    setPaymentObservaciones('')
   }
 
   const filteredCotizaciones = cotizaciones.filter((cotizacion) => {
@@ -121,6 +164,25 @@ export default function CotizacionesAdminPage() {
     }
   }
 
+  const getEstadoLabel = (estado: string) => {
+    switch (estado) {
+      case 'PENDIENTE':
+        return 'Pendiente'
+      case 'PENDIENTE_PAGO_VENTANILLA':
+        return 'Pago en Ventanilla'
+      case 'PAGADA':
+        return 'Pagada'
+      case 'APROBADA':
+        return 'Aprobada'
+      case 'RECHAZADA':
+        return 'Rechazada'
+      case 'EXPIRADA':
+        return 'Expirada'
+      default:
+        return estado
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -135,7 +197,7 @@ export default function CotizacionesAdminPage() {
       <div>
         <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Cotizaciones</h1>
         <p className="text-lab-neutral-600 mt-2">
-          Administra todas las cotizaciones del sistema. Aprueba o rechaza solicitudes de pacientes.
+          Administra todas las cotizaciones del sistema. Confirma pagos en ventanilla.
         </p>
       </div>
 
@@ -196,7 +258,7 @@ export default function CotizacionesAdminPage() {
                   <th className="text-left p-4 font-semibold text-lab-neutral-900">Número</th>
                   <th className="text-left p-4 font-semibold text-lab-neutral-900">Paciente</th>
                   <th className="text-left p-4 font-semibold text-lab-neutral-900">Fecha</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Items</th>
+                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Exámenes</th>
                   <th className="text-left p-4 font-semibold text-lab-neutral-900">Total</th>
                   <th className="text-left p-4 font-semibold text-lab-neutral-900">Estado</th>
                   <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
@@ -218,17 +280,22 @@ export default function CotizacionesAdminPage() {
                     <td className="p-4 text-sm text-lab-neutral-700">
                       {formatDate(new Date(cotizacion.fecha_cotizacion))}
                     </td>
-                    <td className="p-4 text-sm text-lab-neutral-700">{cotizacion.items?.length || 0} examen(es)</td>
+                    <td className="p-4 text-sm text-lab-neutral-700">{cotizacion.detalles?.length || 0} examen(es)</td>
                     <td className="p-4 font-semibold text-lab-neutral-900">${Number(cotizacion.total).toFixed(2)}</td>
                     <td className="p-4">
                       <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(cotizacion.estado)}`}>
-                        {cotizacion.estado}
+                        {getEstadoLabel(cotizacion.estado)}
                       </span>
                     </td>
                     <td className="p-4 text-right space-x-2">
                       <Button size="sm" variant="outline" onClick={() => handleViewDetails(cotizacion)}>
                         Ver
                       </Button>
+                      {cotizacion.estado === 'PENDIENTE_PAGO_VENTANILLA' && (
+                        <Button size="sm" onClick={() => handleViewDetails(cotizacion)}>
+                          Confirmar Pago
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -245,7 +312,7 @@ export default function CotizacionesAdminPage() {
       {/* Detail Modal */}
       {showDetailModal && selectedCotizacion && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-lab-neutral-200">
               <div className="flex justify-between items-center">
                 <div>
@@ -268,25 +335,25 @@ export default function CotizacionesAdminPage() {
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Items */}
+              {/* Exámenes (detalles) */}
               <div>
                 <h3 className="font-semibold text-lab-neutral-900 mb-3">Exámenes Solicitados</h3>
                 <div className="space-y-2">
-                  {selectedCotizacion.items && selectedCotizacion.items.length > 0 ? (
-                    selectedCotizacion.items.map((item, index) => (
+                  {selectedCotizacion.detalles && selectedCotizacion.detalles.length > 0 ? (
+                    selectedCotizacion.detalles.map((detalle, index) => (
                       <div key={index} className="flex justify-between items-center p-3 bg-lab-neutral-50 rounded-lg">
                         <div>
-                          <p className="font-medium text-lab-neutral-900">{item.examen}</p>
+                          <p className="font-medium text-lab-neutral-900">{detalle.examen.nombre}</p>
                           <p className="text-sm text-lab-neutral-600">
-                            {item.cantidad} x ${Number(item.precio_unitario).toFixed(2)}
+                            {detalle.cantidad} x ${Number(detalle.precio_unitario).toFixed(2)}
                           </p>
                         </div>
-                        <p className="font-semibold text-lab-neutral-900">${Number(item.total_linea).toFixed(2)}</p>
+                        <p className="font-semibold text-lab-neutral-900">${Number(detalle.total_linea).toFixed(2)}</p>
                       </div>
                     ))
                   ) : (
                     <div className="text-center py-4 text-lab-neutral-500">
-                      No hay items disponibles para esta cotización
+                      No hay exámenes disponibles para esta cotización
                     </div>
                   )}
                 </div>
@@ -316,11 +383,48 @@ export default function CotizacionesAdminPage() {
               <div className="p-4 bg-lab-neutral-50 rounded-lg">
                 <p className="text-sm text-lab-neutral-600 mb-1">Estado Actual</p>
                 <span className={`text-sm px-3 py-1 rounded ${getEstadoBadge(selectedCotizacion.estado)}`}>
-                  {selectedCotizacion.estado}
+                  {getEstadoLabel(selectedCotizacion.estado)}
                 </span>
               </div>
 
-              {/* Actions */}
+              {/* Confirmación de Pago en Ventanilla */}
+              {selectedCotizacion.estado === 'PENDIENTE_PAGO_VENTANILLA' && (
+                <div className="border-t border-lab-neutral-200 pt-4 space-y-4">
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <h4 className="font-semibold text-amber-800 mb-2">Confirmar Pago en Ventanilla</h4>
+                    <p className="text-sm text-amber-700 mb-3">
+                      El paciente debe pagar <strong>${Number(selectedCotizacion.total).toFixed(2)}</strong> en efectivo.
+                      Una vez confirmado, la cotización pasará a estado PAGADA.
+                    </p>
+                    <div className="space-y-2">
+                      <Label>Observaciones (opcional)</Label>
+                      <textarea
+                        value={paymentObservaciones}
+                        onChange={(e) => setPaymentObservaciones(e.target.value)}
+                        className="w-full h-20 px-3 py-2 text-sm rounded-lg border border-lab-neutral-300 focus:outline-none focus:ring-2 focus:ring-lab-primary-500 resize-none"
+                        placeholder="Ej: Pagó con billete de $50, se devolvió cambio..."
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end space-x-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowDetailModal(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleConfirmarPagoVentanilla}
+                      disabled={confirmingPayment}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {confirmingPayment ? 'Confirmando...' : 'Confirmar Pago Recibido'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions para estado PENDIENTE */}
               {selectedCotizacion.estado === 'PENDIENTE' && (
                 <div className="flex justify-end space-x-3 pt-4 border-t border-lab-neutral-200">
                   <Button

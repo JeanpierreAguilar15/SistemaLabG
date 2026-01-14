@@ -234,7 +234,12 @@ export default function CotizacionesPage() {
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Cita agendada correctamente' })
+        // Mensaje diferente según el estado de pago
+        const isPendientePago = selectedCotizacion.estado === 'PENDIENTE_PAGO_VENTANILLA'
+        const mensaje = isPendientePago
+          ? 'Cita agendada exitosamente. Recuerda que debes pagar en ventanilla cuando llegues al laboratorio. La cita quedará confirmada una vez se verifique el pago.'
+          : 'Cita agendada correctamente.'
+        setMessage({ type: 'success', text: mensaje })
         setShowAgendarCitaModal(false)
         loadCotizaciones() // Recargar para actualizar estado
       } else {

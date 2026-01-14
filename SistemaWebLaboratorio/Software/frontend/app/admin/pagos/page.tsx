@@ -61,8 +61,11 @@ export default function PagosAdminPage() {
   // Modal
   const [selectedPago, setSelectedPago] = useState<Pago | null>(null)
   const [nuevoEstado, setNuevoEstado] = useState('')
+  const [nuevoMonto, setNuevoMonto] = useState('')
+  const [nuevoMetodo, setNuevoMetodo] = useState('')
   const [observaciones, setObservaciones] = useState('')
   const [updating, setUpdating] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -125,6 +128,12 @@ export default function PagosAdminPage() {
   const handleUpdatePago = async () => {
     if (!selectedPago || !nuevoEstado) return
 
+    const montoNum = parseFloat(nuevoMonto)
+    if (isNaN(montoNum) || montoNum <= 0) {
+      setMessage({ type: 'error', text: 'El monto debe ser un número positivo' })
+      return
+    }
+
     setUpdating(true)
     try {
       const response = await fetch(
@@ -135,25 +144,34 @@ export default function PagosAdminPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${accessToken}`,
           },
-          body: JSON.stringify({ estado: nuevoEstado, observaciones }),
+          body: JSON.stringify({
+            estado: nuevoEstado,
+            monto: montoNum,
+            metodo_pago: nuevoMetodo,
+            observaciones,
+          }),
         }
       )
 
       if (response.ok) {
+        setMessage({ type: 'success', text: 'Pago actualizado correctamente' })
         setPagos(pagos.map(p =>
           p.codigo_pago === selectedPago.codigo_pago
-            ? { ...p, estado: nuevoEstado, observaciones }
+            ? { ...p, estado: nuevoEstado, monto: montoNum, metodo_pago: nuevoMetodo, observaciones }
             : p
         ))
         setSelectedPago(null)
         setNuevoEstado('')
+        setNuevoMonto('')
+        setNuevoMetodo('')
         setObservaciones('')
       } else {
-        alert('Error al actualizar el pago')
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al actualizar el pago' })
       }
     } catch (error) {
       console.error('Error updating pago:', error)
-      alert('Error de conexion')
+      setMessage({ type: 'error', text: 'Error de conexión' })
     } finally {
       setUpdating(false)
     }
@@ -198,11 +216,30 @@ export default function PagosAdminPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-lab-neutral-900">Gestion de Pagos</h1>
+        <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Pagos</h1>
         <p className="text-lab-neutral-600 mt-2">
-          Administra y supervisa todos los pagos del sistema
+          Administra y supervisa todos los pagos del sistema. Edita montos y confirma pagos.
         </p>
       </div>
+
+      {/* Message */}
+      {message && (
+        <div
+          className={`p-4 rounded-lg ${
+            message.type === 'success'
+              ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
+              : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
+          }`}
+        >
+          {message.text}
+          <button
+            onClick={() => setMessage(null)}
+            className="float-right text-current opacity-70 hover:opacity-100"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-lab-neutral-200">
@@ -380,6 +417,8 @@ export default function PagosAdminPage() {
                             onClick={() => {
                               setSelectedPago(pago)
                               setNuevoEstado(pago.estado)
+                              setNuevoMonto(String(pago.monto || 0))
+                              setNuevoMetodo(pago.metodo_pago || 'EFECTIVO')
                               setObservaciones(pago.observaciones || '')
                             }}
                           >
@@ -533,22 +572,66 @@ export default function PagosAdminPage() {
       {selectedPago && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-bold mb-4">Gestionar Pago #{selectedPago.codigo_pago}</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">Gestionar Pago #{selectedPago.codigo_pago}</h3>
+              <button
+                onClick={() => setSelectedPago(null)}
+                className="text-lab-neutral-400 hover:text-lab-neutral-600"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
             <div className="space-y-4">
-              <div className="p-4 bg-lab-neutral-50 rounded-lg">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="text-lab-neutral-600">Monto:</div>
-                  <div className="font-bold text-green-600">{formatCurrency(selectedPago.monto)}</div>
-                  <div className="text-lab-neutral-600">Metodo:</div>
-                  <div>{selectedPago.metodo_pago}</div>
-                  <div className="text-lab-neutral-600">Referencia:</div>
-                  <div>{selectedPago.referencia_pago || '-'}</div>
+              {/* Información de cotización */}
+              <div className="p-3 bg-lab-neutral-50 rounded-lg text-sm">
+                <div className="flex justify-between">
+                  <span className="text-lab-neutral-600">Cotización:</span>
+                  <span className="font-mono">{selectedPago.cotizacion?.numero_cotizacion || `#${selectedPago.codigo_cotizacion}`}</span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-lab-neutral-600">Referencia:</span>
+                  <span>{selectedPago.referencia_pago || '-'}</span>
                 </div>
               </div>
 
+              {/* Monto editable */}
               <div className="space-y-2">
-                <Label>Nuevo Estado</Label>
+                <Label>Monto ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={nuevoMonto}
+                  onChange={(e) => setNuevoMonto(e.target.value)}
+                  className="font-bold text-green-600"
+                />
+                {selectedPago.cotizacion?.total && (
+                  <p className="text-xs text-lab-neutral-500">
+                    Total cotización: {formatCurrency(selectedPago.cotizacion.total)}
+                  </p>
+                )}
+              </div>
+
+              {/* Método de pago */}
+              <div className="space-y-2">
+                <Label>Método de Pago</Label>
+                <select
+                  value={nuevoMetodo}
+                  onChange={(e) => setNuevoMetodo(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-lab-neutral-300"
+                >
+                  <option value="EFECTIVO">Efectivo</option>
+                  <option value="TRANSFERENCIA">Transferencia</option>
+                  <option value="TARJETA">Tarjeta</option>
+                </select>
+              </div>
+
+              {/* Estado */}
+              <div className="space-y-2">
+                <Label>Estado del Pago</Label>
                 <select
                   value={nuevoEstado}
                   onChange={(e) => setNuevoEstado(e.target.value)}
@@ -556,22 +639,24 @@ export default function PagosAdminPage() {
                 >
                   <option value="PENDIENTE">Pendiente</option>
                   <option value="CONFIRMADO">Confirmado</option>
+                  <option value="COMPLETADO">Completado</option>
                   <option value="RECHAZADO">Rechazado</option>
                 </select>
               </div>
 
+              {/* Observaciones */}
               <div className="space-y-2">
                 <Label>Observaciones</Label>
                 <textarea
                   value={observaciones}
                   onChange={(e) => setObservaciones(e.target.value)}
-                  className="w-full h-24 px-3 py-2 rounded-md border border-lab-neutral-300"
+                  className="w-full h-20 px-3 py-2 rounded-md border border-lab-neutral-300 text-sm"
                   placeholder="Notas adicionales..."
                 />
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6">
+            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
               <Button variant="outline" onClick={() => setSelectedPago(null)}>
                 Cancelar
               </Button>

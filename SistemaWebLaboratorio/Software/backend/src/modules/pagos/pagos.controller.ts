@@ -101,14 +101,19 @@ export class PagosController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Actualizar estado de pago (Admin)' })
+  @ApiOperation({ summary: 'Actualizar pago (Admin) - estado, monto, método' })
   @ApiResponse({ status: 200, description: 'Pago actualizado' })
   @ApiResponse({ status: 404, description: 'Pago no encontrado' })
   async updatePago(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: { estado: string; observaciones?: string },
+    @Body() data: {
+      estado?: string;
+      monto?: number;
+      metodo_pago?: string;
+      observaciones?: string;
+    },
   ) {
-    return this.pagosService.updatePago(id, data.estado, data.observaciones);
+    return this.pagosService.updatePago(id, data);
   }
 
   @Get('admin/estadisticas')
