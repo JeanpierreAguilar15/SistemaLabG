@@ -1,187 +1,264 @@
 // =====================================================
-// SISTEMA WEB LABORATORIO - DIAGRAMA SIMPLIFICADO
-// 18 Tablas Core del Sistema
+// SISTEMA WEB LABORATORIO CLINICO FRANZ
+// Diagrama Simplificado - 18 Tablas Core
+// Nomenclatura real del sistema Prisma
 // =====================================================
 
-// ==================== SCHEMA: USUARIOS ====================
+// ==================== SCHEMA: usuarios ====================
 
 Table usuarios.usuario {
   codigo_usuario int [pk, increment]
+  codigo_rol int [ref: > usuarios.rol.codigo_rol]
+  cedula varchar(10) [unique, not null]
   nombres varchar(100) [not null]
   apellidos varchar(100) [not null]
   email varchar(100) [unique, not null]
-  password varchar(255) [not null]
-  tipo_documento varchar(20)
-  numero_documento varchar(20) [unique]
-  telefono varchar(20)
-  codigo_rol int [ref: > usuarios.rol.codigo_rol]
+  telefono varchar(15)
+  fecha_nacimiento date
+  genero varchar(20)
+  direccion text
+  password_hash varchar(255) [not null]
+  salt varchar(255) [not null]
+  email_verificado boolean [default: false]
   activo boolean [default: true]
-  fecha_registro datetime [default: `now()`]
+  fecha_creacion datetime [default: `now()`]
 }
 
 Table usuarios.rol {
   codigo_rol int [pk, increment]
   nombre varchar(50) [unique, not null]
-  descripcion varchar(200)
-  permisos json
+  descripcion text
+  nivel_acceso int [default: 1]
   activo boolean [default: true]
+  fecha_creacion datetime [default: `now()`]
 }
 
-// ==================== SCHEMA: CATALOGO ====================
+// ==================== SCHEMA: catalogo ====================
 
 Table catalogo.categoria_examen {
   codigo_categoria int [pk, increment]
-  nombre varchar(100) [not null]
+  nombre varchar(100) [unique, not null]
   descripcion text
   activo boolean [default: true]
 }
 
 Table catalogo.examen {
   codigo_examen int [pk, increment]
+  codigo_categoria int [ref: > catalogo.categoria_examen.codigo_categoria]
+  codigo_interno varchar(50) [unique, not null]
   nombre varchar(200) [not null]
   descripcion text
-  codigo_categoria int [ref: > catalogo.categoria_examen.codigo_categoria]
-  tiempo_proceso_horas int [default: 24]
   requiere_ayuno boolean [default: false]
-  indicaciones text
+  horas_ayuno int
+  instrucciones_preparacion text
+  tiempo_entrega_horas int [default: 24]
+  tipo_muestra varchar(100)
+  valor_referencia_min decimal(10,4)
+  valor_referencia_max decimal(10,4)
+  valores_referencia_texto text
+  unidad_medida varchar(50)
   activo boolean [default: true]
+  fecha_creacion datetime [default: `now()`]
 }
 
 Table catalogo.precio {
   codigo_precio int [pk, increment]
   codigo_examen int [ref: > catalogo.examen.codigo_examen]
-  precio_normal decimal(10,2) [not null]
-  precio_emergencia decimal(10,2)
-  vigente boolean [default: true]
-  fecha_inicio date [not null]
+  precio decimal(10,2) [not null]
+  fecha_inicio date [default: `now()`]
+  fecha_fin date
+  activo boolean [default: true]
 }
 
-// ==================== SCHEMA: AGENDA ====================
+// ==================== SCHEMA: agenda ====================
 
 Table agenda.sede {
   codigo_sede int [pk, increment]
-  nombre varchar(100) [not null]
-  direccion varchar(200)
-  telefono varchar(20)
-  horario_apertura time
-  horario_cierre time
+  nombre varchar(200) [not null]
+  direccion text [not null]
+  telefono varchar(15)
+  email varchar(100)
   activo boolean [default: true]
 }
 
 Table agenda.servicio {
   codigo_servicio int [pk, increment]
-  nombre varchar(100) [not null]
+  nombre varchar(200) [not null]
   descripcion text
-  duracion_minutos int [default: 30]
   activo boolean [default: true]
+  fecha_creacion datetime [default: `now()`]
 }
 
 Table agenda.slot {
   codigo_slot int [pk, increment]
-  codigo_sede int [ref: > agenda.sede.codigo_sede]
   codigo_servicio int [ref: > agenda.servicio.codigo_servicio]
+  codigo_sede int [ref: > agenda.sede.codigo_sede]
   fecha date [not null]
   hora_inicio time [not null]
   hora_fin time [not null]
-  disponible boolean [default: true]
+  cupos_totales int [default: 1]
+  cupos_disponibles int [default: 1]
   activo boolean [default: true]
+  fecha_creacion datetime [default: `now()`]
 }
 
 Table agenda.cita {
   codigo_cita int [pk, increment]
-  codigo_paciente int [ref: > usuarios.usuario.codigo_usuario]
   codigo_slot int [ref: > agenda.slot.codigo_slot]
-  codigo_cotizacion int [ref: > pagos.cotizacion.codigo_cotizacion]
-  estado varchar(20) [default: 'PENDIENTE']
-  notas text
-  fecha_registro datetime [default: `now()`]
+  codigo_paciente int [ref: > usuarios.usuario.codigo_usuario]
+  codigo_cotizacion int [unique, ref: > pagos.cotizacion.codigo_cotizacion]
+  estado varchar(50) [default: 'AGENDADA', note: 'AGENDADA, CONFIRMADA, EN_PROCESO, COMPLETADA, CANCELADA']
+  observaciones text
+  motivo_cancelacion text
+  confirmada boolean [default: false]
+  fecha_confirmacion datetime
+  fecha_creacion datetime [default: `now()`]
 }
 
-// ==================== SCHEMA: PAGOS ====================
+// ==================== SCHEMA: pagos ====================
 
 Table pagos.cotizacion {
   codigo_cotizacion int [pk, increment]
-  numero_cotizacion varchar(20) [unique]
   codigo_paciente int [ref: > usuarios.usuario.codigo_usuario]
+  numero_cotizacion varchar(50) [unique, not null]
+  fecha_cotizacion datetime [default: `now()`]
+  fecha_expiracion datetime [not null]
   subtotal decimal(10,2) [not null]
   descuento decimal(10,2) [default: 0]
   total decimal(10,2) [not null]
-  estado varchar(20) [default: 'PENDIENTE']
-  fecha_cotizacion datetime [default: `now()`]
-  fecha_expiracion datetime
+  estado varchar(50) [default: 'PENDIENTE', note: 'PENDIENTE, PENDIENTE_PAGO_VENTANILLA, PAGO_EN_PROCESO, PAGADA, RECHAZADA, EXPIRADA']
+  metodo_pago_seleccionado varchar(20) [note: 'ONLINE, VENTANILLA']
+  fecha_seleccion_pago datetime
+  observaciones text
 }
 
 Table pagos.cotizacion_detalle {
   codigo_detalle int [pk, increment]
   codigo_cotizacion int [ref: > pagos.cotizacion.codigo_cotizacion]
   codigo_examen int [ref: > catalogo.examen.codigo_examen]
+  cantidad int [not null]
   precio_unitario decimal(10,2) [not null]
-  cantidad int [default: 1]
-  subtotal decimal(10,2) [not null]
+  total_linea decimal(10,2) [not null]
 }
 
 Table pagos.pago {
   codigo_pago int [pk, increment]
   codigo_cotizacion int [ref: > pagos.cotizacion.codigo_cotizacion]
-  monto decimal(10,2) [not null]
-  metodo_pago varchar(30) [not null]
-  estado varchar(20) [default: 'PENDIENTE']
-  referencia_externa varchar(100)
+  codigo_paciente int [ref: > usuarios.usuario.codigo_usuario]
+  numero_pago varchar(50) [unique, not null]
   fecha_pago datetime [default: `now()`]
+  monto_total decimal(10,2) [not null]
+  metodo_pago varchar(50) [not null]
+  estado varchar(50) [default: 'PENDIENTE', note: 'PENDIENTE, COMPLETADO, FALLIDO, REEMBOLSADO']
+  proveedor_pasarela varchar(100) [note: 'stripe, paypal, etc']
+  id_transaccion_externa varchar(200)
+  url_comprobante text
+  observaciones text
 }
 
 Table pagos.factura {
   codigo_factura int [pk, increment]
-  numero_factura varchar(20) [unique]
-  codigo_pago int [ref: > pagos.pago.codigo_pago]
-  tipo_comprobante varchar(20) [not null]
-  ruc_cliente varchar(11)
-  razon_social varchar(200)
-  total decimal(10,2) [not null]
+  codigo_pago int [unique, ref: > pagos.pago.codigo_pago]
+  numero_factura varchar(50) [unique, not null]
   fecha_emision datetime [default: `now()`]
+  subtotal decimal(10,2) [not null]
+  iva decimal(10,2) [default: 0]
+  total decimal(10,2) [not null]
+  estado varchar(50) [default: 'EMITIDA']
+  url_pdf text
+  clave_acceso varchar(100)
 }
 
-// ==================== SCHEMA: RESULTADOS ====================
+// ==================== SCHEMA: resultados ====================
 
 Table resultados.muestra {
   codigo_muestra int [pk, increment]
+  codigo_paciente int [ref: > usuarios.usuario.codigo_usuario]
   codigo_cita int [ref: > agenda.cita.codigo_cita]
-  codigo_barras varchar(50) [unique]
-  tipo_muestra varchar(50)
-  fecha_toma datetime
-  estado varchar(20) [default: 'PENDIENTE']
+  id_muestra varchar(50) [unique, not null, note: 'Codigo de barras']
+  fecha_toma datetime [default: `now()`]
+  tipo_muestra varchar(100)
+  estado varchar(50) [default: 'RECOLECTADA', note: 'RECOLECTADA, EN_PROCESO, PROCESADA']
+  observaciones text
+  tomada_por int [ref: > usuarios.usuario.codigo_usuario]
 }
 
 Table resultados.resultado {
   codigo_resultado int [pk, increment]
   codigo_muestra int [ref: > resultados.muestra.codigo_muestra]
   codigo_examen int [ref: > catalogo.examen.codigo_examen]
-  valor_resultado text
+  valor_numerico decimal(15,6)
+  valor_texto text
   unidad_medida varchar(50)
-  valores_referencia text
-  estado varchar(20) [default: 'PENDIENTE']
-  fecha_resultado datetime
+  dentro_rango_normal boolean
+  nivel varchar(20) [note: 'NORMAL, ALTO, BAJO, CRITICO']
+  observaciones_tecnicas text
+  valor_referencia_min decimal(10,4)
+  valor_referencia_max decimal(10,4)
+  valores_referencia_texto text
+  estado varchar(50) [default: 'EN_PROCESO', note: 'EN_PROCESO, LISTO, VALIDADO, ENTREGADO']
+  fecha_resultado datetime [default: `now()`]
+  procesado_por int [ref: > usuarios.usuario.codigo_usuario]
   validado_por int [ref: > usuarios.usuario.codigo_usuario]
+  fecha_validacion datetime
+  url_pdf text
+  codigo_verificacion varchar(100)
 }
 
-// ==================== SCHEMA: INVENTARIO ====================
+// ==================== SCHEMA: inventario ====================
 
 Table inventario.item {
   codigo_item int [pk, increment]
+  codigo_categoria int [ref: > inventario.categoria_item.codigo_categoria]
+  codigo_interno varchar(50) [unique, not null]
   nombre varchar(200) [not null]
   descripcion text
-  unidad_medida varchar(20)
-  stock_minimo int [default: 0]
+  unidad_medida varchar(50) [not null]
   stock_actual int [default: 0]
+  stock_minimo int [default: 0]
+  stock_maximo int
+  costo_unitario decimal(10,2)
+  es_reactivo boolean [default: false]
+  vida_util_dias_abierto int
+  capacidad_pruebas int
+  activo boolean [default: true]
+  fecha_creacion datetime [default: `now()`]
+}
+
+Table inventario.categoria_item {
+  codigo_categoria int [pk, increment]
+  nombre varchar(100) [unique, not null]
+  descripcion text
   activo boolean [default: true]
 }
 
 Table inventario.lote {
   codigo_lote int [pk, increment]
   codigo_item int [ref: > inventario.item.codigo_item]
-  numero_lote varchar(50) [not null]
-  cantidad int [not null]
+  numero_lote varchar(100) [not null]
+  fecha_fabricacion date
   fecha_vencimiento date
+  cantidad_inicial int [not null]
+  cantidad_actual int [not null]
+  proveedor varchar(200)
   fecha_ingreso datetime [default: `now()`]
-  activo boolean [default: true]
+  estado_lote varchar(20) [default: 'CERRADO', note: 'CERRADO, ABIERTO, AGOTADO, DESCARTADO']
+  fecha_apertura timestamp
+  fecha_vencimiento_abierto timestamp
+  pruebas_realizadas int [default: 0]
 }
+
+// =====================================================
+// FLUJO PRINCIPAL DEL SISTEMA
+// =====================================================
+//
+// 1. Paciente (usuario) se registra con rol "PACIENTE"
+// 2. Paciente crea cotizacion con examenes
+// 3. Paciente paga (online o ventanilla)
+// 4. Paciente agenda cita en un slot disponible
+// 5. Tecnico toma muestra en la cita
+// 6. Laboratorista procesa resultado
+// 7. Bioanalista valida resultado
+// 8. Paciente descarga PDF con codigo_verificacion
+//
+// =====================================================
