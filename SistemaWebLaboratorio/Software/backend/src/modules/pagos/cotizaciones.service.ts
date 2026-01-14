@@ -87,6 +87,23 @@ export class CotizacionesService {
     data: CreateCotizacionDto,
     codigo_paciente: number,
   ) {
+    // Limitar cotizaciones activas por paciente (máximo 5)
+    const cotizacionesActivas = await this.prisma.cotizacion.count({
+      where: {
+        codigo_paciente,
+        estado: {
+          in: ['PENDIENTE', 'ACEPTADA', 'APROBADA', 'PENDIENTE_PAGO_VENTANILLA', 'PAGO_EN_PROCESO'],
+        },
+        fecha_expiracion: { gte: new Date() },
+      },
+    });
+
+    if (cotizacionesActivas >= 5) {
+      throw new BadRequestException(
+        'Ha alcanzado el límite de 5 cotizaciones activas. Por favor, complete o cancele alguna cotización existente antes de crear una nueva.',
+      );
+    }
+
     // Verificar que todos los exámenes existan y obtener precios actuales
     const examenesConPrecios = await Promise.all(
       data.examenes.map(async (item) => {
@@ -240,8 +257,24 @@ export class CotizacionesService {
 
   /**
    * Obtener cotizaciones del paciente autenticado
+   * Marca automáticamente como expiradas las cotizaciones vencidas
    */
   async getMyCotizaciones(codigo_paciente: number) {
+    // Marcar automáticamente como expiradas las cotizaciones vencidas
+    const ahora = new Date();
+    await this.prisma.cotizacion.updateMany({
+      where: {
+        codigo_paciente,
+        fecha_expiracion: { lt: ahora },
+        estado: {
+          in: ['PENDIENTE', 'ACEPTADA', 'APROBADA', 'PENDIENTE_PAGO_VENTANILLA', 'PAGO_EN_PROCESO'],
+        },
+      },
+      data: {
+        estado: 'EXPIRADA',
+      },
+    });
+
     const cotizaciones = await this.prisma.cotizacion.findMany({
       where: {
         codigo_paciente,

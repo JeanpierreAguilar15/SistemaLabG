@@ -134,7 +134,25 @@ export default function PerfilPage() {
     }
   }
 
+  // Validar formato de teléfono ecuatoriano
+  const validatePhone = (phone: string): boolean => {
+    if (!phone || phone.trim() === '') return true // Campo opcional
+    const cleanPhone = phone.replace(/\s|-/g, '')
+    const phoneRegex = /^(09\d{8}|0[2-7]\d{7})$/
+    return phoneRegex.test(cleanPhone)
+  }
+
   const handleSaveProfile = async () => {
+    // Validar teléfonos antes de enviar
+    if (!validatePhone(profileData.telefono)) {
+      setMessage({ type: 'error', text: 'Formato de teléfono inválido. Use: 0987654321 (móvil) o 022345678 (fijo)' })
+      return
+    }
+    if (!validatePhone(profileData.contacto_emergencia_telefono)) {
+      setMessage({ type: 'error', text: 'Formato de teléfono de emergencia inválido. Use: 0987654321 (móvil) o 022345678 (fijo)' })
+      return
+    }
+
     try {
       setSaving(true)
       setMessage(null)

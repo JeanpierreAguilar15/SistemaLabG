@@ -600,6 +600,30 @@ export class AuthService {
     contacto_emergencia_nombre?: string;
     contacto_emergencia_telefono?: string;
   }) {
+    // Validar formato de teléfono ecuatoriano si se proporciona
+    const phoneRegex = /^(09\d{8}|0[2-7]\d{7})$/;
+
+    if (data.telefono && data.telefono.trim() !== '') {
+      const cleanPhone = data.telefono.replace(/\s|-/g, '');
+      if (!phoneRegex.test(cleanPhone)) {
+        throw new BadRequestException(
+          'Formato de teléfono inválido. Use formato ecuatoriano: 0987654321 (móvil) o 022345678 (fijo)'
+        );
+      }
+      data.telefono = cleanPhone;
+    }
+
+    // Validar teléfono de emergencia si se proporciona
+    if (data.contacto_emergencia_telefono && data.contacto_emergencia_telefono.trim() !== '') {
+      const cleanEmergencyPhone = data.contacto_emergencia_telefono.replace(/\s|-/g, '');
+      if (!phoneRegex.test(cleanEmergencyPhone)) {
+        throw new BadRequestException(
+          'Formato de teléfono de emergencia inválido. Use formato ecuatoriano: 0987654321 (móvil) o 022345678 (fijo)'
+        );
+      }
+      data.contacto_emergencia_telefono = cleanEmergencyPhone;
+    }
+
     // Verificar email único si se está actualizando
     if (data.email) {
       const existingUser = await this.prisma.usuario.findFirst({
