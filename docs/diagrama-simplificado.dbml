@@ -1,0 +1,187 @@
+// =====================================================
+// SISTEMA WEB LABORATORIO - DIAGRAMA SIMPLIFICADO
+// 18 Tablas Core del Sistema
+// =====================================================
+
+// ==================== SCHEMA: USUARIOS ====================
+
+Table usuarios.usuario {
+  codigo_usuario int [pk, increment]
+  nombres varchar(100) [not null]
+  apellidos varchar(100) [not null]
+  email varchar(100) [unique, not null]
+  password varchar(255) [not null]
+  tipo_documento varchar(20)
+  numero_documento varchar(20) [unique]
+  telefono varchar(20)
+  codigo_rol int [ref: > usuarios.rol.codigo_rol]
+  activo boolean [default: true]
+  fecha_registro datetime [default: `now()`]
+}
+
+Table usuarios.rol {
+  codigo_rol int [pk, increment]
+  nombre varchar(50) [unique, not null]
+  descripcion varchar(200)
+  permisos json
+  activo boolean [default: true]
+}
+
+// ==================== SCHEMA: CATALOGO ====================
+
+Table catalogo.categoria_examen {
+  codigo_categoria int [pk, increment]
+  nombre varchar(100) [not null]
+  descripcion text
+  activo boolean [default: true]
+}
+
+Table catalogo.examen {
+  codigo_examen int [pk, increment]
+  nombre varchar(200) [not null]
+  descripcion text
+  codigo_categoria int [ref: > catalogo.categoria_examen.codigo_categoria]
+  tiempo_proceso_horas int [default: 24]
+  requiere_ayuno boolean [default: false]
+  indicaciones text
+  activo boolean [default: true]
+}
+
+Table catalogo.precio {
+  codigo_precio int [pk, increment]
+  codigo_examen int [ref: > catalogo.examen.codigo_examen]
+  precio_normal decimal(10,2) [not null]
+  precio_emergencia decimal(10,2)
+  vigente boolean [default: true]
+  fecha_inicio date [not null]
+}
+
+// ==================== SCHEMA: AGENDA ====================
+
+Table agenda.sede {
+  codigo_sede int [pk, increment]
+  nombre varchar(100) [not null]
+  direccion varchar(200)
+  telefono varchar(20)
+  horario_apertura time
+  horario_cierre time
+  activo boolean [default: true]
+}
+
+Table agenda.servicio {
+  codigo_servicio int [pk, increment]
+  nombre varchar(100) [not null]
+  descripcion text
+  duracion_minutos int [default: 30]
+  activo boolean [default: true]
+}
+
+Table agenda.slot {
+  codigo_slot int [pk, increment]
+  codigo_sede int [ref: > agenda.sede.codigo_sede]
+  codigo_servicio int [ref: > agenda.servicio.codigo_servicio]
+  fecha date [not null]
+  hora_inicio time [not null]
+  hora_fin time [not null]
+  disponible boolean [default: true]
+  activo boolean [default: true]
+}
+
+Table agenda.cita {
+  codigo_cita int [pk, increment]
+  codigo_paciente int [ref: > usuarios.usuario.codigo_usuario]
+  codigo_slot int [ref: > agenda.slot.codigo_slot]
+  codigo_cotizacion int [ref: > pagos.cotizacion.codigo_cotizacion]
+  estado varchar(20) [default: 'PENDIENTE']
+  notas text
+  fecha_registro datetime [default: `now()`]
+}
+
+// ==================== SCHEMA: PAGOS ====================
+
+Table pagos.cotizacion {
+  codigo_cotizacion int [pk, increment]
+  numero_cotizacion varchar(20) [unique]
+  codigo_paciente int [ref: > usuarios.usuario.codigo_usuario]
+  subtotal decimal(10,2) [not null]
+  descuento decimal(10,2) [default: 0]
+  total decimal(10,2) [not null]
+  estado varchar(20) [default: 'PENDIENTE']
+  fecha_cotizacion datetime [default: `now()`]
+  fecha_expiracion datetime
+}
+
+Table pagos.cotizacion_detalle {
+  codigo_detalle int [pk, increment]
+  codigo_cotizacion int [ref: > pagos.cotizacion.codigo_cotizacion]
+  codigo_examen int [ref: > catalogo.examen.codigo_examen]
+  precio_unitario decimal(10,2) [not null]
+  cantidad int [default: 1]
+  subtotal decimal(10,2) [not null]
+}
+
+Table pagos.pago {
+  codigo_pago int [pk, increment]
+  codigo_cotizacion int [ref: > pagos.cotizacion.codigo_cotizacion]
+  monto decimal(10,2) [not null]
+  metodo_pago varchar(30) [not null]
+  estado varchar(20) [default: 'PENDIENTE']
+  referencia_externa varchar(100)
+  fecha_pago datetime [default: `now()`]
+}
+
+Table pagos.factura {
+  codigo_factura int [pk, increment]
+  numero_factura varchar(20) [unique]
+  codigo_pago int [ref: > pagos.pago.codigo_pago]
+  tipo_comprobante varchar(20) [not null]
+  ruc_cliente varchar(11)
+  razon_social varchar(200)
+  total decimal(10,2) [not null]
+  fecha_emision datetime [default: `now()`]
+}
+
+// ==================== SCHEMA: RESULTADOS ====================
+
+Table resultados.muestra {
+  codigo_muestra int [pk, increment]
+  codigo_cita int [ref: > agenda.cita.codigo_cita]
+  codigo_barras varchar(50) [unique]
+  tipo_muestra varchar(50)
+  fecha_toma datetime
+  estado varchar(20) [default: 'PENDIENTE']
+}
+
+Table resultados.resultado {
+  codigo_resultado int [pk, increment]
+  codigo_muestra int [ref: > resultados.muestra.codigo_muestra]
+  codigo_examen int [ref: > catalogo.examen.codigo_examen]
+  valor_resultado text
+  unidad_medida varchar(50)
+  valores_referencia text
+  estado varchar(20) [default: 'PENDIENTE']
+  fecha_resultado datetime
+  validado_por int [ref: > usuarios.usuario.codigo_usuario]
+}
+
+// ==================== SCHEMA: INVENTARIO ====================
+
+Table inventario.item {
+  codigo_item int [pk, increment]
+  nombre varchar(200) [not null]
+  descripcion text
+  unidad_medida varchar(20)
+  stock_minimo int [default: 0]
+  stock_actual int [default: 0]
+  activo boolean [default: true]
+}
+
+Table inventario.lote {
+  codigo_lote int [pk, increment]
+  codigo_item int [ref: > inventario.item.codigo_item]
+  numero_lote varchar(50) [not null]
+  cantidad int [not null]
+  fecha_vencimiento date
+  fecha_ingreso datetime [default: `now()`]
+  activo boolean [default: true]
+}
