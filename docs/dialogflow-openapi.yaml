@@ -1,0 +1,721 @@
+openapi: 3.0.0
+info:
+  title: Laboratorio Clínico Franz - API para Dialogflow CX
+  description: |
+    API REST para integración con Dialogflow CX.
+    Todos los endpoints tienen el prefijo /api/v1/
+  version: 2.0.0
+
+servers:
+  - url: https://fancy-items-play.loca.lt/api/v1
+    description: Servidor de desarrollo (tunnel)
+  - url: http://localhost:3001/api/v1
+    description: Servidor local
+
+tags:
+  - name: Exámenes
+    description: Consulta de exámenes y precios
+  - name: Citas
+    description: Agendamiento y consulta de citas
+  - name: Resultados
+    description: Interpretación de resultados con IA
+  - name: Handoff
+    description: Transferencia a operador humano
+  - name: Webhook
+    description: Webhook principal para Dialogflow CX
+
+paths:
+  # =====================================================
+  # EXÁMENES
+  # =====================================================
+  /dialogflow/examenes:
+    get:
+      tags:
+        - Exámenes
+      operationId: listarExamenes
+      summary: Listar todos los exámenes disponibles
+      description: Devuelve hasta 50 exámenes con sus precios actuales
+      responses:
+        '200':
+          description: Lista de exámenes obtenida exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExamenesResponse'
+
+  /dialogflow/examenes/precio/{nombre}:
+    get:
+      tags:
+        - Exámenes
+      operationId: consultarPrecioExamen
+      summary: Consultar precio de un examen
+      description: |
+        Busca un examen por nombre (búsqueda flexible) y devuelve su precio.
+        Soporta búsqueda parcial y sin acentos.
+      parameters:
+        - name: nombre
+          in: path
+          required: true
+          description: Nombre del examen (búsqueda parcial flexible)
+          schema:
+            type: string
+          examples:
+            hemograma:
+              value: hemograma
+            glucosa:
+              value: glucosa
+            perfil_lipidico:
+              value: perfil lipidico
+      responses:
+        '200':
+          description: Precio del examen encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrecioResponse'
+
+  /dialogflow/examenes/rango/{nombre}:
+    get:
+      tags:
+        - Exámenes
+      operationId: consultarRangoExamen
+      summary: Consultar valores de referencia de un examen
+      description: Devuelve los rangos normales de un examen
+      parameters:
+        - name: nombre
+          in: path
+          required: true
+          description: Nombre del examen
+          schema:
+            type: string
+          example: glucosa
+      responses:
+        '200':
+          description: Valores de referencia del examen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RangoResponse'
+
+  # =====================================================
+  # CITAS
+  # =====================================================
+  /dialogflow/citas/disponibilidad:
+    get:
+      tags:
+        - Citas
+      operationId: consultarDisponibilidad
+      summary: Consultar disponibilidad de horarios
+      description: |
+        Devuelve los horarios disponibles para una fecha específica.
+        Verifica feriados automáticamente.
+      parameters:
+        - name: fecha
+          in: query
+          required: true
+          description: Fecha en formato YYYY-MM-DD
+          schema:
+            type: string
+            format: date
+          example: '2026-01-15'
+        - name: servicio
+          in: query
+          required: false
+          description: Código del servicio (opcional, filtra por servicio)
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: Disponibilidad consultada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisponibilidadResponse'
+
+  /dialogflow/citas/agendar:
+    post:
+      tags:
+        - Citas
+      operationId: agendarCita
+      summary: Agendar una nueva cita
+      description: |
+        Crea una cita para un paciente.
+        Requiere que el paciente esté registrado en el sistema.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendarCitaRequest'
+      responses:
+        '200':
+          description: Cita agendada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CitaResponse'
+
+  /dialogflow/citas/paciente/{cedula}:
+    get:
+      tags:
+        - Citas
+      operationId: consultarCitasPaciente
+      summary: Consultar citas de un paciente
+      description: Devuelve las citas pendientes de un paciente (máximo 10)
+      parameters:
+        - name: cedula
+          in: path
+          required: true
+          description: Cédula del paciente
+          schema:
+            type: string
+          example: '1234567890'
+      responses:
+        '200':
+          description: Citas del paciente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CitasListResponse'
+
+  # =====================================================
+  # HANDOFF / OPERADOR
+  # =====================================================
+  /dialogflow/handoff/solicitar:
+    post:
+      tags:
+        - Handoff
+      operationId: solicitarHandoff
+      summary: Solicitar transferencia a operador humano
+      description: Inicia una solicitud de transferencia a un agente humano
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoffRequest'
+      responses:
+        '200':
+          description: Handoff iniciado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoffResponse'
+
+  /dialogflow/handoff/pendientes:
+    get:
+      tags:
+        - Handoff
+      operationId: obtenerPendientes
+      summary: Obtener conversaciones pendientes
+      description: Lista de conversaciones esperando atención (para operadores)
+      responses:
+        '200':
+          description: Lista de conversaciones pendientes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConversacionPendiente'
+
+  # =====================================================
+  # WEBHOOK PRINCIPAL DIALOGFLOW CX
+  # =====================================================
+  /dialogflow/webhook:
+    post:
+      tags:
+        - Webhook
+      operationId: handleDialogflowWebhook
+      summary: Webhook principal para Dialogflow CX fulfillment
+      description: |
+        Procesa las solicitudes de fulfillment de Dialogflow CX.
+
+        Tags soportados:
+        - listar-examenes: Lista exámenes disponibles
+        - consultar-precio: Consulta precio de un examen
+        - consultar-rango: Consulta valores de referencia
+        - consultar-disponibilidad: Consulta horarios disponibles
+        - agendar-cita: Agenda una cita
+        - consultar-citas: Consulta citas del paciente
+        - solicitar-operador: Transfiere a operador humano
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DialogflowWebhookRequest'
+      responses:
+        '200':
+          description: Respuesta de fulfillment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DialogflowWebhookResponse'
+
+  # =====================================================
+  # INTERPRETACIÓN DE RESULTADOS CON IA
+  # =====================================================
+  /chatbot/interpret-results:
+    post:
+      tags:
+        - Resultados
+      operationId: interpretarResultadosPDF
+      summary: Interpretar resultados de laboratorio desde PDF
+      description: |
+        Recibe un PDF en base64 y usa Gemini 2.5 para interpretar
+        los resultados de laboratorio en lenguaje sencillo.
+
+        El PDF puede contener múltiples exámenes que se interpretan
+        de forma conjunta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterpretResultsRequest'
+      responses:
+        '200':
+          description: Interpretación exitosa de los resultados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterpretResultsResponse'
+
+  /chatbot/interpret-results/status:
+    get:
+      tags:
+        - Resultados
+      operationId: verificarServicioInterpretacion
+      summary: Verificar disponibilidad del servicio de interpretación
+      description: Verifica si el servicio de interpretación con Gemini está configurado
+      responses:
+        '200':
+          description: Estado del servicio
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  available:
+                    type: boolean
+                    description: true si el servicio está disponible
+                  message:
+                    type: string
+                    description: Mensaje descriptivo del estado
+
+components:
+  schemas:
+    # =====================================================
+    # EXÁMENES
+    # =====================================================
+    ExamenInfo:
+      type: object
+      properties:
+        codigo:
+          type: integer
+          description: Código único del examen
+        nombre:
+          type: string
+          description: Nombre del examen
+        categoria:
+          type: string
+          description: Categoría del examen
+        precio:
+          type: number
+          format: float
+          description: Precio en USD
+        moneda:
+          type: string
+          default: 'USD'
+        requiere_ayuno:
+          type: boolean
+        horas_ayuno:
+          type: integer
+        tiempo_entrega_horas:
+          type: integer
+
+    ExamenesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        mensaje:
+          type: string
+          description: Mensaje descriptivo con ejemplos de exámenes
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExamenInfo'
+
+    PrecioResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        mensaje:
+          type: string
+          description: Mensaje con el precio o sugerencias si no se encontró
+        data:
+          $ref: '#/components/schemas/ExamenInfo'
+        error_code:
+          type: string
+          enum: [EXAMEN_NO_ENCONTRADO, ERROR_INTERNO]
+
+    RangoResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        mensaje:
+          type: string
+        data:
+          type: object
+          properties:
+            nombre:
+              type: string
+            valor_min:
+              type: number
+            valor_max:
+              type: number
+            unidad_medida:
+              type: string
+            valores_texto:
+              type: string
+        error_code:
+          type: string
+
+    # =====================================================
+    # CITAS
+    # =====================================================
+    HorarioDisponible:
+      type: object
+      properties:
+        slot_id:
+          type: integer
+          description: ID del slot para agendar
+        hora:
+          type: string
+          description: Hora en formato HH:MM
+          example: '09:00'
+        cupos:
+          type: integer
+          description: Cupos disponibles
+        sede:
+          type: string
+          description: Nombre de la sede
+        servicio:
+          type: string
+          description: Nombre del servicio
+
+    DisponibilidadResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        mensaje:
+          type: string
+          description: Mensaje descriptivo de la disponibilidad
+        data:
+          type: object
+          properties:
+            fecha:
+              type: string
+              format: date
+            total_horarios:
+              type: integer
+            horarios:
+              type: array
+              items:
+                $ref: '#/components/schemas/HorarioDisponible'
+
+    AgendarCitaRequest:
+      type: object
+      required:
+        - fecha
+        - hora
+        - cedula_paciente
+      properties:
+        fecha:
+          type: string
+          format: date
+          description: Fecha YYYY-MM-DD
+          example: '2026-01-15'
+        hora:
+          type: string
+          description: Hora HH:MM
+          example: '09:00'
+        cedula_paciente:
+          type: string
+          description: Cédula del paciente
+          example: '1234567890'
+        examen:
+          type: string
+          description: Nombre del examen (opcional)
+        codigo_servicio:
+          type: integer
+          description: Código del servicio
+        codigo_sede:
+          type: integer
+          description: Código de la sede
+        observaciones:
+          type: string
+
+    CitaInfo:
+      type: object
+      properties:
+        codigo_cita:
+          type: integer
+        fecha:
+          type: string
+          format: date
+        hora:
+          type: string
+        servicio:
+          type: string
+        sede:
+          type: string
+        estado:
+          type: string
+          enum: [AGENDADA, CONFIRMADA, EN_PROCESO, COMPLETADA, CANCELADA]
+
+    CitaResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        mensaje:
+          type: string
+          description: Mensaje de confirmación con detalles
+        data:
+          $ref: '#/components/schemas/CitaInfo'
+        error_code:
+          type: string
+          enum: [PACIENTE_NO_ENCONTRADO, SLOT_NO_DISPONIBLE, CITA_DUPLICADA, ERROR_INTERNO]
+
+    CitasListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        mensaje:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CitaInfo'
+        error_code:
+          type: string
+
+    # =====================================================
+    # HANDOFF
+    # =====================================================
+    HandoffRequest:
+      type: object
+      required:
+        - session_id
+      properties:
+        session_id:
+          type: string
+          description: ID de la sesión de Dialogflow
+        motivo:
+          type: string
+          description: Motivo de la transferencia
+        datos_paciente:
+          type: object
+          properties:
+            nombre:
+              type: string
+            cedula:
+              type: string
+            telefono:
+              type: string
+
+    HandoffResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        mensaje:
+          type: string
+        ticket_id:
+          type: string
+        tiempo_espera_estimado:
+          type: integer
+          description: Tiempo estimado en minutos
+
+    ConversacionPendiente:
+      type: object
+      properties:
+        session_id:
+          type: string
+        nombre_paciente:
+          type: string
+        motivo:
+          type: string
+        fecha_solicitud:
+          type: string
+          format: date-time
+        tiempo_espera:
+          type: integer
+          description: Minutos esperando
+
+    # =====================================================
+    # WEBHOOK DIALOGFLOW CX
+    # =====================================================
+    DialogflowWebhookRequest:
+      type: object
+      description: Formato de request de Dialogflow CX
+      properties:
+        detectIntentResponseId:
+          type: string
+        intentInfo:
+          type: object
+          properties:
+            lastMatchedIntent:
+              type: string
+            displayName:
+              type: string
+        pageInfo:
+          type: object
+        sessionInfo:
+          type: object
+          properties:
+            session:
+              type: string
+            parameters:
+              type: object
+              description: |
+                Parámetros extraídos por Dialogflow:
+                - examen: nombre del examen
+                - fecha: fecha en formato YYYY-MM-DD
+                - hora: hora en formato HH:MM
+                - cedula: cédula del paciente
+                - servicio: código del servicio
+        fulfillmentInfo:
+          type: object
+          properties:
+            tag:
+              type: string
+              description: |
+                Tag que identifica la acción a ejecutar:
+                - listar-examenes
+                - consultar-precio
+                - consultar-rango
+                - consultar-disponibilidad
+                - agendar-cita
+                - consultar-citas
+                - solicitar-operador
+
+    DialogflowWebhookResponse:
+      type: object
+      description: Formato de respuesta para Dialogflow CX
+      properties:
+        fulfillment_response:
+          type: object
+          properties:
+            messages:
+              type: array
+              items:
+                type: object
+                properties:
+                  text:
+                    type: object
+                    properties:
+                      text:
+                        type: array
+                        items:
+                          type: string
+        sessionInfo:
+          type: object
+          properties:
+            parameters:
+              type: object
+              description: Parámetros actualizados incluyendo ultimaRespuesta
+
+    # =====================================================
+    # INTERPRETACIÓN DE RESULTADOS
+    # =====================================================
+    InterpretResultsRequest:
+      type: object
+      required:
+        - file
+      properties:
+        file:
+          type: string
+          format: byte
+          description: Archivo PDF codificado en base64
+        mimeType:
+          type: string
+          default: 'application/pdf'
+          description: Tipo MIME del archivo
+
+    ResultadoInterpretado:
+      type: object
+      properties:
+        examen:
+          type: string
+          description: Nombre del examen/parámetro
+        valor:
+          type: string
+          description: Valor obtenido
+        unidad:
+          type: string
+          description: Unidad de medida
+        valor_referencia:
+          type: string
+          description: Rango de referencia normal
+        estado:
+          type: string
+          enum: [NORMAL, ALTO, BAJO, CRITICO, INDETERMINADO]
+          description: Estado del valor respecto al rango
+        interpretacion:
+          type: string
+          description: Explicación en lenguaje sencillo
+
+    InterpretResultsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        chatMessage:
+          type: string
+          description: Mensaje formateado para mostrar en el chat
+        data:
+          type: object
+          properties:
+            paciente:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                cedula:
+                  type: string
+                fecha_nacimiento:
+                  type: string
+                edad:
+                  type: string
+            fecha_examen:
+              type: string
+              format: date
+            laboratorio:
+              type: string
+            resultados:
+              type: array
+              items:
+                $ref: '#/components/schemas/ResultadoInterpretado'
+            resumen_general:
+              type: string
+              description: Resumen de los hallazgos principales
+            recomendaciones:
+              type: array
+              items:
+                type: string
+            advertencias:
+              type: array
+              items:
+                type: string
+        error:
+          type: string
+          description: Mensaje de error si success=false

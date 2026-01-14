@@ -253,6 +253,18 @@ export class ResultadosController {
     return this.resultadosService.getMyResultados(codigo_paciente);
   }
 
+  @Get('my/agrupados')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Obtener mis resultados AGRUPADOS por cita/muestra (Paciente)',
+    description: 'Si el paciente agendó 3 exámenes en una cita, todos se muestran juntos en una sola muestra',
+  })
+  @ApiResponse({ status: 200, description: 'Lista de muestras con sus resultados agrupados' })
+  async getMyResultadosAgrupados(@CurrentUser('codigo_usuario') codigo_paciente: number) {
+    return this.resultadosService.getMyResultadosAgrupados(codigo_paciente);
+  }
+
   @Get(':id/descargar')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

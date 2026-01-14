@@ -524,6 +524,121 @@ export class ResultadosService {
   }
 
   /**
+   * Obtener resultados del paciente AGRUPADOS por muestra/cita
+   * Si el paciente agendó 3 exámenes en una cita, todos se muestran juntos
+   */
+  async getMyResultadosAgrupados(codigo_paciente: number) {
+    // Obtener muestras con sus resultados
+    const muestras = await this.prisma.muestra.findMany({
+      where: {
+        codigo_paciente,
+        resultados: {
+          some: {
+            estado: {
+              in: ['LISTO', 'VALIDADO', 'ENTREGADO'],
+            },
+          },
+        },
+      },
+      include: {
+        cita: {
+          include: {
+            slot: {
+              include: {
+                servicio: true,
+                sede: true,
+              },
+            },
+            cotizacion: {
+              include: {
+                detalles: {
+                  include: {
+                    examen: {
+                      select: {
+                        codigo_examen: true,
+                        nombre: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        resultados: {
+          where: {
+            estado: {
+              in: ['LISTO', 'VALIDADO', 'ENTREGADO'],
+            },
+          },
+          include: {
+            examen: {
+              select: {
+                codigo_examen: true,
+                nombre: true,
+                codigo_interno: true,
+                unidad_medida: true,
+              },
+            },
+          },
+          orderBy: {
+            examen: {
+              nombre: 'asc',
+            },
+          },
+        },
+      },
+      orderBy: {
+        fecha_toma: 'desc',
+      },
+    });
+
+    // Formatear la respuesta agrupada
+    return muestras.map((muestra) => ({
+      codigo_muestra: muestra.codigo_muestra,
+      id_muestra: muestra.id_muestra,
+      fecha_toma: muestra.fecha_toma,
+      tipo_muestra: muestra.tipo_muestra,
+      estado: muestra.estado,
+      cita: muestra.cita
+        ? {
+            codigo_cita: muestra.cita.codigo_cita,
+            fecha: muestra.cita.slot?.fecha,
+            hora: muestra.cita.slot?.hora_inicio,
+            servicio: muestra.cita.slot?.servicio?.nombre,
+            sede: muestra.cita.slot?.sede?.nombre,
+          }
+        : null,
+      examenes_solicitados:
+        muestra.cita?.cotizacion?.detalles?.map((d) => ({
+          codigo: d.examen.codigo_examen,
+          nombre: d.examen.nombre,
+        })) || [],
+      resultados: muestra.resultados.map((r) => ({
+        codigo_resultado: r.codigo_resultado,
+        examen: r.examen.nombre,
+        codigo_examen: r.examen.codigo_examen,
+        valor_numerico: r.valor_numerico,
+        valor_texto: r.valor_texto,
+        unidad_medida: r.unidad_medida || r.examen.unidad_medida,
+        valor_referencia_min: r.valor_referencia_min,
+        valor_referencia_max: r.valor_referencia_max,
+        valores_referencia_texto: r.valores_referencia_texto,
+        dentro_rango_normal: r.dentro_rango_normal,
+        nivel: r.nivel,
+        estado: r.estado,
+        fecha_resultado: r.fecha_resultado,
+        url_pdf: r.url_pdf,
+        codigo_verificacion: r.codigo_verificacion,
+      })),
+      total_examenes: muestra.resultados.length,
+      todos_listos: muestra.resultados.every((r) =>
+        ['LISTO', 'VALIDADO', 'ENTREGADO'].includes(r.estado),
+      ),
+    }));
+  }
+
+  /**
    * Descargar PDF de resultado (Paciente)
    */
   async downloadResultado(codigo_resultado: number, codigo_paciente: number) {
