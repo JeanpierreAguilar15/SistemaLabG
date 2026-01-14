@@ -130,8 +130,9 @@ export class AgendaService {
         continue;
       }
 
-      const startTime = new Date(`1970-01-01T${horaInicioStr}:00`);
-      const endTime = new Date(`1970-01-01T${horaFinStr}:00`);
+      // Usar UTC para evitar problemas de timezone (Bolivia UTC-4)
+      const startTime = new Date(`1970-01-01T${horaInicioStr}:00Z`);
+      const endTime = new Date(`1970-01-01T${horaFinStr}:00Z`);
       const durationMs = duracionMin * 60 * 1000;
 
       let currentTime = startTime.getTime();
@@ -141,8 +142,8 @@ export class AgendaService {
       let huecoStartMs = -1;
       let huecoEndMs = -1;
       if (huecoInicioStr && huecoFinStr) {
-        huecoStartMs = new Date(`1970-01-01T${huecoInicioStr}:00`).getTime();
-        huecoEndMs = new Date(`1970-01-01T${huecoFinStr}:00`).getTime();
+        huecoStartMs = new Date(`1970-01-01T${huecoInicioStr}:00Z`).getTime();
+        huecoEndMs = new Date(`1970-01-01T${huecoFinStr}:00Z`).getTime();
       }
 
       while (currentTime + durationMs <= endTimeMs) {
@@ -165,8 +166,9 @@ export class AgendaService {
         if (!isGap) {
           const start = new Date(slotStart);
           const end = new Date(slotEnd);
-          const startStr = start.toTimeString().substring(0, 5);
-          const endStr = end.toTimeString().substring(0, 5);
+          // Extraer hora en formato UTC para evitar doble conversión de timezone
+          const startStr = start.toISOString().substring(11, 16); // "HH:MM" de ISO
+          const endStr = end.toISOString().substring(11, 16);     // "HH:MM" de ISO
 
           // Crear UN SOLO slot por horario (usando el primer servicio activo)
           // Esto permite que el slot sea usado para cualquier examen/servicio
@@ -174,8 +176,8 @@ export class AgendaService {
             codigo_servicio: servicios[0].codigo_servicio,
             codigo_sede: sede.codigo_sede,
             fecha: new Date(currentDate),
-            hora_inicio: new Date(`1970-01-01T${startStr}:00`),
-            hora_fin: new Date(`1970-01-01T${endStr}:00`),
+            hora_inicio: new Date(`1970-01-01T${startStr}:00Z`), // UTC
+            hora_fin: new Date(`1970-01-01T${endStr}:00Z`),       // UTC
             cupos_totales: capacidad,
             cupos_disponibles: capacidad,
             activo: true,
@@ -245,10 +247,10 @@ export class AgendaService {
       );
     }
 
-    // Generar slots de 10 minutos
+    // Generar slots de 10 minutos - Usar UTC para evitar problemas de timezone
     const slotsToCreate = [];
-    const startTime = new Date(`1970-01-01T${data.hora_inicio}:00`);
-    const endTime = new Date(`1970-01-01T${data.hora_fin}:00`);
+    const startTime = new Date(`1970-01-01T${data.hora_inicio}:00Z`);
+    const endTime = new Date(`1970-01-01T${data.hora_fin}:00Z`);
     const durationMs = 10 * 60 * 1000; // 10 minutos en milisegundos
 
     let currentTime = startTime.getTime();
@@ -258,16 +260,16 @@ export class AgendaService {
       const slotStart = new Date(currentTime);
       const slotEnd = new Date(currentTime + durationMs);
 
-      // Formatear horas para guardar
-      const horaInicioStr = slotStart.toTimeString().substring(0, 5);
-      const horaFinStr = slotEnd.toTimeString().substring(0, 5);
+      // Extraer hora en formato UTC para evitar doble conversión de timezone
+      const horaInicioStr = slotStart.toISOString().substring(11, 16);
+      const horaFinStr = slotEnd.toISOString().substring(11, 16);
 
       slotsToCreate.push({
         codigo_servicio: data.codigo_servicio,
         codigo_sede: data.codigo_sede,
         fecha: new Date(data.fecha),
-        hora_inicio: new Date(`1970-01-01T${horaInicioStr}:00`),
-        hora_fin: new Date(`1970-01-01T${horaFinStr}:00`),
+        hora_inicio: new Date(`1970-01-01T${horaInicioStr}:00Z`),
+        hora_fin: new Date(`1970-01-01T${horaFinStr}:00Z`),
         cupos_totales: 1, // 1 cupo por slot de 10 min
         cupos_disponibles: 1,
         activo: data.activo !== undefined ? data.activo : true,

@@ -3,26 +3,27 @@ import { PrismaService } from '../../../prisma/prisma.service';
 
 /**
  * Extrae la hora de un campo TIME de PostgreSQL
- * PostgreSQL TIME se almacena sin zona horaria, pero Prisma lo convierte a Date
- * Usamos toTimeString para obtener la hora local tal como se almacenó
+ * Los tiempos se almacenan en UTC para evitar problemas de timezone
+ * Usamos toISOString para obtener la hora UTC tal como se almacenó
  */
 function extractHourFromTime(time: Date): number {
-    // toTimeString devuelve formato "HH:MM:SS GMT±XXXX"
-    const timeStr = time.toTimeString();
-    const hour = parseInt(timeStr.substring(0, 2));
-    return isNaN(hour) ? time.getHours() : hour;
+    // toISOString devuelve formato "YYYY-MM-DDTHH:MM:SS.sssZ"
+    const isoStr = time.toISOString();
+    const hour = parseInt(isoStr.substring(11, 13));
+    return isNaN(hour) ? time.getUTCHours() : hour;
 }
 
 function extractMinuteFromTime(time: Date): number {
-    const timeStr = time.toTimeString();
-    const minute = parseInt(timeStr.substring(3, 5));
-    return isNaN(minute) ? time.getMinutes() : minute;
+    const isoStr = time.toISOString();
+    const minute = parseInt(isoStr.substring(14, 16));
+    return isNaN(minute) ? time.getUTCMinutes() : minute;
 }
 
 function extractTimeString(time: Date): string {
-    const timeStr = time.toTimeString();
-    // Formato "HH:MM:SS GMT±XXXX" -> extraemos "HH:MM"
-    return timeStr.substring(0, 5);
+    // Extraer hora en UTC para evitar conversión de timezone
+    const isoStr = time.toISOString();
+    // Formato "YYYY-MM-DDTHH:MM:SS.sssZ" -> extraemos "HH:MM"
+    return isoStr.substring(11, 16);
 }
 
 /**
