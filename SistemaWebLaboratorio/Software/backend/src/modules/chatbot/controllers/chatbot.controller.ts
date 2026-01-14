@@ -14,25 +14,25 @@ import { v4 as uuidv4 } from 'uuid';
 @ApiTags('Chatbot')
 @Controller('chatbot')
 export class ChatbotController {
-    private readonly webhookApiKey: string;
+    private readonly dialogflowAgentId: string;
 
     constructor(
         private readonly chatbotService: ChatbotService,
         private readonly labResultsInterpreter: LabResultsInterpreterService,
         private readonly configService: ConfigService,
     ) {
-        this.webhookApiKey = this.configService.get<string>('DIALOGFLOW_WEBHOOK_API_KEY') || '';
+        this.dialogflowAgentId = this.configService.get<string>('DIALOGFLOW_AGENT_ID') || '';
     }
 
     /**
-     * Validate webhook API key from request headers
+     * Validate webhook API key from request headers using DIALOGFLOW_AGENT_ID
      */
     private validateWebhookApiKey(req: any): void {
-        if (!this.webhookApiKey) {
-            throw new UnauthorizedException('Webhook API key not configured');
+        if (!this.dialogflowAgentId) {
+            throw new UnauthorizedException('Dialogflow Agent ID not configured');
         }
         const apiKey = req.headers['x-api-key'];
-        if (!apiKey || apiKey !== this.webhookApiKey) {
+        if (!apiKey || apiKey !== this.dialogflowAgentId) {
             throw new UnauthorizedException('Invalid API Key');
         }
     }
