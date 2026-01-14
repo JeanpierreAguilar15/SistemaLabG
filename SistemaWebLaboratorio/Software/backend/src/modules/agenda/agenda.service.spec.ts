@@ -315,6 +315,7 @@ describe('AgendaService', () => {
     it('should allow appointment if patient has cancelled appointment in same slot', async () => {
       const citaData = {
         codigo_slot: 1,
+        codigo_cotizacion: 1,
         observaciones: 'Nueva cita',
       };
 

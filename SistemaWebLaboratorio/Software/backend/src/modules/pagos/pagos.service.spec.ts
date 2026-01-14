@@ -286,6 +286,7 @@ describe('PagosService', () => {
       numero_pago: 'PAG-202511-0001',
       estado: 'PENDIENTE',
       observaciones: 'Original',
+      codigo_cotizacion: null,
     };
 
     it('should update pago status', async () => {
@@ -296,9 +297,15 @@ describe('PagosService', () => {
       };
 
       mockPrismaService.pago.findUnique.mockResolvedValue(mockPago);
-      mockPrismaService.pago.update.mockResolvedValue(updatedPago);
+      mockPrismaService.$transaction.mockImplementation(async (callback: any) => {
+        const mockTx = {
+          pago: { update: jest.fn().mockResolvedValue(updatedPago) },
+          cotizacion: { update: jest.fn() },
+        };
+        return callback(mockTx);
+      });
 
-      const result = await service.updatePago(1, 'COMPLETADO', 'Verificado');
+      const result = await service.updatePago(1, { estado: 'COMPLETADO', observaciones: 'Verificado' });
 
       expect(result.estado).toBe('COMPLETADO');
       expect(result.observaciones).toBe('Verificado');
@@ -308,7 +315,7 @@ describe('PagosService', () => {
       mockPrismaService.pago.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.updatePago(1, 'COMPLETADO'),
+        service.updatePago(1, { estado: 'COMPLETADO' }),
       ).rejects.toThrow(NotFoundException);
     });
   });
