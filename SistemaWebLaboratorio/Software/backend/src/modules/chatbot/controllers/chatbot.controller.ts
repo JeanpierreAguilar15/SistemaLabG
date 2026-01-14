@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Get, Put, UseGuards, Req, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { ChatbotService } from '../services/chatbot.service';
 import { LabResultsInterpreterService } from '../services/lab-results-interpreter.service';
 import { CreateMessageDto, UpdateChatbotConfigDto } from '../dto/chatbot.dto';
@@ -13,10 +14,28 @@ import { v4 as uuidv4 } from 'uuid';
 @ApiTags('Chatbot')
 @Controller('chatbot')
 export class ChatbotController {
+    private readonly webhookApiKey: string;
+
     constructor(
         private readonly chatbotService: ChatbotService,
         private readonly labResultsInterpreter: LabResultsInterpreterService,
-    ) { }
+        private readonly configService: ConfigService,
+    ) {
+        this.webhookApiKey = this.configService.get<string>('DIALOGFLOW_WEBHOOK_API_KEY') || '';
+    }
+
+    /**
+     * Validate webhook API key from request headers
+     */
+    private validateWebhookApiKey(req: any): void {
+        if (!this.webhookApiKey) {
+            throw new UnauthorizedException('Webhook API key not configured');
+        }
+        const apiKey = req.headers['x-api-key'];
+        if (!apiKey || apiKey !== this.webhookApiKey) {
+            throw new UnauthorizedException('Invalid API Key');
+        }
+    }
 
     @Public()
     @Post('message')
@@ -54,11 +73,7 @@ export class ChatbotController {
     @Post('webhook/interpretar')
     @ApiOperation({ summary: 'Webhook para interpretar resultados (Dialogflow)' })
     async handleWebhook(@Body() body: { examen: string; valor: number }, @Req() req: any) {
-        const apiKey = req.headers['x-api-key'];
-        // Simple hardcoded check for the demo/MVP phase as requested by user
-        if (apiKey !== '123456') {
-            throw new UnauthorizedException('Invalid API Key');
-        }
+        this.validateWebhookApiKey(req);
         return this.chatbotService.interpretarResultado(body.examen, body.valor);
     }
 
@@ -67,10 +82,7 @@ export class ChatbotController {
     @ApiOperation({ summary: 'Webhook para consultar precio de examen (Dialogflow)' })
     @ApiResponse({ status: 200, description: 'Precio del examen' })
     async consultarPrecio(@Body() body: { examen: string }, @Req() req: any) {
-        const apiKey = req.headers['x-api-key'];
-        if (apiKey !== '123456') {
-            throw new UnauthorizedException('Invalid API Key');
-        }
+        this.validateWebhookApiKey(req);
         return this.chatbotService.consultarPrecio(body.examen);
     }
 
@@ -79,10 +91,7 @@ export class ChatbotController {
     @ApiOperation({ summary: 'Webhook para consultar sedes disponibles (Dialogflow)' })
     @ApiResponse({ status: 200, description: 'Lista de sedes' })
     async consultarSedes(@Req() req: any) {
-        const apiKey = req.headers['x-api-key'];
-        if (apiKey !== '123456') {
-            throw new UnauthorizedException('Invalid API Key');
-        }
+        this.validateWebhookApiKey(req);
         return this.chatbotService.consultarSedes();
     }
 
@@ -91,10 +100,7 @@ export class ChatbotController {
     @ApiOperation({ summary: 'Webhook para consultar servicios disponibles (Dialogflow)' })
     @ApiResponse({ status: 200, description: 'Lista de servicios' })
     async consultarServicios(@Req() req: any) {
-        const apiKey = req.headers['x-api-key'];
-        if (apiKey !== '123456') {
-            throw new UnauthorizedException('Invalid API Key');
-        }
+        this.validateWebhookApiKey(req);
         return this.chatbotService.consultarServicios();
     }
 
