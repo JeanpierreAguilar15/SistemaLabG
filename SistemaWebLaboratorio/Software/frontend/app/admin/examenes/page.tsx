@@ -879,33 +879,38 @@ export default function ExamenesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="valor_referencia_min">Valor Mín.</Label>
-                  <Input
-                    id="valor_referencia_min"
-                    type="number"
-                    step="0.01"
-                    value={formData.valor_referencia_min}
-                    onChange={(e) => setFormData({ ...formData, valor_referencia_min: e.target.value })}
-                    placeholder="70"
-                  />
-                </div>
+              {/* Valores de Referencia para Resultados */}
+              <div className="pt-4 border-t border-lab-neutral-200">
+                <p className="text-sm font-medium text-lab-neutral-700 mb-3">
+                  Valores de Referencia (Rango Normal del Resultado)
+                </p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="valor_referencia_min">Valor Mín.</Label>
+                    <Input
+                      id="valor_referencia_min"
+                      type="number"
+                      step="0.01"
+                      value={formData.valor_referencia_min}
+                      onChange={(e) => setFormData({ ...formData, valor_referencia_min: e.target.value })}
+                      placeholder="70"
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="valor_referencia_max">Valor Máx.</Label>
-                  <Input
-                    id="valor_referencia_max"
-                    type="number"
-                    step="0.01"
-                    value={formData.valor_referencia_max}
-                    onChange={(e) => setFormData({ ...formData, valor_referencia_max: e.target.value })}
-                    placeholder="100"
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="valor_referencia_max">Valor Máx.</Label>
+                    <Input
+                      id="valor_referencia_max"
+                      type="number"
+                      step="0.01"
+                      value={formData.valor_referencia_max}
+                      onChange={(e) => setFormData({ ...formData, valor_referencia_max: e.target.value })}
+                      placeholder="100"
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="unidad_medida">Unidad de Medida</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="unidad_medida">Unidad de Medida</Label>
                   <select
                     id="unidad_medida"
                     value={formData.unidad_medida}
@@ -947,6 +952,7 @@ export default function ExamenesPage() {
                       <option value="Reactivo/No Reactivo">Reactivo/No Reactivo</option>
                     </optgroup>
                   </select>
+                  </div>
                 </div>
               </div>
 

@@ -87,6 +87,19 @@ const getHourNumber = (isoString: string): number => {
   return parseInt(timeStr.split(':')[0], 10)
 }
 
+// Helper para agrupar slots por hora
+const groupSlotsByHour = (slots: any[]): Map<number, any[]> => {
+  const grouped = new Map<number, any[]>()
+  slots.forEach(slot => {
+    const hour = getHourNumber(slot.hora_inicio)
+    if (!grouped.has(hour)) {
+      grouped.set(hour, [])
+    }
+    grouped.get(hour)!.push(slot)
+  })
+  return grouped
+}
+
 export default function CotizacionesPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const router = useRouter()
@@ -108,6 +121,7 @@ export default function CotizacionesPage() {
   const [availableSlots, setAvailableSlots] = useState<any[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
+  const [expandedHour, setExpandedHour] = useState<number | null>(null)
 
 
   useEffect(() => {
@@ -723,22 +737,45 @@ export default function CotizacionesPage() {
                             </svg>
                             <span className="text-sm font-medium text-lab-neutral-700">Mañana</span>
                           </div>
-                          <div className="grid grid-cols-4 gap-2">
-                            {availableSlots
-                              .filter(s => getHourNumber(s.hora_inicio) < 12)
-                              .map((slot) => (
+                          <div className="flex flex-wrap gap-2">
+                            {Array.from(groupSlotsByHour(availableSlots.filter(s => getHourNumber(s.hora_inicio) < 12))).map(([hour, slots]) => (
+                              <div key={hour} className="relative">
                                 <button
-                                  key={slot.codigo_slot}
-                                  onClick={() => setSelectedSlot(slot.codigo_slot)}
-                                  className={`py-2 px-3 text-sm font-medium rounded-lg border-2 transition-all ${
-                                    selectedSlot === slot.codigo_slot
-                                      ? 'bg-lab-primary-600 text-white border-lab-primary-600 shadow-md'
+                                  onClick={() => setExpandedHour(expandedHour === hour ? null : hour)}
+                                  className={`py-2 px-4 text-sm font-medium rounded-lg border-2 transition-all ${
+                                    expandedHour === hour || slots.some(s => s.codigo_slot === selectedSlot)
+                                      ? 'bg-lab-primary-100 text-lab-primary-700 border-lab-primary-400'
                                       : 'bg-white text-lab-neutral-700 border-lab-neutral-200 hover:border-lab-primary-400 hover:bg-lab-primary-50'
                                   }`}
                                 >
-                                  {formatSlotTime(slot.hora_inicio)}
+                                  {hour.toString().padStart(2, '0')}:00
+                                  <span className="ml-1 text-xs text-lab-neutral-400">({slots.length})</span>
+                                  <svg className={`inline-block w-4 h-4 ml-1 transition-transform ${expandedHour === hour ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
                                 </button>
-                              ))}
+                                {expandedHour === hour && (
+                                  <div className="absolute top-full left-0 mt-1 bg-white border border-lab-neutral-200 rounded-lg shadow-lg p-2 z-10 min-w-[120px]">
+                                    {slots.map((slot) => (
+                                      <button
+                                        key={slot.codigo_slot}
+                                        onClick={() => {
+                                          setSelectedSlot(slot.codigo_slot)
+                                          setExpandedHour(null)
+                                        }}
+                                        className={`block w-full py-1.5 px-3 text-sm font-medium rounded transition-all mb-1 last:mb-0 ${
+                                          selectedSlot === slot.codigo_slot
+                                            ? 'bg-lab-primary-600 text-white'
+                                            : 'text-lab-neutral-700 hover:bg-lab-primary-50'
+                                        }`}
+                                      >
+                                        {formatSlotTime(slot.hora_inicio)}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
@@ -752,22 +789,45 @@ export default function CotizacionesPage() {
                             </svg>
                             <span className="text-sm font-medium text-lab-neutral-700">Tarde</span>
                           </div>
-                          <div className="grid grid-cols-4 gap-2">
-                            {availableSlots
-                              .filter(s => getHourNumber(s.hora_inicio) >= 12)
-                              .map((slot) => (
+                          <div className="flex flex-wrap gap-2">
+                            {Array.from(groupSlotsByHour(availableSlots.filter(s => getHourNumber(s.hora_inicio) >= 12))).map(([hour, slots]) => (
+                              <div key={hour} className="relative">
                                 <button
-                                  key={slot.codigo_slot}
-                                  onClick={() => setSelectedSlot(slot.codigo_slot)}
-                                  className={`py-2 px-3 text-sm font-medium rounded-lg border-2 transition-all ${
-                                    selectedSlot === slot.codigo_slot
-                                      ? 'bg-lab-primary-600 text-white border-lab-primary-600 shadow-md'
+                                  onClick={() => setExpandedHour(expandedHour === hour ? null : hour)}
+                                  className={`py-2 px-4 text-sm font-medium rounded-lg border-2 transition-all ${
+                                    expandedHour === hour || slots.some(s => s.codigo_slot === selectedSlot)
+                                      ? 'bg-lab-primary-100 text-lab-primary-700 border-lab-primary-400'
                                       : 'bg-white text-lab-neutral-700 border-lab-neutral-200 hover:border-lab-primary-400 hover:bg-lab-primary-50'
                                   }`}
                                 >
-                                  {formatSlotTime(slot.hora_inicio)}
+                                  {hour.toString().padStart(2, '0')}:00
+                                  <span className="ml-1 text-xs text-lab-neutral-400">({slots.length})</span>
+                                  <svg className={`inline-block w-4 h-4 ml-1 transition-transform ${expandedHour === hour ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
                                 </button>
-                              ))}
+                                {expandedHour === hour && (
+                                  <div className="absolute top-full left-0 mt-1 bg-white border border-lab-neutral-200 rounded-lg shadow-lg p-2 z-10 min-w-[120px]">
+                                    {slots.map((slot) => (
+                                      <button
+                                        key={slot.codigo_slot}
+                                        onClick={() => {
+                                          setSelectedSlot(slot.codigo_slot)
+                                          setExpandedHour(null)
+                                        }}
+                                        className={`block w-full py-1.5 px-3 text-sm font-medium rounded transition-all mb-1 last:mb-0 ${
+                                          selectedSlot === slot.codigo_slot
+                                            ? 'bg-lab-primary-600 text-white'
+                                            : 'text-lab-neutral-700 hover:bg-lab-primary-50'
+                                        }`}
+                                      >
+                                        {formatSlotTime(slot.hora_inicio)}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}

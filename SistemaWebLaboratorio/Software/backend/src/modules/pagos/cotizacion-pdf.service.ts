@@ -309,36 +309,51 @@ export class CotizacionPdfService {
     );
 
     if (examenesConRequisitos.length > 0) {
+      // Verificar si necesitamos nueva página
+      if (doc.y > 550) {
+        doc.addPage();
+      }
+
+      // Posicionar explícitamente en el margen izquierdo
+      const leftMargin = 50;
+      const contentWidth = 500;
+
       doc
         .fontSize(12)
         .fillColor('#DC2626')
         .font('Helvetica-Bold')
-        .text('⚠ REQUISITOS Y PREPARACIÓN', { underline: true })
+        .text('REQUISITOS Y PREPARACIÓN', leftMargin, doc.y, {
+          width: contentWidth,
+          underline: true
+        })
         .moveDown(0.5);
 
       doc.fontSize(9).fillColor('#000000');
 
       examenesConRequisitos.forEach((detalle: any) => {
-        doc.font('Helvetica-Bold').text(`• ${detalle.examen.nombre}:`, {
-          continued: false,
-        });
+        doc
+          .font('Helvetica-Bold')
+          .text(`• ${detalle.examen.nombre}:`, leftMargin, doc.y, {
+            width: contentWidth,
+          });
 
         if (detalle.examen.requiere_ayuno) {
           doc
             .font('Helvetica')
             .text(
-              `  - Requiere ayuno de ${detalle.examen.horas_ayuno || 8} horas`,
-              { indent: 20 },
+              `   - Requiere ayuno de ${detalle.examen.horas_ayuno || 8} horas`,
+              leftMargin + 15, doc.y, { width: contentWidth - 15 }
             );
         }
 
         if (detalle.examen.instrucciones_preparacion) {
           doc
             .font('Helvetica')
-            .text(`  - ${detalle.examen.instrucciones_preparacion}`, {
-              indent: 20,
-              align: 'justify',
-            });
+            .text(`   - ${detalle.examen.instrucciones_preparacion}`,
+              leftMargin + 15, doc.y, {
+                width: contentWidth - 15,
+              }
+            );
         }
 
         doc.moveDown(0.3);
@@ -352,60 +367,61 @@ export class CotizacionPdfService {
    * Agregar totales
    */
   private addTotals(doc: any, cotizacion: any) {
-    const rightAlign = 450;
-    const valueAlign = 520;
+    const rightAlign = 400;
+    const valueAlign = 500;
+    let currentY = doc.y;
 
     // Línea separadora
     doc
       .strokeColor('#CCCCCC')
       .lineWidth(1)
-      .moveTo(350, doc.y)
-      .lineTo(562, doc.y)
+      .moveTo(350, currentY)
+      .lineTo(562, currentY)
       .stroke();
 
-    doc.moveDown(0.5);
+    currentY += 15;
 
+    // Subtotal
     doc
       .fontSize(10)
       .fillColor('#000000')
       .font('Helvetica')
-      .text('SUBTOTAL:', rightAlign, doc.y, { width: 60 })
-      .text(`$${Number(cotizacion.subtotal).toFixed(2)}`, valueAlign, doc.y - 12, {
-        width: 40,
-      });
+      .text('SUBTOTAL:', rightAlign, currentY)
+      .text(`$${Number(cotizacion.subtotal).toFixed(2)}`, valueAlign, currentY);
 
+    currentY += 15;
+
+    // Descuento (si aplica)
     if (Number(cotizacion.descuento) > 0) {
       doc
-        .text('DESCUENTO:', rightAlign, doc.y, { width: 60 })
+        .text('DESCUENTO:', rightAlign, currentY)
         .fillColor('#DC2626')
-        .text(`-$${Number(cotizacion.descuento).toFixed(2)}`, valueAlign, doc.y - 12, {
-          width: 40,
-        })
+        .text(`-$${Number(cotizacion.descuento).toFixed(2)}`, valueAlign, currentY)
         .fillColor('#000000');
+      currentY += 15;
     }
 
-    doc.moveDown(0.5);
+    currentY += 5;
 
-    // Línea separadora
+    // Línea separadora para total
     doc
       .strokeColor('#2563EB')
       .lineWidth(2)
-      .moveTo(350, doc.y)
-      .lineTo(562, doc.y)
+      .moveTo(350, currentY)
+      .lineTo(562, currentY)
       .stroke();
 
-    doc.moveDown(0.3);
+    currentY += 10;
 
+    // Total
     doc
       .fontSize(14)
       .font('Helvetica-Bold')
       .fillColor('#2563EB')
-      .text('TOTAL:', rightAlign, doc.y, { width: 60 })
-      .text(`$${Number(cotizacion.total).toFixed(2)}`, valueAlign, doc.y - 16, {
-        width: 40,
-      });
+      .text('TOTAL:', rightAlign, currentY)
+      .text(`$${Number(cotizacion.total).toFixed(2)}`, valueAlign, currentY);
 
-    doc.moveDown(2);
+    doc.y = currentY + 30;
   }
 
   /**
