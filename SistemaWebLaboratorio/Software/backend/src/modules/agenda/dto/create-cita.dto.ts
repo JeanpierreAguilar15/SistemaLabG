@@ -1,5 +1,5 @@
 import { IsInt, IsString, IsOptional } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCitaDto {
   @ApiProperty({
@@ -9,21 +9,18 @@ export class CreateCitaDto {
   @IsInt()
   codigo_slot: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Observaciones del paciente',
     example: 'Tengo alergia a la penicilina',
-    required: false,
   })
   @IsOptional()
   @IsString()
   observaciones?: string;
 
   @ApiProperty({
-    description: 'Código de la cotización asociada (opcional)',
+    description: 'Código de la cotización asociada (requerido para agendar)',
     example: 1,
-    required: false,
   })
-  @IsOptional()
   @IsInt()
-  codigo_cotizacion?: number;
+  codigo_cotizacion: number;
 }

@@ -24,12 +24,6 @@ export class RolesGuard implements CanActivate {
       (role) => userRole === role.toUpperCase()
     );
 
-    console.log('RolesGuard Check:', {
-      userRole: user?.rol,
-      requiredRoles,
-      hasPermission
-    });
-
     return hasPermission;
   }
 }

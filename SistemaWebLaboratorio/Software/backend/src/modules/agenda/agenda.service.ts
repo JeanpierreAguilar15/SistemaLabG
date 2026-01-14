@@ -526,13 +526,7 @@ export class AgendaService {
       throw new BadRequestException('Ya tienes una cita agendada en este horario');
     }
 
-    // VALIDACIÓN DE COTIZACIÓN Y PAGO (OBLIGATORIO)
-    if (!data.codigo_cotizacion) {
-      throw new BadRequestException(
-        'Se requiere una cotización para agendar una cita. Por favor, cree una cotización primero y seleccione un método de pago.',
-      );
-    }
-
+    // VALIDACIÓN DE COTIZACIÓN Y PAGO
     const cotizacion = await this.prisma.cotizacion.findUnique({
       where: { codigo_cotizacion: data.codigo_cotizacion },
     });
@@ -980,9 +974,13 @@ export class AgendaService {
       );
     }
 
-    // Verificar que la cita sea futura
+    // Verificar que la cita sea futura (considerando fecha Y hora)
     const ahora = new Date();
-    if (cita.slot.fecha < ahora) {
+    const fechaCita = new Date(cita.slot.fecha);
+    const horaCita = new Date(cita.slot.hora_inicio);
+    fechaCita.setHours(horaCita.getHours(), horaCita.getMinutes(), 0, 0);
+
+    if (fechaCita < ahora) {
       throw new BadRequestException('No se puede confirmar una cita pasada');
     }
 
