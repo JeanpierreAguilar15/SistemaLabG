@@ -421,13 +421,6 @@ export default function ConfigurationPage() {
                 <div className="w-11 h-6 bg-lab-neutral-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-lab-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-lab-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lab-primary-600"></div>
               </label>
             </div>
-            <div className="flex items-center justify-between py-2 px-3 bg-lab-neutral-50 rounded-lg">
-              <span className="text-sm text-lab-neutral-700">Confirmaciones de Pago</span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked />
-                <div className="w-11 h-6 bg-lab-neutral-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-lab-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-lab-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lab-primary-600"></div>
-              </label>
-            </div>
           </div>
         </div>
 
@@ -525,49 +518,6 @@ export default function ConfigurationPage() {
           </div>
         </div>
 
-        {/* Payment Settings */}
-        <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
-          <div className="flex items-center space-x-4 mb-4">
-            <div className="w-12 h-12 bg-lab-success-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-lab-neutral-900">Configuración de Pagos</h2>
-              <p className="text-sm text-lab-neutral-600">Métodos de pago aceptados</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between py-2 px-3 bg-lab-neutral-50 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-lab-neutral-700">Efectivo</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked />
-                <div className="w-11 h-6 bg-lab-neutral-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-lab-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-lab-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lab-primary-600"></div>
-              </label>
-            </div>
-            <div className="flex items-center justify-between py-2 px-3 bg-lab-neutral-50 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-lab-neutral-700">Tarjeta de Crédito/Débito</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked />
-                <div className="w-11 h-6 bg-lab-neutral-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-lab-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-lab-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lab-primary-600"></div>
-              </label>
-            </div>
-            <div className="flex items-center justify-between py-2 px-3 bg-lab-neutral-50 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-lab-neutral-700">Transferencia Bancaria</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked />
-                <div className="w-11 h-6 bg-lab-neutral-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-lab-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-lab-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lab-primary-600"></div>
-              </label>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Statistics Dashboard */}
