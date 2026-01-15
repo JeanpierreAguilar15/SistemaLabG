@@ -306,23 +306,36 @@ export class AgendaService {
    * Obtener slots disponibles (Público)
    */
   async getAvailableSlots(filters: QuerySlotsDto) {
+    // Fecha mínima: hoy a medianoche
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
     const where: any = {
       activo: true,
       cupos_disponibles: { gt: 0 },
       fecha: {
-        gte: new Date(), // Solo futuros
+        gte: today, // Solo hoy o futuros (nunca pasados)
       },
     };
 
     if (filters.fecha) {
       const searchDate = new Date(filters.fecha);
+      searchDate.setUTCHours(0, 0, 0, 0);
       const nextDate = new Date(searchDate);
       nextDate.setDate(nextDate.getDate() + 1);
 
-      where.fecha = {
-        gte: searchDate,
-        lt: nextDate,
-      };
+      // Solo permitir búsqueda si la fecha no es pasada
+      if (searchDate >= today) {
+        where.fecha = {
+          gte: searchDate,
+          lt: nextDate,
+        };
+      } else {
+        // Si es fecha pasada, forzar que no retorne nada
+        where.fecha = {
+          gte: new Date('2099-01-01'), // Fecha imposible
+        };
+      }
     }
 
     if (filters.codigo_servicio) {
@@ -505,6 +518,16 @@ export class AgendaService {
 
     if (!slot) {
       throw new NotFoundException(`Slot con código ${data.codigo_slot} no encontrado`);
+    }
+
+    // VALIDACIÓN: No permitir agendar en fechas pasadas
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const slotDate = new Date(slot.fecha);
+    slotDate.setUTCHours(0, 0, 0, 0);
+
+    if (slotDate < today) {
+      throw new BadRequestException('No se puede agendar citas en fechas pasadas');
     }
 
     if (!slot.activo) {
