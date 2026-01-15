@@ -595,6 +595,38 @@ export class AgendaService {
       `Cita autorizada | Cotización: ${cotizacion.numero_cotizacion} | Estado: ${cotizacion.estado}`,
     );
 
+    // VALIDACIÓN DE STOCK DE INSUMOS
+    // Obtener los exámenes de la cotización y verificar disponibilidad de insumos
+    const detallesCotizacion = await this.prisma.detalleCotizacion.findMany({
+      where: { codigo_cotizacion: data.codigo_cotizacion },
+      select: { codigo_examen: true },
+    });
+
+    if (detallesCotizacion.length > 0) {
+      const codigosExamenes = detallesCotizacion.map(d => d.codigo_examen);
+      const verificacionStock = await this.inventarioService.verificarStockExamenes(codigosExamenes);
+
+      if (!verificacionStock.disponible) {
+        // Construir mensaje detallado de los insumos faltantes
+        const faltantesDetalle = verificacionStock.detalles
+          .filter(d => !d.disponible)
+          .map(d => {
+            const faltantes = d.faltantes.map(f => `${f.item} (necesita: ${f.requerido}, disponible: ${f.disponible})`).join(', ');
+            return faltantes;
+          })
+          .filter(f => f.length > 0)
+          .join('; ');
+
+        throw new BadRequestException(
+          `No hay suficiente stock de insumos para realizar los exámenes solicitados. ` +
+          `Insumos faltantes: ${faltantesDetalle || 'Verifique el inventario'}. ` +
+          `Por favor, contacte al laboratorio.`,
+        );
+      }
+
+      this.logger.log(`Stock verificado OK para cotización ${cotizacion.numero_cotizacion}`);
+    }
+
     // Crear cita en transacción para asegurar consistencia de cupos
     const cita = await this.prisma.$transaction(async (prisma) => {
       // Decrementar cupos
@@ -760,6 +792,69 @@ export class AgendaService {
     this.logger.log(`Cita ${codigo_cita} cancelada por paciente ${codigo_paciente}`);
 
     return updatedCita;
+  }
+
+  /**
+   * Cancelar cita (Admin) - Cancela la cita y restaura disponibilidad
+   * Solo para citas que no han sido completadas (no se descuenta inventario en esos estados)
+   */
+  async cancelarCitaAdmin(
+    codigo_cita: number,
+    motivo: string,
+    adminId: number,
+  ) {
+    const cita = await this.prisma.cita.findUnique({
+      where: { codigo_cita },
+      include: { slot: true, cotizacion: true },
+    });
+
+    if (!cita) {
+      throw new NotFoundException(`Cita no encontrada`);
+    }
+
+    if (cita.estado === 'CANCELADA') {
+      throw new BadRequestException('La cita ya está cancelada');
+    }
+
+    if (cita.estado === 'COMPLETADA') {
+      throw new BadRequestException(
+        'No se puede cancelar una cita completada. El inventario ya fue consumido.',
+      );
+    }
+
+    // Actualizar en transacción
+    const updatedCita = await this.prisma.$transaction(async (prisma) => {
+      // Incrementar cupos del slot
+      await prisma.slot.update({
+        where: { codigo_slot: cita.codigo_slot },
+        data: {
+          cupos_disponibles: { increment: 1 },
+        },
+      });
+
+      // Si la cotización estaba PAGADA, podría necesitar reembolso (marcar como nota)
+      const notaReembolso = cita.cotizacion?.estado === 'PAGADA'
+        ? ' [REQUIERE REEMBOLSO]'
+        : '';
+
+      // Actualizar cita
+      return prisma.cita.update({
+        where: { codigo_cita },
+        data: {
+          estado: 'CANCELADA',
+          observaciones: `${cita.observaciones || ''} | Cancelada por Admin: ${motivo}${notaReembolso}`.trim(),
+        },
+        include: { slot: true, cotizacion: true },
+      });
+    });
+
+    this.logger.log(`Cita ${codigo_cita} cancelada por Admin ${adminId}. Motivo: ${motivo}`);
+
+    return {
+      message: 'Cita cancelada exitosamente',
+      cita: updatedCita,
+      requiereReembolso: cita.cotizacion?.estado === 'PAGADA',
+    };
   }
 
   /**

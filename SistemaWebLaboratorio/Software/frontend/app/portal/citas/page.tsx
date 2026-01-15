@@ -103,6 +103,14 @@ export default function CitasPage() {
 
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
+  // Auto-dismiss message after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
+
   useEffect(() => {
     if (accessToken) {
       loadCitas()
@@ -417,15 +425,31 @@ export default function CitasPage() {
         </p>
       </div>
 
-      {/* Mensaje */}
+      {/* Toast Message - Fixed top right */}
       {message && (
         <div
-          className={`p-4 rounded-lg ${message.type === 'success'
+          className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm animate-in slide-in-from-top-2 fade-in duration-300 ${message.type === 'success'
             ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
             : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
             }`}
         >
-          {message.text}
+          <div className="flex items-center gap-2">
+            {message.type === 'success' ? (
+              <svg className="w-5 h-5 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            <span>{message.text}</span>
+            <button onClick={() => setMessage(null)} className="ml-2 hover:opacity-70">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
 

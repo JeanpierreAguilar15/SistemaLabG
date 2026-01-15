@@ -410,6 +410,12 @@ export class CotizacionesService {
             },
           },
         },
+        cita: {
+          select: {
+            codigo_cita: true,
+            estado: true,
+          },
+        },
       },
       orderBy: {
         fecha_cotizacion: 'desc',

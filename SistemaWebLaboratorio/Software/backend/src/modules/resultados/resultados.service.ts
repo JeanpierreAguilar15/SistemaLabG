@@ -849,6 +849,126 @@ export class ResultadosService {
   }
 
   /**
+   * Obtener todos los resultados AGRUPADOS por paciente/cita (Admin)
+   * Para una vista más organizada en el panel de administración
+   */
+  async getAllResultadosAgrupados(filters?: {
+    fecha_desde?: string;
+    fecha_hasta?: string;
+  }) {
+    const where: any = {};
+
+    if (filters?.fecha_desde || filters?.fecha_hasta) {
+      where.fecha_toma = {};
+
+      if (filters.fecha_desde) {
+        where.fecha_toma.gte = new Date(filters.fecha_desde);
+      }
+
+      if (filters.fecha_hasta) {
+        where.fecha_toma.lte = new Date(filters.fecha_hasta);
+      }
+    }
+
+    // Obtener muestras con sus resultados
+    const muestras = await this.prisma.muestra.findMany({
+      where: {
+        ...where,
+        resultados: {
+          some: {},
+        },
+      },
+      include: {
+        paciente: {
+          select: {
+            codigo_usuario: true,
+            nombres: true,
+            apellidos: true,
+            cedula: true,
+            email: true,
+          },
+        },
+        cita: {
+          include: {
+            slot: {
+              include: {
+                sede: {
+                  select: {
+                    nombre: true,
+                  },
+                },
+              },
+            },
+            cotizacion: {
+              select: {
+                numero_cotizacion: true,
+                estado: true,
+              },
+            },
+          },
+        },
+        resultados: {
+          include: {
+            examen: {
+              select: {
+                codigo_examen: true,
+                nombre: true,
+                codigo_interno: true,
+              },
+            },
+          },
+          orderBy: {
+            examen: {
+              nombre: 'asc',
+            },
+          },
+        },
+      },
+      orderBy: {
+        fecha_toma: 'desc',
+      },
+    });
+
+    // Formatear la respuesta agrupada
+    return muestras.map((muestra) => ({
+      codigo_muestra: muestra.codigo_muestra,
+      id_muestra: muestra.id_muestra,
+      fecha_toma: muestra.fecha_toma,
+      tipo_muestra: muestra.tipo_muestra,
+      estado_muestra: muestra.estado,
+      paciente: muestra.paciente,
+      cita: muestra.cita
+        ? {
+            codigo_cita: muestra.cita.codigo_cita,
+            fecha: muestra.cita.slot?.fecha,
+            hora_inicio: muestra.cita.slot?.hora_inicio,
+            sede: muestra.cita.slot?.sede?.nombre,
+            cotizacion: muestra.cita.cotizacion?.numero_cotizacion,
+            estado_pago: muestra.cita.cotizacion?.estado,
+          }
+        : null,
+      resultados: muestra.resultados.map((r) => ({
+        codigo_resultado: r.codigo_resultado,
+        examen: r.examen,
+        valor_numerico: r.valor_numerico,
+        valor_texto: r.valor_texto,
+        unidad_medida: r.unidad_medida,
+        nivel: r.nivel,
+        estado: r.estado,
+        fecha_resultado: r.fecha_resultado,
+        url_pdf: r.url_pdf,
+      })),
+      total_examenes: muestra.resultados.length,
+      examenes_listos: muestra.resultados.filter((r) =>
+        ['LISTO', 'VALIDADO', 'ENTREGADO'].includes(r.estado),
+      ).length,
+      examenes_pendientes: muestra.resultados.filter(
+        (r) => r.estado === 'EN_PROCESO',
+      ).length,
+    }));
+  }
+
+  /**
    * Obtener estadísticas de resultados (Admin)
    */
   async getEstadisticas(filters?: {

@@ -171,6 +171,26 @@ export class ResultadosController {
     return this.resultadosService.getAllResultados(filters);
   }
 
+  @Get('admin/agrupados')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'PERSONAL_LAB')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Obtener resultados AGRUPADOS por paciente/cita (Admin)',
+    description: 'Vista organizada donde cada muestra agrupa todos sus exámenes',
+  })
+  @ApiResponse({ status: 200, description: 'Lista de muestras con resultados agrupados' })
+  async getAllResultadosAgrupados(
+    @Query('fecha_desde') fecha_desde?: string,
+    @Query('fecha_hasta') fecha_hasta?: string,
+  ) {
+    const filters: any = {};
+    if (fecha_desde) filters.fecha_desde = fecha_desde;
+    if (fecha_hasta) filters.fecha_hasta = fecha_hasta;
+
+    return this.resultadosService.getAllResultadosAgrupados(filters);
+  }
+
   @Put('admin/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'PERSONAL_LAB')

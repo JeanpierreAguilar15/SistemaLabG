@@ -7,36 +7,53 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate } from '@/lib/utils'
 
-interface Resultado {
-  codigo_resultado: number
-  codigo_muestra: number
+interface Examen {
   codigo_examen: number
+  nombre: string
+  codigo_interno: string
+}
+
+interface ResultadoAgrupado {
+  codigo_resultado: number
+  examen: Examen
   valor_numerico: number | null
   valor_texto: string | null
   unidad_medida: string | null
   nivel: string | null
-  observaciones_tecnicas: string | null
   estado: string
   fecha_resultado: string
   url_pdf: string | null
-  muestra: {
-    id_muestra: string
-    codigo_paciente: number
-    paciente: {
-      nombres: string
-      apellidos: string
-      email: string
-      cedula: string
-    }
-  }
-  examen: {
-    codigo_examen: number
-    nombre: string
-    codigo_interno: string
-  }
-  valor_referencia_min: number | null
-  valor_referencia_max: number | null
-  valores_referencia_texto: string | null
+}
+
+interface Paciente {
+  codigo_usuario: number
+  nombres: string
+  apellidos: string
+  cedula: string
+  email: string
+}
+
+interface Cita {
+  codigo_cita: number
+  fecha: string
+  hora_inicio: string
+  sede: string | null
+  cotizacion: string | null
+  estado_pago: string | null
+}
+
+interface MuestraAgrupada {
+  codigo_muestra: number
+  id_muestra: string
+  fecha_toma: string
+  tipo_muestra: string
+  estado_muestra: string
+  paciente: Paciente
+  cita: Cita | null
+  resultados: ResultadoAgrupado[]
+  total_examenes: number
+  examenes_listos: number
+  examenes_pendientes: number
 }
 
 interface Message {
@@ -46,11 +63,10 @@ interface Message {
 
 export default function ResultadosAdminPage() {
   const { accessToken } = useAuthStore()
-  const [resultados, setResultados] = useState<Resultado[]>([])
+  const [muestras, setMuestras] = useState<MuestraAgrupada[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showDetailModal, setShowDetailModal] = useState(false)
-  const [selectedResultado, setSelectedResultado] = useState<Resultado | null>(null)
+  const [expandedMuestras, setExpandedMuestras] = useState<Set<number>>(new Set())
   const [message, setMessage] = useState<Message | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [uploadResultadoId, setUploadResultadoId] = useState<number | null>(null)
@@ -75,14 +91,13 @@ export default function ResultadosAdminPage() {
   const loadResultados = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/admin/all`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/admin/agrupados`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
 
       if (response.ok) {
         const result = await response.json()
-        const resultados = result.data || result
-        setResultados(resultados)
+        setMuestras(result)
       }
     } catch (error) {
       console.error('Error loading resultados:', error)
@@ -90,6 +105,16 @@ export default function ResultadosAdminPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const toggleExpand = (codigoMuestra: number) => {
+    const newExpanded = new Set(expandedMuestras)
+    if (newExpanded.has(codigoMuestra)) {
+      newExpanded.delete(codigoMuestra)
+    } else {
+      newExpanded.add(codigoMuestra)
+    }
+    setExpandedMuestras(newExpanded)
   }
 
   const handleDownloadPDF = async (codigo_resultado: number) => {
@@ -114,7 +139,7 @@ export default function ResultadosAdminPage() {
         setMessage({ type: 'error', text: 'Error al descargar PDF' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexion al servidor' })
     }
   }
 
@@ -149,7 +174,7 @@ export default function ResultadosAdminPage() {
         setMessage({ type: 'error', text: 'Error al cargar vista previa del PDF' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexion al servidor' })
     }
   }
 
@@ -164,17 +189,15 @@ export default function ResultadosAdminPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      // Validar que sea PDF
       if (file.type !== 'application/pdf') {
-        setMessage({ type: 'error', text: '❌ Solo se permiten archivos PDF' })
+        setMessage({ type: 'error', text: 'Solo se permiten archivos PDF' })
         e.target.value = ''
         return
       }
 
-      // Validar tamaño (10MB máximo)
-      const maxSize = 10 * 1024 * 1024 // 10MB
+      const maxSize = 10 * 1024 * 1024
       if (file.size > maxSize) {
-        setMessage({ type: 'error', text: '❌ El archivo no debe superar los 10MB' })
+        setMessage({ type: 'error', text: 'El archivo no debe superar los 10MB' })
         e.target.value = ''
         return
       }
@@ -185,7 +208,7 @@ export default function ResultadosAdminPage() {
 
   const handleUploadPDF = async () => {
     if (!selectedFile || !uploadResultadoId) {
-      setMessage({ type: 'error', text: '❌ Debe seleccionar un archivo PDF' })
+      setMessage({ type: 'error', text: 'Debe seleccionar un archivo PDF' })
       return
     }
 
@@ -216,21 +239,18 @@ export default function ResultadosAdminPage() {
         setMessage({ type: 'error', text: error.message || 'Error al subir PDF' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Error de conexión al servidor' })
+      setMessage({ type: 'error', text: 'Error de conexion al servidor' })
     }
   }
 
-  const handleViewDetails = (resultado: Resultado) => {
-    setSelectedResultado(resultado)
-    setShowDetailModal(true)
-  }
-
-  const filteredResultados = resultados.filter((resultado) => {
+  const filteredMuestras = muestras.filter((muestra) => {
     const matchSearch =
       searchTerm === '' ||
-      resultado.muestra?.paciente?.nombres.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      resultado.muestra?.paciente?.apellidos.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      resultado.examen?.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+      muestra.paciente?.nombres.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      muestra.paciente?.apellidos.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      muestra.paciente?.cedula.includes(searchTerm) ||
+      muestra.id_muestra.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      muestra.resultados.some((r) => r.examen?.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
 
     return matchSearch
   })
@@ -265,6 +285,17 @@ export default function ResultadosAdminPage() {
     }
   }
 
+  const getEstadoPagoBadge = (estado: string | null) => {
+    switch (estado) {
+      case 'PAGADA':
+        return 'bg-lab-success-100 text-lab-success-800'
+      case 'PENDIENTE_PAGO_VENTANILLA':
+        return 'bg-lab-warning-100 text-lab-warning-800'
+      default:
+        return 'bg-lab-neutral-100 text-lab-neutral-600'
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -278,27 +309,44 @@ export default function ResultadosAdminPage() {
       {/* Messages */}
       {message && (
         <div
-          className={`p-4 rounded-lg ${message.type === 'success'
+          className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm animate-in slide-in-from-top-2 fade-in duration-300 ${
+            message.type === 'success'
               ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
               : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
-            }`}
+          }`}
         >
-          {message.text}
+          <div className="flex items-center gap-2">
+            {message.type === 'success' ? (
+              <svg className="w-5 h-5 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            <span className="flex-1">{message.text}</span>
+            <button onClick={() => setMessage(null)} className="text-current opacity-70 hover:opacity-100">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
 
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-lab-neutral-900">Gestión de Resultados</h1>
+        <h1 className="text-3xl font-bold text-lab-neutral-900">Gestion de Resultados</h1>
         <p className="text-lab-neutral-600 mt-2">
-          Aquí aparecen los pacientes con citas y toma de muestra completadas. Sube los PDFs de resultados procesados externamente.
+          Resultados organizados por paciente y cita. Cada fila agrupa todos los examenes de una misma muestra.
         </p>
         <div className="mt-3 bg-lab-info-50 border border-lab-info-200 rounded-lg p-3">
           <p className="text-sm text-lab-info-800">
             <svg className="w-4 h-4 inline mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            Sube PDFs de resultados ya procesados, descarga los existentes o visualízalos directamente en el navegador.
+            Haz clic en una fila para ver y gestionar los examenes individuales de cada paciente.
           </p>
         </div>
       </div>
@@ -307,7 +355,7 @@ export default function ResultadosAdminPage() {
       <Card>
         <CardContent className="pt-6">
           <Input
-            placeholder="Buscar por paciente o examen..."
+            placeholder="Buscar por paciente, cedula, ID muestra o examen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="max-w-md"
@@ -315,251 +363,229 @@ export default function ResultadosAdminPage() {
         </CardContent>
       </Card>
 
-
-      {/* Detail Modal */}
-      {showDetailModal && selectedResultado && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-lab-neutral-200 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-lab-neutral-900">Detalles del Resultado</h2>
-              <button
-                onClick={() => setShowDetailModal(false)}
-                className="text-lab-neutral-400 hover:text-lab-neutral-600"
-              >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Paciente Info */}
-              <div>
-                <h3 className="text-lg font-semibold text-lab-neutral-900 mb-3">Información del Paciente</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-lab-neutral-500">Nombre:</span>
-                    <p className="font-medium">{selectedResultado.muestra?.paciente?.nombres} {selectedResultado.muestra?.paciente?.apellidos}</p>
-                  </div>
-                  <div>
-                    <span className="text-lab-neutral-500">Cédula:</span>
-                    <p className="font-medium font-mono">{selectedResultado.muestra?.paciente?.cedula}</p>
-                  </div>
-                  <div>
-                    <span className="text-lab-neutral-500">Email:</span>
-                    <p className="font-medium">{selectedResultado.muestra?.paciente?.email}</p>
-                  </div>
-                  <div>
-                    <span className="text-lab-neutral-500">ID Muestra:</span>
-                    <p className="font-medium font-mono">{selectedResultado.muestra?.id_muestra}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Exam Info */}
-              <div>
-                <h3 className="text-lg font-semibold text-lab-neutral-900 mb-3">Información del Examen</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-lab-neutral-500">Examen:</span>
-                    <p className="font-medium">{selectedResultado.examen?.nombre}</p>
-                  </div>
-                  <div>
-                    <span className="text-lab-neutral-500">Código Interno:</span>
-                    <p className="font-medium font-mono">{selectedResultado.examen?.codigo_interno}</p>
-                  </div>
-                  <div>
-                    <span className="text-lab-neutral-500">Fecha:</span>
-                    <p className="font-medium">{formatDate(new Date(selectedResultado.fecha_resultado))}</p>
-                  </div>
-                  <div>
-                    <span className="text-lab-neutral-500">Estado:</span>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getEstadoBadge(selectedResultado.estado)}`}>
-                      {selectedResultado.estado}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Result Values */}
-              <div>
-                <h3 className="text-lg font-semibold text-lab-neutral-900 mb-3">Valores del Resultado</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  {selectedResultado.valor_numerico && (
-                    <div>
-                      <span className="text-lab-neutral-500">Valor Numérico:</span>
-                      <p className="text-2xl font-bold text-lab-primary-600">
-                        {selectedResultado.valor_numerico} {selectedResultado.unidad_medida}
-                      </p>
-                    </div>
-                  )}
-                  {selectedResultado.valor_texto && (
-                    <div>
-                      <span className="text-lab-neutral-500">Valor:</span>
-                      <p className="text-lg font-semibold">{selectedResultado.valor_texto}</p>
-                    </div>
-                  )}
-                  <div>
-                    <span className="text-lab-neutral-500">Nivel:</span>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getNivelBadge(selectedResultado.nivel)}`}>
-                      {selectedResultado.nivel}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Reference Values */}
-              {(selectedResultado.valor_referencia_min || selectedResultado.valor_referencia_max || selectedResultado.valores_referencia_texto) && (
-                <div>
-                  <h3 className="text-lg font-semibold text-lab-neutral-900 mb-3">Valores de Referencia</h3>
-                  <div className="bg-lab-neutral-50 rounded-lg p-4 space-y-2 text-sm">
-                    {selectedResultado.valor_referencia_min && selectedResultado.valor_referencia_max && (
-                      <p>
-                        <span className="text-lab-neutral-600">Rango: </span>
-                        <span className="font-medium">
-                          {selectedResultado.valor_referencia_min} - {selectedResultado.valor_referencia_max} {selectedResultado.unidad_medida}
-                        </span>
-                      </p>
-                    )}
-                    {selectedResultado.valores_referencia_texto && (
-                      <p>
-                        <span className="text-lab-neutral-600">Referencia: </span>
-                        <span className="font-medium">{selectedResultado.valores_referencia_texto}</span>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Technical Observations */}
-              {selectedResultado.observaciones_tecnicas && (
-                <div>
-                  <h3 className="text-lg font-semibold text-lab-neutral-900 mb-3">Observaciones Técnicas</h3>
-                  <p className="text-sm text-lab-neutral-700 bg-lab-warning-50 border border-lab-warning-200 rounded-lg p-4">
-                    {selectedResultado.observaciones_tecnicas}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 border-t border-lab-neutral-200 flex justify-end">
-              <Button onClick={() => setShowDetailModal(false)} variant="outline">
-                Cerrar
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Resultados Table */}
+      {/* Grouped Results */}
       <Card>
         <CardHeader>
-          <CardTitle>Resultados ({filteredResultados.length})</CardTitle>
-          <CardDescription>Lista de resultados de laboratorio</CardDescription>
+          <CardTitle>Resultados por Paciente ({filteredMuestras.length} muestras)</CardTitle>
+          <CardDescription>Lista de muestras con sus examenes agrupados</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-lab-neutral-200">
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Fecha</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Paciente</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Examen</th>
-                  <th className="text-left p-4 font-semibold text-lab-neutral-900">Estado</th>
-                  <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredResultados.map((resultado) => (
-                  <tr
-                    key={resultado.codigo_resultado}
-                    className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50"
-                  >
-                    <td className="p-4 text-sm text-lab-neutral-700">
-                      {formatDate(new Date(resultado.fecha_resultado))}
-                    </td>
-                    <td className="p-4">
-                      <div className="font-medium text-lab-neutral-900">
-                        {resultado.muestra?.paciente?.nombres} {resultado.muestra?.paciente?.apellidos}
+          <div className="space-y-4">
+            {filteredMuestras.map((muestra) => (
+              <div
+                key={muestra.codigo_muestra}
+                className="border border-lab-neutral-200 rounded-lg overflow-hidden"
+              >
+                {/* Header row - clickable */}
+                <div
+                  onClick={() => toggleExpand(muestra.codigo_muestra)}
+                  className="bg-lab-neutral-50 p-4 cursor-pointer hover:bg-lab-neutral-100 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      {/* Expand icon */}
+                      <svg
+                        className={`w-5 h-5 text-lab-neutral-500 transition-transform ${
+                          expandedMuestras.has(muestra.codigo_muestra) ? 'rotate-90' : ''
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+
+                      {/* Patient info */}
+                      <div>
+                        <div className="font-semibold text-lab-neutral-900">
+                          {muestra.paciente?.nombres} {muestra.paciente?.apellidos}
+                        </div>
+                        <div className="text-sm text-lab-neutral-600 flex items-center gap-3">
+                          <span className="font-mono">{muestra.paciente?.cedula}</span>
+                          <span>|</span>
+                          <span>Muestra: {muestra.id_muestra}</span>
+                        </div>
                       </div>
-                      <div className="text-sm text-lab-neutral-600">{resultado.muestra?.paciente?.email}</div>
-                    </td>
-                    <td className="p-4">
-                      <div className="font-medium text-lab-neutral-900">{resultado.examen?.nombre}</div>
-                      <div className="text-sm text-lab-neutral-600">{resultado.examen?.codigo_interno}</div>
-                    </td>
-                    <td className="p-4">
-                      <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(resultado.estado)}`}>
-                        {resultado.estado}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-end gap-2">
-                        {/* Sin PDF: Mostrar botón de subir */}
-                        {!resultado.url_pdf && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleOpenUploadModal(resultado.codigo_resultado)}
-                            className="text-lab-primary-600 hover:text-lab-primary-700 hover:bg-lab-primary-50"
-                            title="Subir PDF de resultado"
+                    </div>
+
+                    <div className="flex items-center gap-6">
+                      {/* Date */}
+                      <div className="text-right">
+                        <div className="text-sm text-lab-neutral-500">Fecha toma</div>
+                        <div className="font-medium">
+                          {formatDate(new Date(muestra.fecha_toma))}
+                        </div>
+                      </div>
+
+                      {/* Exam counts */}
+                      <div className="text-right">
+                        <div className="text-sm text-lab-neutral-500">Examenes</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lab-success-600 font-medium">
+                            {muestra.examenes_listos} listos
+                          </span>
+                          {muestra.examenes_pendientes > 0 && (
+                            <>
+                              <span className="text-lab-neutral-400">/</span>
+                              <span className="text-lab-warning-600 font-medium">
+                                {muestra.examenes_pendientes} pendientes
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Payment status */}
+                      {muestra.cita && (
+                        <div className="text-right">
+                          <div className="text-sm text-lab-neutral-500">Pago</div>
+                          <span className={`text-xs px-2 py-1 rounded ${getEstadoPagoBadge(muestra.cita.estado_pago)}`}>
+                            {muestra.cita.estado_pago === 'PAGADA' ? 'Pagado' : 'Pendiente'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded content - individual exams */}
+                {expandedMuestras.has(muestra.codigo_muestra) && (
+                  <div className="border-t border-lab-neutral-200 bg-white">
+                    {/* Cita info */}
+                    {muestra.cita && (
+                      <div className="px-4 py-3 bg-lab-primary-50 border-b border-lab-primary-100 text-sm">
+                        <div className="flex items-center gap-4 text-lab-primary-800">
+                          <span>Cita #{muestra.cita.codigo_cita}</span>
+                          <span>|</span>
+                          <span>Sede: {muestra.cita.sede || 'N/A'}</span>
+                          {muestra.cita.cotizacion && (
+                            <>
+                              <span>|</span>
+                              <span>Cotizacion: {muestra.cita.cotizacion}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Exams table */}
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-lab-neutral-200 bg-lab-neutral-50">
+                          <th className="text-left p-3 text-sm font-semibold text-lab-neutral-700">Examen</th>
+                          <th className="text-left p-3 text-sm font-semibold text-lab-neutral-700">Codigo</th>
+                          <th className="text-left p-3 text-sm font-semibold text-lab-neutral-700">Nivel</th>
+                          <th className="text-left p-3 text-sm font-semibold text-lab-neutral-700">Estado</th>
+                          <th className="text-right p-3 text-sm font-semibold text-lab-neutral-700">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {muestra.resultados.map((resultado) => (
+                          <tr
+                            key={resultado.codigo_resultado}
+                            className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50"
                           >
-                            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                            Subir
-                          </Button>
-                        )}
+                            <td className="p-3">
+                              <div className="font-medium text-lab-neutral-900">
+                                {resultado.examen?.nombre}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-mono text-sm text-lab-neutral-600">
+                                {resultado.examen?.codigo_interno}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {resultado.nivel && (
+                                <span className={`text-xs px-2 py-1 rounded ${getNivelBadge(resultado.nivel)}`}>
+                                  {resultado.nivel}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(resultado.estado)}`}>
+                                {resultado.estado}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center justify-end gap-2">
+                                {!resultado.url_pdf && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleOpenUploadModal(resultado.codigo_resultado)
+                                    }}
+                                    className="text-lab-primary-600 hover:text-lab-primary-700 hover:bg-lab-primary-50"
+                                    title="Subir PDF de resultado"
+                                  >
+                                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    Subir
+                                  </Button>
+                                )}
 
-                        {/* Con PDF: Mostrar botones de vista previa, descarga y editar */}
-                        {resultado.url_pdf && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handlePreviewPDF(resultado.codigo_resultado)}
-                              className="text-lab-info-600 hover:text-lab-info-700 hover:bg-lab-info-50"
-                              title="Vista previa del PDF"
-                            >
-                              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              Ver
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDownloadPDF(resultado.codigo_resultado)}
-                              className="text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50"
-                              title="Descargar PDF"
-                            >
-                              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                              </svg>
-                              Descargar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleOpenUploadModal(resultado.codigo_resultado, true)}
-                              className="text-lab-warning-600 hover:text-lab-warning-700 hover:bg-lab-warning-50"
-                              title="Reemplazar PDF"
-                            >
-                              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                              Editar
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                                {resultado.url_pdf && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handlePreviewPDF(resultado.codigo_resultado)
+                                      }}
+                                      className="text-lab-info-600 hover:text-lab-info-700 hover:bg-lab-info-50"
+                                      title="Vista previa del PDF"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                      </svg>
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDownloadPDF(resultado.codigo_resultado)
+                                      }}
+                                      className="text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50"
+                                      title="Descargar PDF"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                                      </svg>
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleOpenUploadModal(resultado.codigo_resultado, true)
+                                      }}
+                                      className="text-lab-warning-600 hover:text-lab-warning-700 hover:bg-lab-warning-50"
+                                      title="Reemplazar PDF"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                      </svg>
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
 
-            {filteredResultados.length === 0 && (
+            {filteredMuestras.length === 0 && (
               <div className="text-center py-12 text-lab-neutral-500">
                 No se encontraron resultados
               </div>
@@ -578,8 +604,8 @@ export default function ResultadosAdminPage() {
               </h2>
               <p className="text-sm text-lab-neutral-600 mt-2">
                 {isEditingPdf
-                  ? 'Selecciona un nuevo archivo PDF para reemplazar el actual. El PDF anterior será eliminado.'
-                  : 'Sube un archivo PDF procesado externamente. Esto validará automáticamente el resultado.'}
+                  ? 'Selecciona un nuevo archivo PDF para reemplazar el actual. El PDF anterior sera eliminado.'
+                  : 'Sube un archivo PDF procesado externamente. Esto validara automaticamente el resultado.'}
               </p>
             </div>
 
@@ -603,7 +629,7 @@ export default function ResultadosAdminPage() {
                       cursor-pointer"
                   />
                   <p className="text-xs text-lab-neutral-500 mt-1">
-                    Tamaño máximo: 10MB. Solo archivos PDF
+                    Tamano maximo: 10MB. Solo archivos PDF
                   </p>
                 </div>
 

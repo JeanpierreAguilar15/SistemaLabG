@@ -273,6 +273,22 @@ export class AgendaController {
     return this.agendaService.confirmarCita(id, adminId);
   }
 
+  @Put('admin/citas/:id/cancel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancelar cita (Admin)' })
+  @ApiResponse({ status: 200, description: 'Cita cancelada' })
+  @ApiResponse({ status: 404, description: 'Cita no encontrada' })
+  @ApiResponse({ status: 400, description: 'No se puede cancelar cita completada' })
+  async cancelarCitaAdmin(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { motivo: string },
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
+    return this.agendaService.cancelarCitaAdmin(id, body.motivo, adminId);
+  }
+
   @Put('admin/citas/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')

@@ -35,6 +35,11 @@ interface Cotizacion {
     email: string
   }
   detalles?: DetalleCotizacion[]
+  cita?: {
+    codigo_cita: number
+    estado: string
+    fecha: string
+  }
 }
 
 export default function CotizacionesAdminPage() {
@@ -48,6 +53,9 @@ export default function CotizacionesAdminPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [confirmingPayment, setConfirmingPayment] = useState(false)
   const [paymentObservaciones, setPaymentObservaciones] = useState('')
+  const [cancellingCita, setCancellingCita] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelMotivo, setCancelMotivo] = useState('')
 
   useEffect(() => {
     loadCotizaciones()
@@ -133,6 +141,44 @@ export default function CotizacionesAdminPage() {
     setSelectedCotizacion(cotizacion)
     setShowDetailModal(true)
     setPaymentObservaciones('')
+  }
+
+  const handleCancelarCita = async () => {
+    if (!selectedCotizacion?.cita || !cancelMotivo.trim()) return
+
+    setCancellingCita(true)
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/agenda/admin/citas/${selectedCotizacion.cita.codigo_cita}/cancel`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ motivo: cancelMotivo }),
+        }
+      )
+
+      if (response.ok) {
+        const result = await response.json()
+        const msg = result.requiereReembolso
+          ? 'Cita cancelada. El paciente ya había pagado, se requiere reembolso.'
+          : 'Cita cancelada exitosamente.'
+        setMessage({ type: 'success', text: msg })
+        loadCotizaciones()
+        setShowDetailModal(false)
+        setShowCancelModal(false)
+        setCancelMotivo('')
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al cancelar cita' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión al cancelar cita' })
+    } finally {
+      setCancellingCita(false)
+    }
   }
 
   const filteredCotizaciones = cotizaciones.filter((cotizacion) => {
@@ -292,9 +338,24 @@ export default function CotizacionesAdminPage() {
                         Ver
                       </Button>
                       {cotizacion.estado === 'PENDIENTE_PAGO_VENTANILLA' && (
-                        <Button size="sm" onClick={() => handleViewDetails(cotizacion)}>
-                          Confirmar Pago
-                        </Button>
+                        <>
+                          <Button size="sm" onClick={() => handleViewDetails(cotizacion)}>
+                            Confirmar Pago
+                          </Button>
+                          {cotizacion.cita && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-lab-danger-600 hover:bg-lab-danger-50"
+                              onClick={() => {
+                                setSelectedCotizacion(cotizacion)
+                                setShowCancelModal(true)
+                              }}
+                            >
+                              Cancelar
+                            </Button>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>
@@ -439,6 +500,52 @@ export default function CotizacionesAdminPage() {
                   </Button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Cita Modal */}
+      {showCancelModal && selectedCotizacion?.cita && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-lab-neutral-900 mb-4">Cancelar Cita</h3>
+            <p className="text-sm text-lab-neutral-600 mb-4">
+              ¿Está seguro de cancelar la cita asociada a la cotización <strong>{selectedCotizacion.numero_cotizacion}</strong>?
+            </p>
+            {selectedCotizacion.estado === 'PAGADA' && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+                <p className="text-sm text-amber-700">
+                  <strong>Nota:</strong> Esta cotización ya fue pagada. Se requerirá reembolso al paciente.
+                </p>
+              </div>
+            )}
+            <div className="space-y-2 mb-4">
+              <Label>Motivo de cancelación *</Label>
+              <textarea
+                value={cancelMotivo}
+                onChange={(e) => setCancelMotivo(e.target.value)}
+                className="w-full h-20 px-3 py-2 text-sm rounded-lg border border-lab-neutral-300 focus:outline-none focus:ring-2 focus:ring-lab-primary-500 resize-none"
+                placeholder="Ej: Paciente no se presentó, no realizó el pago..."
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCancelModal(false)
+                  setCancelMotivo('')
+                }}
+              >
+                Volver
+              </Button>
+              <Button
+                onClick={handleCancelarCita}
+                disabled={cancellingCita || !cancelMotivo.trim()}
+                className="bg-lab-danger-600 hover:bg-lab-danger-700"
+              >
+                {cancellingCita ? 'Cancelando...' : 'Cancelar Cita'}
+              </Button>
             </div>
           </div>
         </div>
