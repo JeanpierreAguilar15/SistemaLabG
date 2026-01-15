@@ -285,60 +285,178 @@ IMPORTANTE EN EL RESUMEN:
    * Parsea la respuesta JSON de Gemini
    */
   private parseGeminiResponse(responseText: string): Partial<LabResultInterpretation> {
-    try {
-      let cleanText = responseText.trim();
+    let cleanText = responseText.trim();
 
-      // Remover bloques de código markdown si existen
-      if (cleanText.includes('```json')) {
-        const match = cleanText.match(/```json\s*([\s\S]*?)\s*```/);
-        if (match) {
-          cleanText = match[1];
-        }
-      } else if (cleanText.includes('```')) {
-        const match = cleanText.match(/```\s*([\s\S]*?)\s*```/);
-        if (match) {
-          cleanText = match[1];
-        }
+    // Remover bloques de código markdown si existen
+    if (cleanText.includes('```json')) {
+      const match = cleanText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (match) {
+        cleanText = match[1];
       }
-
-      // Intentar encontrar el objeto JSON completo si hay texto extra
-      const jsonStart = cleanText.indexOf('{');
-      const jsonEnd = cleanText.lastIndexOf('}');
-      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-        cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
+    } else if (cleanText.includes('```')) {
+      const match = cleanText.match(/```\s*([\s\S]*?)\s*```/);
+      if (match) {
+        cleanText = match[1];
       }
+    }
 
-      // Limpiar caracteres problemáticos que a veces agrega Gemini
-      cleanText = cleanText
+    // Intentar encontrar el objeto JSON completo si hay texto extra
+    const jsonStart = cleanText.indexOf('{');
+    const jsonEnd = cleanText.lastIndexOf('}');
+    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+      cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
+    }
+
+    // Intentar parsear con diferentes niveles de limpieza
+    const cleaningStrategies = [
+      // Estrategia 1: Limpieza básica
+      (text: string) => text
         .replace(/[\x00-\x1F\x7F]/g, ' ') // Caracteres de control
         .replace(/,\s*}/g, '}') // Comas trailing antes de }
-        .replace(/,\s*]/g, ']'); // Comas trailing antes de ]
+        .replace(/,\s*]/g, ']'), // Comas trailing antes de ]
 
-      const parsed = JSON.parse(cleanText);
+      // Estrategia 2: Corregir comas faltantes entre elementos de array
+      (text: string) => text
+        .replace(/[\x00-\x1F\x7F]/g, ' ')
+        .replace(/,\s*}/g, '}')
+        .replace(/,\s*]/g, ']')
+        .replace(/}\s*{/g, '},{') // Objetos sin coma entre ellos
+        .replace(/"\s*{/g, '",{') // String seguido de objeto sin coma
+        .replace(/}\s*"/g, '},"'), // Objeto seguido de string sin coma
 
-      return {
-        paciente: parsed.paciente || undefined,
-        fecha_examen: parsed.fecha_examen || undefined,
-        laboratorio: parsed.laboratorio || undefined,
-        resultados: Array.isArray(parsed.resultados) ? parsed.resultados : [],
-        resumen_general: parsed.resumen_general || '',
-        recomendaciones: Array.isArray(parsed.recomendaciones) ? parsed.recomendaciones : [],
-        advertencias: Array.isArray(parsed.advertencias) ? parsed.advertencias : [],
-      };
-    } catch (error) {
-      this.logger.warn(`Error parseando respuesta JSON: ${error.message}`);
+      // Estrategia 3: Normalizar espacios y saltos de línea dentro de strings
+      (text: string) => {
+        // Reemplazar newlines dentro de strings JSON por espacios
+        let result = '';
+        let inString = false;
+        let escape = false;
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          if (escape) {
+            result += char;
+            escape = false;
+            continue;
+          }
+          if (char === '\\') {
+            result += char;
+            escape = true;
+            continue;
+          }
+          if (char === '"') {
+            inString = !inString;
+            result += char;
+            continue;
+          }
+          if (inString && (char === '\n' || char === '\r')) {
+            result += ' '; // Reemplazar newline por espacio
+            continue;
+          }
+          result += char;
+        }
+        return result
+          .replace(/[\x00-\x1F\x7F]/g, ' ')
+          .replace(/,\s*}/g, '}')
+          .replace(/,\s*]/g, ']')
+          .replace(/}\s*{/g, '},{');
+      },
 
-      // Intentar extraer información básica del texto si el JSON falla
-      const resumenMatch = responseText.match(/resumen[_\s]?general["']?\s*:\s*["']([^"']+)["']/i);
-      const resumen = resumenMatch ? resumenMatch[1] : 'No se pudo procesar la respuesta de manera estructurada. Por favor, intenta de nuevo.';
+      // Estrategia 4: Limpieza agresiva - quitar caracteres no ASCII problemáticos
+      (text: string) => text
+        .replace(/[\x00-\x1F\x7F]/g, ' ')
+        .replace(/[""]/g, '"') // Comillas tipográficas
+        .replace(/['']/g, "'") // Apóstrofes tipográficos
+        .replace(/…/g, '...') // Elipsis
+        .replace(/–/g, '-') // Guión largo
+        .replace(/—/g, '-') // Guión más largo
+        .replace(/,\s*}/g, '}')
+        .replace(/,\s*]/g, ']')
+        .replace(/}\s*{/g, '},{')
+        .replace(/\n/g, ' ')
+        .replace(/\r/g, ' ')
+        .replace(/\t/g, ' ')
+        .replace(/\s+/g, ' '),
+    ];
 
-      return {
-        resultados: [],
-        resumen_general: resumen,
-        recomendaciones: ['Consulta con tu medico para una interpretacion profesional de tus resultados.'],
-        advertencias: [],
-      };
+    for (let i = 0; i < cleaningStrategies.length; i++) {
+      try {
+        const cleaned = cleaningStrategies[i](cleanText);
+        const parsed = JSON.parse(cleaned);
+
+        if (i > 0) {
+          this.logger.log(`JSON parseado exitosamente con estrategia ${i + 1}`);
+        }
+
+        return {
+          paciente: parsed.paciente || undefined,
+          fecha_examen: parsed.fecha_examen || undefined,
+          laboratorio: parsed.laboratorio || undefined,
+          resultados: Array.isArray(parsed.resultados) ? parsed.resultados : [],
+          resumen_general: parsed.resumen_general || '',
+          recomendaciones: Array.isArray(parsed.recomendaciones) ? parsed.recomendaciones : [],
+          advertencias: Array.isArray(parsed.advertencias) ? parsed.advertencias : [],
+        };
+      } catch (error) {
+        if (i === cleaningStrategies.length - 1) {
+          this.logger.warn(`Error parseando respuesta JSON después de ${i + 1} estrategias: ${error.message}`);
+        }
+      }
     }
+
+    // Si todo falla, intentar extraer información con regex
+    this.logger.warn('Todas las estrategias de parsing fallaron, extrayendo con regex');
+
+    // Intentar extraer información básica del texto
+    const resumenMatch = responseText.match(/resumen[_\s]?general["']?\s*:\s*["']([^"']+)["']/i);
+    const resumen = resumenMatch ? resumenMatch[1] : '';
+
+    // Intentar extraer recomendaciones
+    const recomendaciones: string[] = [];
+    const recomMatch = responseText.match(/recomendaciones["']?\s*:\s*\[([\s\S]*?)\]/i);
+    if (recomMatch) {
+      const recomStr = recomMatch[1];
+      const items = recomStr.match(/"([^"]+)"/g);
+      if (items) {
+        items.forEach(item => recomendaciones.push(item.replace(/"/g, '')));
+      }
+    }
+
+    // Intentar extraer advertencias
+    const advertencias: string[] = [];
+    const advMatch = responseText.match(/advertencias["']?\s*:\s*\[([\s\S]*?)\]/i);
+    if (advMatch) {
+      const advStr = advMatch[1];
+      const items = advStr.match(/"([^"]+)"/g);
+      if (items) {
+        items.forEach(item => advertencias.push(item.replace(/"/g, '')));
+      }
+    }
+
+    // Intentar extraer resultados individuales
+    const resultados: any[] = [];
+    const resultMatch = responseText.match(/resultados["']?\s*:\s*\[([\s\S]*?)\]/i);
+    if (resultMatch) {
+      // Buscar objetos de examen individuales
+      const examenMatches = resultMatch[1].matchAll(/"examen"\s*:\s*"([^"]+)"[\s\S]*?"valor"\s*:\s*"?([^",}]+)"?[\s\S]*?"estado"\s*:\s*"([^"]+)"/g);
+      for (const match of examenMatches) {
+        resultados.push({
+          examen: match[1],
+          valor: match[2].trim(),
+          estado: match[3],
+          interpretacion: 'Ver documento original para más detalles.',
+        });
+      }
+    }
+
+    if (resumen || recomendaciones.length > 0 || resultados.length > 0) {
+      this.logger.log(`Extracción regex exitosa: ${resultados.length} resultados, ${recomendaciones.length} recomendaciones`);
+    }
+
+    return {
+      resultados,
+      resumen_general: resumen || 'No se pudo procesar la respuesta completamente. Los datos pueden estar incompletos.',
+      recomendaciones: recomendaciones.length > 0 ? recomendaciones : ['Consulta con tu médico para una interpretación profesional de tus resultados.'],
+      advertencias,
+    };
   }
 
   /**
