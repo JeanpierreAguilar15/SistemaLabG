@@ -597,7 +597,7 @@ export class AgendaService {
 
     // VALIDACIÓN DE STOCK DE INSUMOS
     // Obtener los exámenes de la cotización y verificar disponibilidad de insumos
-    const detallesCotizacion = await this.prisma.detalleCotizacion.findMany({
+    const detallesCotizacion = await this.prisma.cotizacionDetalle.findMany({
       where: { codigo_cotizacion: data.codigo_cotizacion },
       select: { codigo_examen: true },
     });

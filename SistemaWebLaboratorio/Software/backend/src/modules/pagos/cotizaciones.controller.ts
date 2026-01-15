@@ -171,6 +171,23 @@ export class CotizacionesController {
     return this.cotizacionesService.seleccionarMetodoPago(id, metodo_pago, codigo_paciente);
   }
 
+  @Put(':id/cancelar')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Cancelar cotización (Paciente)',
+    description: 'Permite al paciente cancelar su cotización si no está pagada ni tiene cita completada',
+  })
+  @ApiResponse({ status: 200, description: 'Cotización cancelada' })
+  @ApiResponse({ status: 400, description: 'No se puede cancelar la cotización' })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  async cancelarCotizacion(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('codigo_usuario') codigo_paciente: number,
+  ) {
+    return this.cotizacionesService.cancelarCotizacion(id, codigo_paciente);
+  }
+
   // ==================== COTIZACIONES (Admin) ====================
 
   @Get('admin/all')

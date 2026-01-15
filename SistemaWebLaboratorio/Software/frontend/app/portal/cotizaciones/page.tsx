@@ -123,6 +123,11 @@ export default function CotizacionesPage() {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
   const [expandedHour, setExpandedHour] = useState<number | null>(null)
 
+  // Estados para cancelar cotización
+  const [showCancelarModal, setShowCancelarModal] = useState(false)
+  const [cotizacionACancelar, setCotizacionACancelar] = useState<Cotizacion | null>(null)
+  const [cancelando, setCancelando] = useState(false)
+
 
   useEffect(() => {
     loadExamenes()
@@ -371,6 +376,7 @@ export default function CotizacionesPage() {
     const acciones = {
       puedeAgendarCita: false,
       puedeSeleccionarPago: false,
+      puedeCancelar: false,
       tieneCita: !!cotizacion.cita,
     }
 
@@ -382,6 +388,13 @@ export default function CotizacionesPage() {
     // Puede seleccionar método de pago si está en PENDIENTE
     if (cotizacion.estado === 'PENDIENTE') {
       acciones.puedeSeleccionarPago = true
+    }
+
+    // Puede cancelar si no está pagada, no está cancelada/rechazada, y no tiene cita completada
+    const estadosNoCancelables = ['PAGADA', 'CANCELADA', 'RECHAZADA', 'EXPIRADA']
+    const citaCompletada = cotizacion.cita?.estado === 'COMPLETADA'
+    if (!estadosNoCancelables.includes(cotizacion.estado) && !citaCompletada) {
+      acciones.puedeCancelar = true
     }
 
     return acciones
@@ -410,6 +423,37 @@ export default function CotizacionesPage() {
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error de conexión' })
+    }
+  }
+
+  const handleCancelarCotizacion = async () => {
+    if (!cotizacionACancelar) return
+
+    try {
+      setCancelando(true)
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/cotizaciones/${cotizacionACancelar.codigo_cotizacion}/cancelar`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cotización cancelada exitosamente' })
+        setShowCancelarModal(false)
+        setCotizacionACancelar(null)
+        loadCotizaciones()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.message || 'Error al cancelar cotización' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error de conexión' })
+    } finally {
+      setCancelando(false)
     }
   }
 
@@ -708,6 +752,24 @@ export default function CotizacionesPage() {
                           Cita Agendada
                         </span>
                       )}
+
+                      {/* Boton para cancelar cotización */}
+                      {acciones.puedeCancelar && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setCotizacionACancelar(cotizacion)
+                            setShowCancelarModal(true)
+                          }}
+                          className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
+                          title="Cancelar cotización"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )
@@ -929,6 +991,63 @@ export default function CotizacionesPage() {
                 disabled={!selectedSlot || !fechaCita}
               >
                 Confirmar Cita
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmar Cancelación */}
+      {showCancelarModal && cotizacionACancelar && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-lab-neutral-200">
+              <h2 className="text-xl font-bold text-lab-neutral-900">Cancelar Cotización</h2>
+            </div>
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-lab-danger-100 rounded-full">
+                  <svg className="w-6 h-6 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-lab-neutral-700">
+                    ¿Estás seguro de que deseas cancelar la cotización <strong>{cotizacionACancelar.numero_cotizacion}</strong>?
+                  </p>
+                  <p className="text-sm text-lab-neutral-500 mt-2">
+                    Esta acción no se puede deshacer. Si deseas realizar estos exámenes más adelante, deberás crear una nueva cotización.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-lab-neutral-200 flex justify-end gap-3 bg-lab-neutral-50">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCancelarModal(false)
+                  setCotizacionACancelar(null)
+                }}
+                disabled={cancelando}
+              >
+                No, mantener
+              </Button>
+              <Button
+                onClick={handleCancelarCotizacion}
+                disabled={cancelando}
+                className="bg-lab-danger-600 hover:bg-lab-danger-700 text-white"
+              >
+                {cancelando ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Cancelando...
+                  </>
+                ) : (
+                  'Sí, cancelar cotización'
+                )}
               </Button>
             </div>
           </div>

@@ -822,6 +822,72 @@ export class CotizacionesService {
   }
 
   /**
+   * Cancelar cotización (Paciente)
+   * Solo se puede cancelar si no tiene cita agendada o si la cita no está completada
+   */
+  async cancelarCotizacion(
+    codigo_cotizacion: number,
+    codigo_paciente: number,
+  ) {
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { codigo_cotizacion },
+      include: {
+        cita: true,
+      },
+    });
+
+    if (!cotizacion) {
+      throw new NotFoundException('Cotización no encontrada');
+    }
+
+    // Verificar que pertenece al paciente
+    if (cotizacion.codigo_paciente !== codigo_paciente) {
+      throw new NotFoundException('Cotización no encontrada');
+    }
+
+    // No se puede cancelar si ya está cancelada o rechazada
+    if (['CANCELADA', 'RECHAZADA'].includes(cotizacion.estado)) {
+      throw new BadRequestException(
+        `La cotización ya está en estado ${cotizacion.estado}`,
+      );
+    }
+
+    // No se puede cancelar si tiene cita COMPLETADA
+    if (cotizacion.cita && cotizacion.cita.estado === 'COMPLETADA') {
+      throw new BadRequestException(
+        'No se puede cancelar una cotización con cita completada',
+      );
+    }
+
+    // No se puede cancelar si ya está PAGADA (necesita reembolso)
+    if (cotizacion.estado === 'PAGADA') {
+      throw new BadRequestException(
+        'No se puede cancelar una cotización pagada. Por favor, contacte al laboratorio para solicitar un reembolso.',
+      );
+    }
+
+    // Cancelar la cotización
+    const cotizacionCancelada = await this.prisma.cotizacion.update({
+      where: { codigo_cotizacion },
+      data: {
+        estado: 'CANCELADA',
+        observaciones: cotizacion.observaciones
+          ? `${cotizacion.observaciones} | Cancelada por el paciente`
+          : 'Cancelada por el paciente',
+      },
+    });
+
+    this.logger.log(
+      `Cotización ${cotizacion.numero_cotizacion} cancelada por paciente ${codigo_paciente}`,
+    );
+
+    return {
+      message: 'Cotización cancelada exitosamente',
+      cotizacion: cotizacionCancelada,
+    };
+  }
+
+  /**
    * Generar número de pago único (usado internamente)
    */
   private async generarNumeroPago(tx?: any): Promise<string> {
