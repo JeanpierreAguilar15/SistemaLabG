@@ -208,10 +208,11 @@ export class ChatbotAgendaService {
         const en14Dias = new Date(hoy);
         en14Dias.setDate(en14Dias.getDate() + 14);
 
+        // NO filtrar por servicio - igual que el sistema web (cotizaciones)
+        // Los slots son compartidos para todos los servicios
         const slotsDisponibles = await this.prisma.slot.groupBy({
             by: ['fecha'],
             where: {
-                codigo_servicio: servicioSeleccionado.codigo_servicio,
                 activo: true,
                 cupos_disponibles: { gt: 0 },
                 fecha: {
@@ -231,7 +232,7 @@ export class ChatbotAgendaService {
             state.step = 'INICIAL';
             this.conversationStates.set(sessionId, state);
             return {
-                mensaje: `Lo sentimos, no hay disponibilidad para ${servicioSeleccionado.nombre} en los proximos 14 dias.\n\nTe recomendamos:\n- Llamar a nuestras sedes para consultar disponibilidad\n- Intentar con otro servicio\n\nDeseas agendar otro servicio?`,
+                mensaje: `Lo sentimos, no hay disponibilidad en los proximos 14 dias.\n\nTe recomendamos:\n- Llamar a nuestras sedes para consultar disponibilidad\n- Intentar con otro servicio\n\nDeseas agendar otro servicio?`,
                 accion: 'NO_DISPONIBILIDAD',
             };
         }
@@ -279,11 +280,10 @@ export class ChatbotAgendaService {
         const en14Dias = new Date(hoy);
         en14Dias.setDate(en14Dias.getDate() + 14);
 
-        // Obtener fechas disponibles
+        // Obtener fechas disponibles - NO filtrar por servicio
         const fechasDisponibles = await this.prisma.slot.groupBy({
             by: ['fecha'],
             where: {
-                codigo_servicio: state.servicioId,
                 activo: true,
                 cupos_disponibles: { gt: 0 },
                 fecha: { gte: hoy, lte: en14Dias },
@@ -334,10 +334,9 @@ export class ChatbotAgendaService {
         const [year, month, day] = fechaSeleccionadaISO.split('-').map(Number);
         const fechaParaConsulta = new Date(Date.UTC(year, month - 1, day));
 
-        // Buscar slots disponibles para esa fecha
+        // Buscar slots disponibles para esa fecha - NO filtrar por servicio
         const slots = await this.prisma.slot.findMany({
             where: {
-                codigo_servicio: state.servicioId,
                 fecha: fechaParaConsulta,
                 activo: true,
                 cupos_disponibles: { gt: 0 },
@@ -452,7 +451,6 @@ export class ChatbotAgendaService {
         // Obtener slots del turno seleccionado
         const slots = await this.prisma.slot.findMany({
             where: {
-                codigo_servicio: state.servicioId,
                 fecha: new Date(state.fecha!),
                 activo: true,
                 cupos_disponibles: { gt: 0 },
@@ -558,7 +556,6 @@ export class ChatbotAgendaService {
         // Obtener slots del turno seleccionado
         const slots = await this.prisma.slot.findMany({
             where: {
-                codigo_servicio: state.servicioId,
                 fecha: new Date(state.fecha!),
                 activo: true,
                 cupos_disponibles: { gt: 0 },
@@ -923,10 +920,11 @@ export class ChatbotAgendaService {
         const en14Dias = new Date(hoy);
         en14Dias.setDate(en14Dias.getDate() + 14);
 
+        // NO filtrar por servicio - igual que el sistema web (cotizaciones)
+        // Los slots son compartidos para todos los servicios de toma de muestras
         const slotsDisponibles = await this.prisma.slot.groupBy({
             by: ['fecha'],
             where: {
-                codigo_servicio: state.servicioId,
                 activo: true,
                 cupos_disponibles: { gt: 0 },
                 fecha: { gte: hoy, lte: en14Dias },
@@ -986,7 +984,6 @@ export class ChatbotAgendaService {
         // Obtener slots disponibles
         const allSlots = await this.prisma.slot.findMany({
             where: {
-                codigo_servicio: state.servicioId,
                 fecha: new Date(state.fecha!),
                 activo: true,
                 cupos_disponibles: { gt: 0 },
