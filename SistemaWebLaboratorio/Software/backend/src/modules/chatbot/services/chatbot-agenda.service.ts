@@ -1132,12 +1132,14 @@ export class ChatbotAgendaService {
                     data: { cupos_disponibles: { decrement: 1 } },
                 });
 
-                // Crear cita
+                // Crear cita - marcar como confirmada para que aparezca en panel admin
                 const cita = await prisma.cita.create({
                     data: {
                         codigo_paciente: userId,
                         codigo_slot: state.slotId!,
                         estado: 'AGENDADA',
+                        confirmada: true, // El paciente confirmó explícitamente en el chat
+                        fecha_confirmacion: new Date(),
                         observaciones: state.requiereExamenes
                             ? `Cita de Toma de Muestras agendada vía chatbot - ${state.examenesSeleccionados?.length || 0} exámenes`
                             : 'Cita agendada vía chatbot',
@@ -1164,16 +1166,18 @@ export class ChatbotAgendaService {
                     const fechaExpiracion = new Date();
                     fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
 
+                    // Estado PENDIENTE_PAGO_VENTANILLA permite agendar cita
+                    // El paciente pagará presencialmente cuando llegue al laboratorio
                     cotizacion = await prisma.cotizacion.create({
                         data: {
                             paciente: { connect: { codigo_usuario: userId } },
                             numero_cotizacion: numeroCotizacion,
                             fecha_expiracion: fechaExpiracion,
-                            estado: 'PENDIENTE',
+                            estado: 'PENDIENTE_PAGO_VENTANILLA',
                             subtotal: total,
                             descuento: 0,
                             total: total,
-                            observaciones: 'Cotización generada vía chatbot',
+                            observaciones: 'Cotización generada vía chatbot - Pago en ventanilla',
                             detalles: {
                                 create: state.examenesSeleccionados.map(e => ({
                                     examen: { connect: { codigo_examen: e.codigo } },
