@@ -354,8 +354,9 @@ export class DialogflowService {
         };
       }
 
+      // IMPORTANTE: Usar UTC para coincidir con cómo se guardan los slots en la BD
       const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
+      hoy.setUTCHours(0, 0, 0, 0);
       if (fechaConsulta < hoy) {
         return {
           success: false,

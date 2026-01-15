@@ -232,9 +232,10 @@ export class AgendaService {
     }
 
     // Validar que la fecha sea futura
+    // Usar UTC para consistencia con cómo se guardan las fechas
     const fecha = new Date(data.fecha);
     const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    hoy.setUTCHours(0, 0, 0, 0);
 
     if (fecha < hoy) {
       throw new BadRequestException('No se pueden crear slots en fechas pasadas');

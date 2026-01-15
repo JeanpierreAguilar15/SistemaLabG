@@ -202,8 +202,9 @@ export class ChatbotAgendaService {
         }
 
         // Buscar fechas disponibles (próximos 14 días)
+        // IMPORTANTE: Usar UTC para coincidir con cómo se guardan los slots en la BD
         const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
+        hoy.setUTCHours(0, 0, 0, 0);
         const en14Dias = new Date(hoy);
         en14Dias.setDate(en14Dias.getDate() + 14);
 
@@ -272,8 +273,9 @@ export class ChatbotAgendaService {
             return { mensaje: 'Por favor, inicia el proceso de agendamiento escribiendo "agendar cita".', accion: 'REINICIAR' };
         }
 
+        // IMPORTANTE: Usar UTC para coincidir con cómo se guardan los slots en la BD
         const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
+        hoy.setUTCHours(0, 0, 0, 0);
         const en14Dias = new Date(hoy);
         en14Dias.setDate(en14Dias.getDate() + 14);
 
@@ -915,8 +917,9 @@ export class ChatbotAgendaService {
         }
 
         // Buscar fechas disponibles
+        // IMPORTANTE: Usar UTC para coincidir con cómo se guardan los slots en la BD
         const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
+        hoy.setUTCHours(0, 0, 0, 0);
         const en14Dias = new Date(hoy);
         en14Dias.setDate(en14Dias.getDate() + 14);
 
@@ -1395,8 +1398,9 @@ export class ChatbotAgendaService {
         mensaje: string;
         accion: string;
     }> {
+        // IMPORTANTE: Usar UTC para coincidir con cómo se guardan los slots en la BD
         const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
+        hoy.setUTCHours(0, 0, 0, 0);
         const en7Dias = new Date(hoy);
         en7Dias.setDate(en7Dias.getDate() + 7);
 
