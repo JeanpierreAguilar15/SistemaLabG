@@ -613,8 +613,11 @@ export class ResultadosService {
         })) || [],
       resultados: muestra.resultados.map((r) => ({
         codigo_resultado: r.codigo_resultado,
-        examen: r.examen.nombre,
-        codigo_examen: r.examen.codigo_examen,
+        examen: {
+          codigo_examen: r.examen.codigo_examen,
+          nombre: r.examen.nombre,
+          codigo_interno: r.examen.codigo_interno,
+        },
         valor_numerico: r.valor_numerico,
         valor_texto: r.valor_texto,
         unidad_medida: r.unidad_medida || r.examen.unidad_medida,
