@@ -566,11 +566,8 @@ export class ResultadosService {
           },
         },
         resultados: {
-          where: {
-            estado: {
-              in: ['LISTO', 'VALIDADO', 'ENTREGADO'],
-            },
-          },
+          // Incluir todos los resultados (no filtrar por estado)
+          // para poder calcular correctamente examenes_listos y examenes_pendientes
           include: {
             examen: {
               select: {
@@ -632,6 +629,12 @@ export class ResultadosService {
         codigo_verificacion: r.codigo_verificacion,
       })),
       total_examenes: muestra.resultados.length,
+      examenes_listos: muestra.resultados.filter((r) =>
+        ['LISTO', 'VALIDADO', 'ENTREGADO'].includes(r.estado),
+      ).length,
+      examenes_pendientes: muestra.resultados.filter((r) =>
+        ['PENDIENTE', 'EN_PROCESO'].includes(r.estado),
+      ).length,
       todos_listos: muestra.resultados.every((r) =>
         ['LISTO', 'VALIDADO', 'ENTREGADO'].includes(r.estado),
       ),
