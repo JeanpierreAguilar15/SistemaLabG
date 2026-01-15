@@ -511,16 +511,25 @@ export default function CitasPage() {
                       )}
                       {(cita.estado === 'PENDIENTE' || cita.estado === 'AGENDADA') && (
                         <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedCita(cita)
-                              setShowReprogramarModal(true)
-                            }}
-                          >
-                            Reprogramar
-                          </Button>
+                          {/* Solo mostrar Reprogramar si NO está confirmada */}
+                          {!cita.confirmada && cita.cotizacion_estado !== 'PAGADA' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedCita(cita)
+                                setShowReprogramarModal(true)
+                              }}
+                            >
+                              Reprogramar
+                            </Button>
+                          )}
+                          {/* Mostrar mensaje si ya está confirmada */}
+                          {(cita.confirmada || cita.cotizacion_estado === 'PAGADA') && (
+                            <span className="text-xs text-lab-neutral-500 italic px-2">
+                              Cita confirmada - No se puede reprogramar
+                            </span>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"

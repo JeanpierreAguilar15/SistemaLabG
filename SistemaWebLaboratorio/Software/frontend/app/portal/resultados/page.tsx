@@ -14,58 +14,65 @@ interface Examen {
   codigo_interno: string
 }
 
-interface Resultado {
+interface ResultadoAgrupado {
   codigo_resultado: number
-  codigo_muestra: number
-  id_muestra: string
-  examen: Examen | string // Puede venir como objeto o string
-  categoria: string
-  fecha_resultado: string
+  examen: Examen
+  valor_numerico: number | null
+  valor_texto: string | null
+  unidad_medida: string | null
+  nivel: string | null
   estado: string
-  valor_numerico?: number
-  valor_texto?: string
-  unidad_medida?: string
-  nivel?: string
-  dentro_rango_normal?: boolean
-  valor_referencia_min?: number
-  valor_referencia_max?: number
-  url_pdf?: string
-  codigo_verificacion?: string
+  fecha_resultado: string
+  url_pdf: string | null
 }
 
-// Helper para obtener el nombre del examen
-const getExamenNombre = (examen: Examen | string): string => {
-  if (typeof examen === 'string') return examen
-  return examen?.nombre || 'Sin nombre'
+interface Cita {
+  codigo_cita: number
+  fecha: string
+  hora_inicio: string
+  sede: string | null
+}
+
+interface MuestraAgrupada {
+  codigo_muestra: number
+  id_muestra: string
+  fecha_toma: string
+  tipo_muestra: string
+  estado_muestra: string
+  cita: Cita | null
+  resultados: ResultadoAgrupado[]
+  total_examenes: number
+  examenes_listos: number
+  examenes_pendientes: number
 }
 
 export default function ResultadosPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
 
   const [loading, setLoading] = useState(false)
-  const [resultados, setResultados] = useState<Resultado[]>([])
-  const [filteredResultados, setFilteredResultados] = useState<Resultado[]>([])
+  const [muestras, setMuestras] = useState<MuestraAgrupada[]>([])
+  const [expandedMuestras, setExpandedMuestras] = useState<Set<number>>(new Set())
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('')
-  const [estadoFilter, setEstadoFilter] = useState('TODOS')
-  const [fechaDesde, setFechaDesde] = useState('')
-  const [fechaHasta, setFechaHasta] = useState('')
 
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     loadResultados()
   }, [])
 
   useEffect(() => {
-    applyFilters()
-  }, [resultados, searchTerm, estadoFilter, fechaDesde, fechaHasta])
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
 
   const loadResultados = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/my`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/my/agrupados`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -73,7 +80,11 @@ export default function ResultadosPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setResultados(data)
+        setMuestras(data)
+        // Expandir automáticamente si hay pocas muestras
+        if (data.length <= 3) {
+          setExpandedMuestras(new Set(data.map((m: MuestraAgrupada) => m.codigo_muestra)))
+        }
       }
     } catch (error) {
       console.error('Error loading resultados:', error)
@@ -82,55 +93,38 @@ export default function ResultadosPage() {
     }
   }
 
-  const applyFilters = () => {
-    let filtered = [...resultados]
-
-    // Filtro por búsqueda
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (r) =>
-          getExamenNombre(r.examen).toLowerCase().includes(searchTerm.toLowerCase()) ||
-          r.id_muestra.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+  const toggleExpand = (codigoMuestra: number) => {
+    const newExpanded = new Set(expandedMuestras)
+    if (newExpanded.has(codigoMuestra)) {
+      newExpanded.delete(codigoMuestra)
+    } else {
+      newExpanded.add(codigoMuestra)
     }
-
-    // Filtro por estado
-    if (estadoFilter !== 'TODOS') {
-      filtered = filtered.filter((r) => r.estado === estadoFilter)
-    }
-
-    // Filtro por fecha desde
-    if (fechaDesde) {
-      filtered = filtered.filter((r) => new Date(r.fecha_resultado) >= new Date(fechaDesde))
-    }
-
-    // Filtro por fecha hasta
-    if (fechaHasta) {
-      filtered = filtered.filter((r) => new Date(r.fecha_resultado) <= new Date(fechaHasta))
-    }
-
-    setFilteredResultados(filtered)
+    setExpandedMuestras(newExpanded)
   }
 
-  const handleDescargarPDF = async (resultado: Resultado) => {
+  const handleDescargarPDF = async (resultado: ResultadoAgrupado) => {
     if (!resultado.url_pdf) {
       setMessage({ type: 'error', text: 'Este resultado no tiene PDF disponible' })
       return
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/${resultado.codigo_resultado}/descargar`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/resultados/${resultado.codigo_resultado}/descargar`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
 
       if (response.ok) {
         const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `resultado_${resultado.id_muestra}_${getExamenNombre(resultado.examen)}.pdf`
+        a.download = `resultado_${resultado.examen?.nombre || 'examen'}.pdf`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
@@ -145,17 +139,32 @@ export default function ResultadosPage() {
     }
   }
 
+  const handleDescargarTodos = async (muestra: MuestraAgrupada) => {
+    const resultadosConPdf = muestra.resultados.filter((r) => r.url_pdf)
+    if (resultadosConPdf.length === 0) {
+      setMessage({ type: 'error', text: 'No hay PDFs disponibles para descargar' })
+      return
+    }
+
+    setMessage({ type: 'success', text: `Descargando ${resultadosConPdf.length} resultado(s)...` })
+
+    for (const resultado of resultadosConPdf) {
+      await handleDescargarPDF(resultado)
+    }
+  }
+
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
       case 'LISTO':
       case 'ENTREGADO':
-        return 'lab-badge-success'
+        return 'bg-lab-success-100 text-lab-success-800'
       case 'VALIDADO':
-        return 'lab-badge-info'
+        return 'bg-lab-info-100 text-lab-info-800'
       case 'EN_PROCESO':
-        return 'lab-badge-neutral'
+      case 'PENDIENTE':
+        return 'bg-lab-warning-100 text-lab-warning-800'
       default:
-        return 'lab-badge-neutral'
+        return 'bg-lab-neutral-100 text-lab-neutral-600'
     }
   }
 
@@ -169,12 +178,14 @@ export default function ResultadosPage() {
         return 'Validado'
       case 'EN_PROCESO':
         return 'En Proceso'
+      case 'PENDIENTE':
+        return 'Pendiente'
       default:
         return estado
     }
   }
 
-  const getNivelBadge = (nivel?: string) => {
+  const getNivelBadge = (nivel: string | null) => {
     switch (nivel) {
       case 'NORMAL':
         return 'bg-lab-success-100 text-lab-success-800'
@@ -189,55 +200,57 @@ export default function ResultadosPage() {
     }
   }
 
-  const getNivelIcon = (nivel?: string) => {
-    switch (nivel) {
-      case 'NORMAL':
-        return (
-          <svg className="w-5 h-5 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        )
-      case 'ALTO':
-      case 'BAJO':
-        return (
-          <svg className="w-5 h-5 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        )
-      case 'CRITICO':
-        return (
-          <svg className="w-5 h-5 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        )
-      default:
-        return null
-    }
-  }
+  // Filtrar muestras
+  const filteredMuestras = muestras.filter((muestra) => {
+    if (!searchTerm) return true
+    const search = searchTerm.toLowerCase()
+    return (
+      muestra.id_muestra.toLowerCase().includes(search) ||
+      muestra.resultados.some((r) => r.examen?.nombre.toLowerCase().includes(search))
+    )
+  })
 
-  const resultadosDisponibles = filteredResultados.filter((r) => ['LISTO', 'ENTREGADO', 'VALIDADO'].includes(r.estado))
-  const resultadosEnProceso = filteredResultados.filter((r) => r.estado === 'EN_PROCESO')
+  // Calcular totales
+  const totalResultados = muestras.reduce((sum, m) => sum + m.total_examenes, 0)
+  const totalDisponibles = muestras.reduce((sum, m) => sum + m.examenes_listos, 0)
+  const totalPendientes = muestras.reduce((sum, m) => sum + m.examenes_pendientes, 0)
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-lab-neutral-900">Mis Resultados</h1>
-        <p className="text-lab-neutral-600 mt-2">Consulta y descarga tus resultados de laboratorio</p>
-      </div>
-
-      {/* Mensaje */}
+      {/* Toast Message */}
       {message && (
         <div
-          className={`p-4 rounded-lg ${
+          className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm animate-in slide-in-from-top-2 fade-in duration-300 ${
             message.type === 'success'
               ? 'bg-lab-success-50 text-lab-success-800 border border-lab-success-200'
               : 'bg-lab-danger-50 text-lab-danger-800 border border-lab-danger-200'
           }`}
         >
-          {message.text}
+          <div className="flex items-center gap-2">
+            {message.type === 'success' ? (
+              <svg className="w-5 h-5 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            <span className="flex-1">{message.text}</span>
+            <button onClick={() => setMessage(null)} className="text-current opacity-70 hover:opacity-100">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-lab-neutral-900">Mis Resultados</h1>
+        <p className="text-lab-neutral-600 mt-2">Consulta y descarga tus resultados de laboratorio organizados por cita</p>
+      </div>
 
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -246,7 +259,7 @@ export default function ResultadosPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-lab-neutral-600">Disponibles</p>
-                <p className="text-3xl font-bold text-lab-success-600">{resultadosDisponibles.length}</p>
+                <p className="text-3xl font-bold text-lab-success-600">{totalDisponibles}</p>
               </div>
               <div className="bg-lab-success-100 p-3 rounded-xl">
                 <svg className="w-6 h-6 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -262,7 +275,7 @@ export default function ResultadosPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-lab-neutral-600">En Proceso</p>
-                <p className="text-3xl font-bold text-lab-warning-600">{resultadosEnProceso.length}</p>
+                <p className="text-3xl font-bold text-lab-warning-600">{totalPendientes}</p>
               </div>
               <div className="bg-lab-warning-100 p-3 rounded-xl">
                 <svg className="w-6 h-6 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -278,7 +291,7 @@ export default function ResultadosPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-lab-neutral-600">Total Resultados</p>
-                <p className="text-3xl font-bold text-lab-primary-600">{resultados.length}</p>
+                <p className="text-3xl font-bold text-lab-primary-600">{totalResultados}</p>
               </div>
               <div className="bg-lab-primary-100 p-3 rounded-xl">
                 <svg className="w-6 h-6 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -290,85 +303,29 @@ export default function ResultadosPage() {
         </Card>
       </div>
 
-      {/* Filtros */}
+      {/* Búsqueda */}
       <Card>
-        <CardHeader>
-          <CardTitle>Filtros de Búsqueda</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="search">Buscar</Label>
-              <Input
-                id="search"
-                placeholder="Examen o código de muestra"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="estado">Estado</Label>
-              <select
-                id="estado"
-                value={estadoFilter}
-                onChange={(e) => setEstadoFilter(e.target.value)}
-                className="w-full h-10 px-3 rounded-md border border-lab-neutral-300 focus:outline-none focus:ring-2 focus:ring-lab-primary-500"
-              >
-                <option value="TODOS">Todos</option>
-                <option value="LISTO">Disponible</option>
-                <option value="ENTREGADO">Entregado</option>
-                <option value="VALIDADO">Validado</option>
-                <option value="EN_PROCESO">En Proceso</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="fecha_desde">Desde</Label>
-              <Input
-                id="fecha_desde"
-                type="date"
-                value={fechaDesde}
-                onChange={(e) => setFechaDesde(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="fecha_hasta">Hasta</Label>
-              <Input
-                id="fecha_hasta"
-                type="date"
-                value={fechaHasta}
-                onChange={(e) => setFechaHasta(e.target.value)}
-              />
-            </div>
+        <CardContent className="pt-6">
+          <div className="space-y-2">
+            <Label htmlFor="search">Buscar</Label>
+            <Input
+              id="search"
+              placeholder="Buscar por examen o codigo de muestra..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="max-w-md"
+            />
           </div>
-
-          {(searchTerm || estadoFilter !== 'TODOS' || fechaDesde || fechaHasta) && (
-            <div className="flex justify-end mt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSearchTerm('')
-                  setEstadoFilter('TODOS')
-                  setFechaDesde('')
-                  setFechaHasta('')
-                }}
-              >
-                Limpiar Filtros
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* Lista de Resultados */}
+      {/* Lista de Resultados Agrupados */}
       <Card>
         <CardHeader>
-          <CardTitle>Resultados de Exámenes</CardTitle>
+          <CardTitle>Resultados por Cita</CardTitle>
           <CardDescription>
-            {filteredResultados.length} resultado{filteredResultados.length !== 1 && 's'} encontrado{filteredResultados.length !== 1 && 's'}
+            {filteredMuestras.length} muestra{filteredMuestras.length !== 1 && 's'} con resultados.
+            Haz clic en cada una para ver los examenes.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -376,69 +333,160 @@ export default function ResultadosPage() {
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-lab-primary-600"></div>
             </div>
-          ) : filteredResultados.length === 0 ? (
-            <div className="text-center py-8 text-lab-neutral-500">
-              No se encontraron resultados
+          ) : filteredMuestras.length === 0 ? (
+            <div className="text-center py-12 text-lab-neutral-500">
+              <svg className="w-16 h-16 mx-auto text-lab-neutral-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p>No tienes resultados de examenes aun</p>
+              <p className="text-sm mt-1">Los resultados apareceran aqui cuando esten listos</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {filteredResultados.map((resultado) => (
-                <div
-                  key={resultado.codigo_resultado}
-                  className="p-4 rounded-lg border border-lab-neutral-200 hover:border-lab-primary-300 hover:shadow-sm transition-all"
-                >
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0 mt-1">
-                      {getNivelIcon(resultado.nivel)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <h4 className="font-semibold text-lab-neutral-900 truncate">{getExamenNombre(resultado.examen)}</h4>
-                        <span className={`flex-shrink-0 ${getEstadoBadge(resultado.estado)}`}>
-                          {getEstadoText(resultado.estado)}
-                        </span>
+            <div className="space-y-4">
+              {filteredMuestras.map((muestra) => {
+                const resultadosConPdf = muestra.resultados.filter((r) => r.url_pdf).length
+
+                return (
+                  <div
+                    key={muestra.codigo_muestra}
+                    className="border border-lab-neutral-200 rounded-lg overflow-hidden"
+                  >
+                    {/* Header - clickable */}
+                    <div
+                      onClick={() => toggleExpand(muestra.codigo_muestra)}
+                      className="bg-lab-neutral-50 p-4 cursor-pointer hover:bg-lab-neutral-100 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          {/* Expand icon */}
+                          <svg
+                            className={`w-5 h-5 text-lab-neutral-500 transition-transform ${
+                              expandedMuestras.has(muestra.codigo_muestra) ? 'rotate-90' : ''
+                            }`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+
+                          {/* Info */}
+                          <div>
+                            <div className="font-semibold text-lab-neutral-900">
+                              Muestra: {muestra.id_muestra}
+                            </div>
+                            <div className="text-sm text-lab-neutral-600">
+                              {formatDate(new Date(muestra.fecha_toma))}
+                              {muestra.cita?.sede && ` • ${muestra.cita.sede}`}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                          {/* Exam counts */}
+                          <div className="text-right">
+                            <div className="text-sm text-lab-neutral-500">Examenes</div>
+                            <div className="flex items-center gap-2">
+                              {muestra.examenes_listos > 0 && (
+                                <span className="text-lab-success-600 font-medium">
+                                  {muestra.examenes_listos} listo{muestra.examenes_listos !== 1 && 's'}
+                                </span>
+                              )}
+                              {muestra.examenes_pendientes > 0 && (
+                                <>
+                                  {muestra.examenes_listos > 0 && <span className="text-lab-neutral-400">/</span>}
+                                  <span className="text-lab-warning-600 font-medium">
+                                    {muestra.examenes_pendientes} pendiente{muestra.examenes_pendientes !== 1 && 's'}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Quick download all */}
+                          {resultadosConPdf > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDescargarTodos(muestra)
+                              }}
+                              className="text-lab-primary-600 hover:text-lab-primary-700"
+                            >
+                              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Descargar ({resultadosConPdf})
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-sm text-lab-neutral-600 mt-1">
-                        {resultado.categoria}
-                      </p>
-                      <p className="text-xs text-lab-neutral-500 mt-0.5">
-                        {formatDate(new Date(resultado.fecha_resultado))} • Muestra: {resultado.id_muestra}
-                      </p>
-
-                      {['LISTO', 'ENTREGADO', 'VALIDADO'].includes(resultado.estado) && (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          {resultado.nivel && (
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getNivelBadge(resultado.nivel)}`}>
-                              {resultado.nivel}
-                            </span>
-                          )}
-                          {resultado.valor_numerico !== null && resultado.valor_numerico !== undefined && (
-                            <span className="text-sm text-lab-neutral-700">
-                              <strong>{resultado.valor_numerico}</strong> {resultado.unidad_medida}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {['LISTO', 'ENTREGADO', 'VALIDADO'].includes(resultado.estado) && resultado.url_pdf && (
-                        <div className="mt-3">
-                          <Button size="sm" onClick={() => handleDescargarPDF(resultado)} className="w-full sm:w-auto">
-                            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Descargar PDF
-                          </Button>
-                        </div>
-                      )}
                     </div>
+
+                    {/* Expanded content - individual exams */}
+                    {expandedMuestras.has(muestra.codigo_muestra) && (
+                      <div className="border-t border-lab-neutral-200 bg-white divide-y divide-lab-neutral-100">
+                        {muestra.resultados.map((resultado) => (
+                          <div
+                            key={resultado.codigo_resultado}
+                            className="p-4 hover:bg-lab-neutral-50 transition-colors"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3">
+                                  <h4 className="font-medium text-lab-neutral-900">
+                                    {resultado.examen?.nombre}
+                                  </h4>
+                                  <span className={`text-xs px-2 py-1 rounded ${getEstadoBadge(resultado.estado)}`}>
+                                    {getEstadoText(resultado.estado)}
+                                  </span>
+                                  {resultado.nivel && (
+                                    <span className={`text-xs px-2 py-1 rounded ${getNivelBadge(resultado.nivel)}`}>
+                                      {resultado.nivel}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-lab-neutral-500 mt-1">
+                                  Codigo: {resultado.examen?.codigo_interno}
+                                  {resultado.valor_numerico !== null && resultado.valor_numerico !== undefined && (
+                                    <span className="ml-3 text-lab-neutral-700">
+                                      Valor: <strong>{resultado.valor_numerico}</strong> {resultado.unidad_medida}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {resultado.url_pdf && ['LISTO', 'VALIDADO', 'ENTREGADO'].includes(resultado.estado) && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleDescargarPDF(resultado)}
+                                  >
+                                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    Descargar PDF
+                                  </Button>
+                                )}
+                                {!resultado.url_pdf && resultado.estado === 'EN_PROCESO' && (
+                                  <span className="text-sm text-lab-neutral-500 italic">
+                                    Resultado en proceso...
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
       </Card>
-
     </div>
   )
 }
