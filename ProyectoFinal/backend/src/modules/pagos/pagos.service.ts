@@ -137,7 +137,7 @@ export class PagosService {
 
     await this.prisma.pago.update({
       where: { id: pagoId },
-      data: { estado: 'RECHAZADO' },
+      data: { estado: 'FALLIDO' },
     });
 
     // Cancelar la reserva
