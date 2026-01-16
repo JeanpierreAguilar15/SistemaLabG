@@ -6,10 +6,16 @@ import { TipoCancha } from '@prisma/client';
 export class CanchasService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(tipo?: string) {
-    const where = tipo
-      ? { tipo: tipo.toUpperCase() as TipoCancha, activa: true }
-      : { activa: true };
+  async findAll(tipo?: string, includeInactive = false) {
+    const where: any = {};
+
+    if (tipo) {
+      where.tipo = tipo.toUpperCase() as TipoCancha;
+    }
+
+    if (!includeInactive) {
+      where.activa = true;
+    }
 
     return this.prisma.cancha.findMany({
       where,
@@ -86,10 +92,50 @@ export class CanchasService {
   }
 
   async create(data: any) {
-    return this.prisma.cancha.create({ data });
+    return this.prisma.cancha.create({
+      data,
+      include: { horarios: true }
+    });
   }
 
   async update(id: string, data: any) {
-    return this.prisma.cancha.update({ where: { id }, data });
+    return this.prisma.cancha.update({
+      where: { id },
+      data,
+      include: { horarios: true }
+    });
+  }
+
+  async delete(id: string) {
+    // Soft delete - just mark as inactive
+    return this.prisma.cancha.update({
+      where: { id },
+      data: { activa: false }
+    });
+  }
+
+  async getHorarios(id: string) {
+    const cancha = await this.findById(id);
+    return cancha.horarios;
+  }
+
+  async updateHorarios(id: string, horarios: any[]) {
+    // Delete existing horarios and create new ones
+    await this.prisma.horarioDisponible.deleteMany({
+      where: { canchaId: id }
+    });
+
+    // Create new horarios
+    const newHorarios = await this.prisma.horarioDisponible.createMany({
+      data: horarios.map(h => ({
+        canchaId: id,
+        diaSemana: h.diaSemana,
+        horaInicio: h.horaInicio,
+        horaFin: h.horaFin,
+        disponible: h.disponible ?? true
+      }))
+    });
+
+    return this.getHorarios(id);
   }
 }

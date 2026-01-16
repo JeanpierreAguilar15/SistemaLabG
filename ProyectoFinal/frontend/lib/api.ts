@@ -78,8 +78,11 @@ class ApiClient {
   }
 
   // Canchas
-  async getCanchas(tipo?: string) {
-    const query = tipo ? `?tipo=${tipo}` : '';
+  async getCanchas(tipo?: string, includeInactive = false) {
+    const params = new URLSearchParams();
+    if (tipo) params.append('tipo', tipo);
+    if (includeInactive) params.append('includeInactive', 'true');
+    const query = params.toString() ? `?${params.toString()}` : '';
     return this.request<any[]>(`/canchas${query}`);
   }
 
@@ -89,6 +92,38 @@ class ApiClient {
 
   async getDisponibilidad(canchaId: string, fecha: string) {
     return this.request<any>(`/canchas/${canchaId}/disponibilidad?fecha=${fecha}`);
+  }
+
+  // Admin - Canchas
+  async createCancha(data: { nombre: string; tipo: string; descripcion: string; precioPorHora: number }) {
+    return this.request<any>('/canchas', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateCancha(id: string, data: Partial<{ nombre: string; tipo: string; descripcion: string; precioPorHora: number; activa: boolean }>) {
+    return this.request<any>(`/canchas/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCancha(id: string) {
+    return this.request<any>(`/canchas/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getHorarios(canchaId: string) {
+    return this.request<any[]>(`/canchas/${canchaId}/horarios`);
+  }
+
+  async updateHorarios(canchaId: string, horarios: any[]) {
+    return this.request<any>(`/canchas/${canchaId}/horarios`, {
+      method: 'PATCH',
+      body: JSON.stringify(horarios),
+    });
   }
 
   // Reservas

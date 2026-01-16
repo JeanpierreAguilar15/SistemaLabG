@@ -124,7 +124,7 @@ export default function AdminDashboardPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm text-gray-500">Ingresos del Mes</p>
-              <p className="text-2xl font-bold text-gray-800">Bs. {stats.ingresosMes}</p>
+              <p className="text-2xl font-bold text-gray-800">${stats.ingresosMes.toLocaleString()}</p>
             </div>
           </div>
         </div>
