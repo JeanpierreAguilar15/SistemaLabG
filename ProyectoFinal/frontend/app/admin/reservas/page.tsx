@@ -10,7 +10,6 @@ interface Reserva {
   horaInicio: string
   horaFin: string
   estado: string
-  total: number
   usuario: {
     nombre: string
     apellido: string
@@ -19,7 +18,14 @@ interface Reserva {
   cancha: {
     nombre: string
     tipo: string
+    precioPorHora: number
   }
+  pago: {
+    id: string
+    estado: string
+    metodo: string
+    monto: number
+  } | null
 }
 
 const estadoColors: Record<string, string> = {
@@ -27,6 +33,11 @@ const estadoColors: Record<string, string> = {
   CONFIRMADA: 'bg-green-100 text-green-700',
   CANCELADA: 'bg-red-100 text-red-700',
   COMPLETADA: 'bg-blue-100 text-blue-700',
+}
+
+const pagoColors: Record<string, string> = {
+  COMPLETADO: 'bg-green-100 text-green-700',
+  PENDIENTE: 'bg-orange-100 text-orange-700',
 }
 
 export default function AdminReservasPage() {
@@ -175,6 +186,7 @@ export default function AdminReservasPage() {
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Fecha</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Horario</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Pago</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
@@ -194,7 +206,25 @@ export default function AdminReservasPage() {
                     </td>
                     <td className="px-6 py-4 text-gray-700">{formatFecha(reserva.fecha)}</td>
                     <td className="px-6 py-4 text-gray-700">{reserva.horaInicio} - {reserva.horaFin}</td>
-                    <td className="px-6 py-4 font-medium text-gray-800">${reserva.total?.toLocaleString() || '0'}</td>
+                    <td className="px-6 py-4 font-semibold text-gray-800">
+                      ${Number(reserva.cancha.precioPorHora).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      {reserva.pago ? (
+                        <div>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${pagoColors[reserva.pago.estado]}`}>
+                            {reserva.pago.estado === 'COMPLETADO' ? 'Pagado' : 'Pendiente'}
+                          </span>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {reserva.pago.metodo === 'TARJETA' ? 'Tarjeta' : 'Presencial'}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                          Sin pago
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${estadoColors[reserva.estado]}`}>
                         {reserva.estado}

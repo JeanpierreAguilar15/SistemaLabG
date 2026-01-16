@@ -270,11 +270,19 @@ export default function PagarReservaPage() {
   }
 
   const formatFecha = (fecha: string) => {
-    return new Date(fecha + 'T12:00:00').toLocaleDateString('es-ES', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long'
-    })
+    try {
+      const date = new Date(fecha)
+      if (isNaN(date.getTime())) {
+        return fecha
+      }
+      return date.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+      })
+    } catch {
+      return fecha
+    }
   }
 
   const CardIcon = ({ type }: { type: string }) => {
@@ -325,9 +333,9 @@ export default function PagarReservaPage() {
 
           <h1 className="text-2xl font-bold text-slate-800 mb-8">Completar Pago</h1>
 
-          <div className="grid lg:grid-cols-5 gap-8">
+          <div className="grid lg:grid-cols-3 gap-6">
             {/* Formulario de Pago */}
-            <div className="lg:col-span-3 space-y-6">
+            <div className="lg:col-span-2 space-y-6">
               {/* Metodo de Pago */}
               <div className="bg-white rounded-xl shadow-sm p-6">
                 <h2 className="text-lg font-semibold text-slate-800 mb-4">Metodo de Pago</h2>
@@ -560,7 +568,7 @@ export default function PagarReservaPage() {
             </div>
 
             {/* Resumen de Reserva */}
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-1">
               <div className="bg-white rounded-xl shadow-sm p-6 sticky top-24">
                 <h2 className="text-lg font-semibold text-slate-800 mb-4">Resumen</h2>
 
