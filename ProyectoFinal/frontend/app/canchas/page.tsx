@@ -79,8 +79,8 @@ export default function CanchasPage() {
             onClick={() => setFiltro('')}
             className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${
               filtro === ''
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             Todas
@@ -89,8 +89,8 @@ export default function CanchasPage() {
             onClick={() => setFiltro('FUTBOL')}
             className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center space-x-2 ${
               filtro === 'FUTBOL'
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             <span>⚽</span>
@@ -100,8 +100,8 @@ export default function CanchasPage() {
             onClick={() => setFiltro('TENIS')}
             className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center space-x-2 ${
               filtro === 'TENIS'
-                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             <span>🎾</span>
@@ -111,8 +111,8 @@ export default function CanchasPage() {
             onClick={() => setFiltro('BASQUET')}
             className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center space-x-2 ${
               filtro === 'BASQUET'
-                ? 'bg-gradient-to-r from-orange-500 to-rose-600 text-white shadow-lg'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             <span>🏀</span>
@@ -123,13 +123,13 @@ export default function CanchasPage() {
         {/* Lista de Canchas */}
         {loading ? (
           <div className="text-center py-20">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
               <svg className="animate-spin h-8 w-8 text-white" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             </div>
-            <p className="text-gray-600 text-lg">Cargando canchas...</p>
+            <p className="text-slate-600 text-lg">Cargando canchas...</p>
           </div>
         ) : canchas.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">

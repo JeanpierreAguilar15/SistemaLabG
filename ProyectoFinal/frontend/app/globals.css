@@ -26,7 +26,7 @@ html {
 
 @layer components {
   .btn-primary {
-    @apply bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98];
+    @apply bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl;
   }
 
   .btn-secondary {
@@ -69,7 +69,7 @@ html {
 
   /* Animated gradient background */
   .animated-gradient {
-    background: linear-gradient(-45deg, #3b82f6, #6366f1, #8b5cf6, #3b82f6);
+    background: linear-gradient(-45deg, #1e40af, #2563eb, #3b82f6, #1e40af);
     background-size: 400% 400%;
     animation: gradient 15s ease infinite;
   }

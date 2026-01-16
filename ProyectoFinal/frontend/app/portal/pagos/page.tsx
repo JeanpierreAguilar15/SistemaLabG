@@ -72,9 +72,9 @@ export default function MisPagosPage() {
 
       {/* Resumen */}
       <div className="grid md:grid-cols-3 gap-4 mb-8">
-        <div className="card bg-gradient-to-r from-green-500 to-green-600 text-white">
+        <div className="card bg-gradient-to-r from-blue-600 to-blue-700 text-white">
           <p className="text-white/80 text-sm">Total Pagado</p>
-          <p className="text-3xl font-bold">Bs. {totalPagado.toFixed(2)}</p>
+          <p className="text-3xl font-bold">${totalPagado.toFixed(2)}</p>
         </div>
         <div className="card">
           <p className="text-gray-500 text-sm">Total de Pagos</p>
@@ -128,7 +128,7 @@ export default function MisPagosPage() {
                       <span className="text-sm">{metodoLabels[pago.metodo]}</span>
                     </td>
                     <td className="py-4 text-right">
-                      <span className="font-semibold">Bs. {Number(pago.monto).toFixed(2)}</span>
+                      <span className="font-semibold">${Number(pago.monto).toFixed(2)}</span>
                     </td>
                     <td className="py-4 text-center">
                       <span className={`px-3 py-1 rounded-full text-xs ${estadoColors[pago.estado]}`}>
