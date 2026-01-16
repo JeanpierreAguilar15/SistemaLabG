@@ -241,6 +241,18 @@ class ApiClient {
       body: JSON.stringify({ motivo }),
     });
   }
+
+  // Admin - Configuracion
+  async getConfiguracion() {
+    return this.request<any>('/configuracion/admin');
+  }
+
+  async updateConfiguracion(config: any) {
+    return this.request<any>('/configuracion/admin', {
+      method: 'PATCH',
+      body: JSON.stringify(config),
+    });
+  }
 }
 
 export const api = new ApiClient();
