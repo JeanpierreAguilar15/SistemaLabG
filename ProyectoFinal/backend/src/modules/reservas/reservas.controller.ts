@@ -5,6 +5,7 @@ import { ReservasService } from './reservas.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CreateReservaDto } from './dto/create-reserva.dto';
 
 @ApiTags('reservas')
 @Controller('reservas')
@@ -15,7 +16,7 @@ export class ReservasController {
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear una nueva reserva' })
-  async create(@Request() req: any, @Body() createReservaDto: any) {
+  async create(@Request() req: any, @Body() createReservaDto: CreateReservaDto) {
     return this.reservasService.create(req.user.id, createReservaDto);
   }
 

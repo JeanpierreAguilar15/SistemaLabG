@@ -5,6 +5,7 @@ import { PagosService } from './pagos.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CreatePagoDto } from './dto/create-pago.dto';
 
 @ApiTags('pagos')
 @Controller('pagos')
@@ -15,7 +16,7 @@ export class PagosController {
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Procesar pago de una reserva' })
-  async procesarPago(@Request() req: any, @Body() createPagoDto: any) {
+  async procesarPago(@Request() req: any, @Body() createPagoDto: CreatePagoDto) {
     return this.pagosService.procesarPago(req.user.id, createPagoDto);
   }
 

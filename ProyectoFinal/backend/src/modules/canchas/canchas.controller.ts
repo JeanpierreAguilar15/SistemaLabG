@@ -4,6 +4,8 @@ import { CanchasService } from './canchas.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CreateCanchaDto } from './dto/create-cancha.dto';
+import { UpdateCanchaDto } from './dto/update-cancha.dto';
 
 @ApiTags('canchas')
 @Controller('canchas')
@@ -36,8 +38,8 @@ export class CanchasController {
   @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear una nueva cancha (Admin)' })
-  async create(@Body() data: any) {
-    return this.canchasService.create(data);
+  async create(@Body() createCanchaDto: CreateCanchaDto) {
+    return this.canchasService.create(createCanchaDto);
   }
 
   @Patch(':id')
@@ -45,8 +47,8 @@ export class CanchasController {
   @Roles('ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar una cancha (Admin)' })
-  async update(@Param('id') id: string, @Body() data: any) {
-    return this.canchasService.update(id, data);
+  async update(@Param('id') id: string, @Body() updateCanchaDto: UpdateCanchaDto) {
+    return this.canchasService.update(id, updateCanchaDto);
   }
 
   @Delete(':id')
