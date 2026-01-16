@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ReservasService } from '@modules/reservas/reservas.service';
+import { NotificacionesService } from '@modules/notificaciones/notificaciones.service';
 import { MetodoPago } from '@prisma/client';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class PagosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reservasService: ReservasService,
+    private readonly notificacionesService: NotificacionesService,
   ) {}
 
   async procesarPago(usuarioId: string, data: any) {
@@ -40,6 +42,9 @@ export class PagosService {
         reserva: {
           include: { cancha: true },
         },
+        usuario: {
+          select: { email: true, nombre: true, apellido: true },
+        },
       },
     });
 
@@ -48,6 +53,33 @@ export class PagosService {
       where: { id: data.reservaId },
       data: { estado: 'CONFIRMADA' },
     });
+
+    // Enviar email de confirmacion
+    const metodosNombre: Record<string, string> = {
+      EFECTIVO: 'Efectivo',
+      TARJETA: 'Tarjeta de Credito/Debito',
+      TRANSFERENCIA: 'Transferencia Bancaria',
+      QR: 'Pago QR',
+    };
+
+    await this.notificacionesService.enviarConfirmacionPago(
+      pago.usuario.email,
+      {
+        nombre: `${pago.usuario.nombre} ${pago.usuario.apellido}`,
+        cancha: reserva.cancha.nombre,
+        fecha: new Date(reserva.fecha).toLocaleDateString('es-ES', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
+        horaInicio: reserva.horaInicio,
+        horaFin: reserva.horaFin,
+        monto: pago.monto,
+        metodo: metodosNombre[data.metodo] || data.metodo,
+        referencia: pago.referencia,
+      },
+    );
 
     return {
       message: 'Pago procesado exitosamente',

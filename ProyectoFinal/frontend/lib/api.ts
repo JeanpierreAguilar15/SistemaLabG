@@ -159,6 +159,46 @@ class ApiClient {
   async getMisPagos() {
     return this.request<any[]>('/pagos/mis-pagos');
   }
+
+  // Admin - Dashboard
+  async getDashboardStats() {
+    return this.request<any>('/reservas/admin/dashboard');
+  }
+
+  // Admin - Reservas
+  async getAllReservas(estado?: string, fecha?: string) {
+    const params = new URLSearchParams();
+    if (estado) params.append('estado', estado);
+    if (fecha) params.append('fecha', fecha);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any[]>(`/reservas/admin/all${query}`);
+  }
+
+  async confirmarReserva(id: string) {
+    return this.request<any>(`/reservas/admin/${id}/confirmar`, {
+      method: 'PATCH',
+    });
+  }
+
+  async cancelarReservaAdmin(id: string) {
+    return this.request<any>(`/reservas/admin/${id}/cancelar`, {
+      method: 'PATCH',
+    });
+  }
+
+  // Admin - Usuarios
+  async getAllUsuarios(rol?: string) {
+    const params = new URLSearchParams();
+    if (rol) params.append('rol', rol);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any[]>(`/usuarios/admin/all${query}`);
+  }
+
+  async toggleUsuarioActivo(id: string) {
+    return this.request<any>(`/usuarios/admin/${id}/toggle-activo`, {
+      method: 'PATCH',
+    });
+  }
 }
 
 export const api = new ApiClient();

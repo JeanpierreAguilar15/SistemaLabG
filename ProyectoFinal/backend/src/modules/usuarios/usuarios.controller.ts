@@ -1,8 +1,10 @@
-import { Controller, Get, Patch, Body, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Patch, Body, UseGuards, Request, Param, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { UsuariosService } from './usuarios.service';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
+import { RolesGuard } from '@common/guards/roles.guard';
+import { Roles } from '@common/decorators/roles.decorator';
 
 @ApiTags('usuarios')
 @Controller('usuarios')
@@ -23,5 +25,24 @@ export class UsuariosController {
   @ApiOperation({ summary: 'Actualizar perfil del usuario' })
   async updatePerfil(@Request() req: any, @Body() updateDto: UpdateUsuarioDto) {
     return this.usuariosService.update(req.user.id, updateDto);
+  }
+
+  @Get('admin/all')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener todos los usuarios (admin)' })
+  @ApiQuery({ name: 'rol', required: false })
+  async getAllUsuarios(@Query('rol') rol?: string) {
+    return this.usuariosService.findAll(rol);
+  }
+
+  @Patch('admin/:id/toggle-activo')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Activar/desactivar usuario (admin)' })
+  async toggleActivo(@Param('id') id: string) {
+    return this.usuariosService.toggleActivo(id);
   }
 }

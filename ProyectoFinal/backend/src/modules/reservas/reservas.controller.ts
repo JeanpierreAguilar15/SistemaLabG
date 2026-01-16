@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { ReservasService } from './reservas.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('reservas')
 @Controller('reservas')
@@ -22,6 +25,43 @@ export class ReservasController {
   @ApiOperation({ summary: 'Obtener mis reservas' })
   async getMisReservas(@Request() req: any) {
     return this.reservasService.findByUsuario(req.user.id);
+  }
+
+  // Admin endpoints
+  @Get('admin/all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Listar todas las reservas (Admin)' })
+  async findAll(@Query('estado') estado?: string, @Query('fecha') fecha?: string) {
+    return this.reservasService.findAll(estado, fecha);
+  }
+
+  @Get('admin/dashboard')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener estadisticas del dashboard (Admin)' })
+  async getDashboardStats() {
+    return this.reservasService.getDashboardStats();
+  }
+
+  @Patch('admin/:id/confirmar')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirmar una reserva (Admin)' })
+  async confirmar(@Param('id') id: string) {
+    return this.reservasService.confirmar(id);
+  }
+
+  @Patch('admin/:id/cancelar')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancelar una reserva (Admin)' })
+  async cancelarAdmin(@Param('id') id: string) {
+    return this.reservasService.cancelarAdmin(id);
   }
 
   @Get(':id')

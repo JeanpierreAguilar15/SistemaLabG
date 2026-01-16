@@ -102,4 +102,108 @@ export class ReservasService {
       data: { estado: 'CANCELADA' },
     });
   }
+
+  // Admin methods
+  async findAll(estado?: string, fecha?: string) {
+    const where: any = {};
+    if (estado) where.estado = estado;
+    if (fecha) where.fecha = new Date(fecha);
+
+    return this.prisma.reserva.findMany({
+      where,
+      include: {
+        cancha: true,
+        usuario: {
+          select: { id: true, nombre: true, apellido: true, email: true },
+        },
+        pago: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getDashboardStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    // Reservas de hoy
+    const reservasHoy = await this.prisma.reserva.count({
+      where: {
+        fecha: {
+          gte: today,
+          lt: tomorrow,
+        },
+        estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+      },
+    });
+
+    // Total reservas
+    const totalReservas = await this.prisma.reserva.count();
+
+    // Ingresos del mes (pagos completados)
+    const pagosDelMes = await this.prisma.pago.aggregate({
+      _sum: { monto: true },
+      where: {
+        estado: 'COMPLETADO',
+        createdAt: {
+          gte: firstDayOfMonth,
+          lte: lastDayOfMonth,
+        },
+      },
+    });
+
+    // Usuarios activos (con al menos una reserva)
+    const usuariosActivos = await this.prisma.usuario.count({
+      where: {
+        reservas: { some: {} },
+      },
+    });
+
+    // Reservas recientes
+    const reservasRecientes = await this.prisma.reserva.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        cancha: { select: { nombre: true } },
+        usuario: { select: { nombre: true, apellido: true } },
+      },
+    });
+
+    return {
+      reservasHoy,
+      totalReservas,
+      ingresosMes: pagosDelMes._sum.monto || 0,
+      usuariosActivos,
+      reservasRecientes,
+    };
+  }
+
+  async confirmar(id: string) {
+    const reserva = await this.findById(id);
+
+    if (reserva.estado !== 'PENDIENTE') {
+      throw new BadRequestException('Solo se pueden confirmar reservas pendientes');
+    }
+
+    return this.prisma.reserva.update({
+      where: { id },
+      data: { estado: 'CONFIRMADA' },
+      include: {
+        cancha: true,
+        usuario: { select: { id: true, nombre: true, apellido: true, email: true } },
+      },
+    });
+  }
+
+  async cancelarAdmin(id: string) {
+    return this.prisma.reserva.update({
+      where: { id },
+      data: { estado: 'CANCELADA' },
+    });
+  }
 }

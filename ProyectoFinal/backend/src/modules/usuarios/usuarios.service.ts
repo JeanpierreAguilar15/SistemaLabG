@@ -45,13 +45,43 @@ export class UsuariosService {
     });
   }
 
-  async findAll() {
+  async findAll(rol?: string) {
+    const where: any = {};
+    if (rol) {
+      where.rol = rol;
+    }
+
     return this.prisma.usuario.findMany({
+      where,
       select: {
         id: true,
         email: true,
         nombre: true,
         apellido: true,
+        telefono: true,
+        rol: true,
+        activo: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async toggleActivo(id: string) {
+    const usuario = await this.prisma.usuario.findUnique({ where: { id } });
+    if (!usuario) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    return this.prisma.usuario.update({
+      where: { id },
+      data: { activo: !usuario.activo },
+      select: {
+        id: true,
+        email: true,
+        nombre: true,
+        apellido: true,
+        telefono: true,
         rol: true,
         activo: true,
         createdAt: true,
