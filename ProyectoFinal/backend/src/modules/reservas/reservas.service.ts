@@ -267,17 +267,31 @@ export class ReservasService {
   }
 
   async getReportes(fechaInicio?: string, fechaFin?: string) {
-    const inicio = fechaInicio ? new Date(fechaInicio) : new Date(new Date().setMonth(new Date().getMonth() - 1));
-    const fin = fechaFin ? new Date(fechaFin) : new Date();
-    inicio.setHours(0, 0, 0, 0);
-    fin.setHours(23, 59, 59, 999);
+    // Parse dates in local timezone to avoid issues
+    const now = new Date();
+    let inicio: Date;
+    let fin: Date;
 
-    // Reservas por cancha
+    if (fechaInicio) {
+      const [year, month, day] = fechaInicio.split('-').map(Number);
+      inicio = new Date(year, month - 1, day, 0, 0, 0, 0);
+    } else {
+      inicio = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate(), 0, 0, 0, 0);
+    }
+
+    if (fechaFin) {
+      const [year, month, day] = fechaFin.split('-').map(Number);
+      fin = new Date(year, month - 1, day, 23, 59, 59, 999);
+    } else {
+      fin = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    }
+
+    // Reservas por cancha (usando createdAt para mostrar reservas CREADAS en el periodo)
     const reservasPorCancha = await this.prisma.reserva.groupBy({
       by: ['canchaId'],
       _count: { id: true },
       where: {
-        fecha: { gte: inicio, lte: fin },
+        createdAt: { gte: inicio, lte: fin },
       },
     });
 
@@ -300,7 +314,7 @@ export class ReservasService {
       by: ['estado'],
       _count: { id: true },
       where: {
-        fecha: { gte: inicio, lte: fin },
+        createdAt: { gte: inicio, lte: fin },
       },
     });
 
@@ -344,7 +358,7 @@ export class ReservasService {
       by: ['usuarioId'],
       _count: { id: true },
       where: {
-        fecha: { gte: inicio, lte: fin },
+        createdAt: { gte: inicio, lte: fin },
         estado: { in: ['CONFIRMADA', 'COMPLETADA'] },
       },
       orderBy: { _count: { id: 'desc' } },
@@ -366,7 +380,7 @@ export class ReservasService {
 
     // Totales
     const totalReservas = await this.prisma.reserva.count({
-      where: { fecha: { gte: inicio, lte: fin } },
+      where: { createdAt: { gte: inicio, lte: fin } },
     });
 
     const totalIngresos = await this.prisma.pago.aggregate({
@@ -379,7 +393,7 @@ export class ReservasService {
 
     const totalCanceladas = await this.prisma.reserva.count({
       where: {
-        fecha: { gte: inicio, lte: fin },
+        createdAt: { gte: inicio, lte: fin },
         estado: 'CANCELADA',
       },
     });

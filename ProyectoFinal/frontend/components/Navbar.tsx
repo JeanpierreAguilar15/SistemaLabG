@@ -75,9 +75,14 @@ export default function Navbar() {
               Canchas
             </NavLink>
             {user && (
-              <NavLink href="/portal/reservas" active={pathname.startsWith('/portal')}>
-                Mis Reservas
-              </NavLink>
+              <>
+                <NavLink href="/portal/reservas" active={pathname === '/portal/reservas' || pathname.startsWith('/portal/reservas/')}>
+                  Mis Reservas
+                </NavLink>
+                <NavLink href="/portal/pagos" active={pathname === '/portal/pagos'}>
+                  Mis Pagos
+                </NavLink>
+              </>
             )}
             {user?.rol === 'ADMIN' && (
               <NavLink href="/admin" active={pathname.startsWith('/admin')}>
@@ -196,9 +201,14 @@ export default function Navbar() {
                 Canchas
               </MobileNavLink>
               {user && (
-                <MobileNavLink href="/portal/reservas" active={pathname.startsWith('/portal')} onClick={() => setMobileMenuOpen(false)}>
-                  Mis Reservas
-                </MobileNavLink>
+                <>
+                  <MobileNavLink href="/portal/reservas" active={pathname === '/portal/reservas' || pathname.startsWith('/portal/reservas/')} onClick={() => setMobileMenuOpen(false)}>
+                    Mis Reservas
+                  </MobileNavLink>
+                  <MobileNavLink href="/portal/pagos" active={pathname === '/portal/pagos'} onClick={() => setMobileMenuOpen(false)}>
+                    Mis Pagos
+                  </MobileNavLink>
+                </>
               )}
               {user?.rol === 'ADMIN' && (
                 <MobileNavLink href="/admin" active={pathname.startsWith('/admin')} onClick={() => setMobileMenuOpen(false)}>
