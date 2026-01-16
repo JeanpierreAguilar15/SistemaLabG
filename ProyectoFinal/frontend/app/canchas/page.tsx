@@ -12,6 +12,7 @@ interface Cancha {
   descripcion: string
   precioPorHora: number
   activa: boolean
+  imagen?: string
 }
 
 const tipoIcons: Record<string, string> = {
@@ -141,12 +142,22 @@ export default function CanchasPage() {
               >
                 {/* Card Image */}
                 <div className={`relative h-48 ${tipoGradients[cancha.tipo]} rounded-xl mb-6 overflow-hidden`}>
-                  <div className="absolute inset-0 pattern-dots opacity-30"></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="sport-icon bg-white/20 backdrop-blur-sm group-hover:scale-110 transition-transform duration-500">
-                      <span className="text-5xl">{tipoIcons[cancha.tipo]}</span>
-                    </div>
-                  </div>
+                  {cancha.imagen ? (
+                    <img
+                      src={api.getImageUrl(cancha.imagen)}
+                      alt={cancha.nombre}
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <>
+                      <div className="absolute inset-0 pattern-dots opacity-30"></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="sport-icon bg-white/20 backdrop-blur-sm group-hover:scale-110 transition-transform duration-500">
+                          <span className="text-5xl">{tipoIcons[cancha.tipo]}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                   <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/40 to-transparent"></div>
 
                   {/* Badge */}

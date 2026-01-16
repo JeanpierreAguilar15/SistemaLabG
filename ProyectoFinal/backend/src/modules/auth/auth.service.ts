@@ -29,7 +29,7 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    const token = this.generateToken(usuario);
+    const tokens = this.generateTokens(usuario);
 
     return {
       message: 'Usuario registrado exitosamente',
@@ -40,7 +40,7 @@ export class AuthService {
         apellido: usuario.apellido,
         rol: usuario.rol,
       },
-      token,
+      ...tokens,
     };
   }
 
@@ -61,7 +61,7 @@ export class AuthService {
       throw new UnauthorizedException('Usuario desactivado');
     }
 
-    const token = this.generateToken(usuario);
+    const tokens = this.generateTokens(usuario);
 
     return {
       message: 'Login exitoso',
@@ -72,8 +72,40 @@ export class AuthService {
         apellido: usuario.apellido,
         rol: usuario.rol,
       },
-      token,
+      ...tokens,
     };
+  }
+
+  async refreshToken(refreshToken: string) {
+    try {
+      const payload = this.jwtService.verify(refreshToken, {
+        secret: this.configService.get('JWT_REFRESH_SECRET') || this.configService.get('JWT_SECRET'),
+      });
+
+      if (payload.type !== 'refresh') {
+        throw new UnauthorizedException('Token de refresh inválido');
+      }
+
+      const usuario = await this.usuariosService.findById(payload.sub);
+      if (!usuario || !usuario.activo) {
+        throw new UnauthorizedException('Usuario no válido o desactivado');
+      }
+
+      const tokens = this.generateTokens(usuario);
+
+      return {
+        message: 'Token refrescado exitosamente',
+        ...tokens,
+      };
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        throw new UnauthorizedException('El token de refresh ha expirado. Por favor inicia sesión nuevamente.');
+      }
+      if (error.name === 'JsonWebTokenError') {
+        throw new UnauthorizedException('Token de refresh inválido');
+      }
+      throw error;
+    }
   }
 
   async forgotPassword(email: string) {
@@ -151,12 +183,46 @@ export class AuthService {
     return { message: 'Contraseña actualizada exitosamente' };
   }
 
-  private generateToken(usuario: any): string {
+  private generateTokens(usuario: any): { token: string; refreshToken: string; expiresIn: number } {
     const payload = {
       sub: usuario.id,
       email: usuario.email,
       rol: usuario.rol,
     };
-    return this.jwtService.sign(payload);
+
+    // Access token (short-lived: 15 minutes)
+    const accessTokenExpiresIn = this.configService.get('JWT_EXPIRES_IN') || '15m';
+    const token = this.jwtService.sign(payload, { expiresIn: accessTokenExpiresIn });
+
+    // Refresh token (long-lived: 7 days)
+    const refreshTokenExpiresIn = this.configService.get('JWT_REFRESH_EXPIRES_IN') || '7d';
+    const refreshToken = this.jwtService.sign(
+      { ...payload, type: 'refresh' },
+      {
+        secret: this.configService.get('JWT_REFRESH_SECRET') || this.configService.get('JWT_SECRET'),
+        expiresIn: refreshTokenExpiresIn,
+      }
+    );
+
+    // Parse expiration for client
+    const expiresIn = this.parseExpiresIn(accessTokenExpiresIn);
+
+    return { token, refreshToken, expiresIn };
+  }
+
+  private parseExpiresIn(expiresIn: string): number {
+    const match = expiresIn.match(/^(\d+)([smhd])$/);
+    if (!match) return 900; // Default 15 minutes
+
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+
+    switch (unit) {
+      case 's': return value;
+      case 'm': return value * 60;
+      case 'h': return value * 3600;
+      case 'd': return value * 86400;
+      default: return 900;
+    }
   }
 }

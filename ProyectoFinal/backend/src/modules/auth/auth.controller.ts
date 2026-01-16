@@ -32,6 +32,16 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 30, ttl: 60000 } }) // 30 refreshes per minute
+  @ApiOperation({ summary: 'Refrescar token de acceso' })
+  @ApiResponse({ status: 200, description: 'Token refrescado exitosamente' })
+  @ApiResponse({ status: 401, description: 'Token de refresh inválido o expirado' })
+  async refreshToken(@Body('refreshToken') refreshToken: string) {
+    return this.authService.refreshToken(refreshToken);
+  }
+
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 3, ttl: 300000 } }) // 3 requests per 5 minutes

@@ -22,7 +22,7 @@ export default function LoginPage() {
 
     try {
       const response = await api.login(email, password)
-      api.setToken(response.token)
+      api.setTokens(response.token, response.refreshToken)
 
       showSuccess(`Bienvenido de vuelta, ${response.usuario.nombre}!`)
 

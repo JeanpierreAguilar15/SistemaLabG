@@ -14,6 +14,7 @@ import { ReservasModule } from '@modules/reservas/reservas.module';
 import { PagosModule } from '@modules/pagos/pagos.module';
 import { NotificacionesModule } from '@modules/notificaciones/notificaciones.module';
 import { ConfiguracionModule } from '@modules/configuracion/configuracion.module';
+import { UploadsModule } from '@modules/uploads/uploads.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { ConfiguracionModule } from '@modules/configuracion/configuracion.module
     ReservasModule,
     PagosModule,
     NotificacionesModule,
+    UploadsModule,
   ],
   providers: [
     // Apply throttler guard globally

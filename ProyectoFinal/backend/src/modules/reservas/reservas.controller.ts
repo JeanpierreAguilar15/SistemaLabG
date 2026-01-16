@@ -46,6 +46,18 @@ export class ReservasController {
     return this.reservasService.getDashboardStats();
   }
 
+  @Get('admin/reportes')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener reportes detallados (Admin)' })
+  async getReportes(
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+  ) {
+    return this.reservasService.getReportes(fechaInicio, fechaFin);
+  }
+
   @Patch('admin/:id/confirmar')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
@@ -72,11 +84,23 @@ export class ReservasController {
     return this.reservasService.findById(id);
   }
 
+  @Get(':id/politica-cancelacion')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verificar politica de cancelacion para una reserva' })
+  async verificarPoliticaCancelacion(@Param('id') id: string) {
+    return this.reservasService.verificarPoliticaCancelacion(id);
+  }
+
   @Patch(':id/cancelar')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cancelar una reserva' })
-  async cancelar(@Param('id') id: string, @Request() req: any) {
-    return this.reservasService.cancelar(id, req.user.id);
+  async cancelar(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body('forzar') forzar?: boolean,
+  ) {
+    return this.reservasService.cancelar(id, req.user.id, forzar);
   }
 }

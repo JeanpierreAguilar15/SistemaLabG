@@ -1,12 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CanchasService } from '@modules/canchas/canchas.service';
+import { ConfiguracionService } from '@modules/configuracion/configuracion.service';
 
 @Injectable()
 export class ReservasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly canchasService: CanchasService,
+    private readonly configuracionService: ConfiguracionService,
   ) {}
 
   async create(usuarioId: string, data: any) {
@@ -92,7 +94,7 @@ export class ReservasService {
     return reserva;
   }
 
-  async cancelar(id: string, usuarioId: string) {
+  async cancelar(id: string, usuarioId: string, forzar = false) {
     const reserva = await this.findById(id);
 
     if (reserva.usuarioId !== usuarioId) {
@@ -107,10 +109,57 @@ export class ReservasService {
       throw new BadRequestException('No se puede cancelar una reserva completada');
     }
 
-    return this.prisma.reserva.update({
+    // Check cancellation policy
+    const minHoras = this.configuracionService.getCancelacionMinHoras();
+    const fechaReserva = new Date(reserva.fecha);
+    const [horas, minutos] = reserva.horaInicio.split(':').map(Number);
+    fechaReserva.setHours(horas, minutos, 0, 0);
+
+    const ahora = new Date();
+    const horasHastaReserva = (fechaReserva.getTime() - ahora.getTime()) / (1000 * 60 * 60);
+
+    if (horasHastaReserva < minHoras && !forzar) {
+      throw new BadRequestException(
+        `No se puede cancelar con menos de ${minHoras} horas de anticipacion. ` +
+        `La reserva es en ${Math.max(0, Math.floor(horasHastaReserva))} horas.`
+      );
+    }
+
+    const canceladaTarde = horasHastaReserva < minHoras;
+
+    await this.prisma.reserva.update({
       where: { id },
       data: { estado: 'CANCELADA' },
     });
+
+    return {
+      message: 'Reserva cancelada exitosamente',
+      canceladaTarde,
+      horasAnticipacion: Math.max(0, Math.floor(horasHastaReserva)),
+    };
+  }
+
+  async verificarPoliticaCancelacion(id: string) {
+    const reserva = await this.findById(id);
+    const minHoras = this.configuracionService.getCancelacionMinHoras();
+
+    const fechaReserva = new Date(reserva.fecha);
+    const [horas, minutos] = reserva.horaInicio.split(':').map(Number);
+    fechaReserva.setHours(horas, minutos, 0, 0);
+
+    const ahora = new Date();
+    const horasHastaReserva = (fechaReserva.getTime() - ahora.getTime()) / (1000 * 60 * 60);
+
+    const puedeCancelar = horasHastaReserva >= minHoras;
+
+    return {
+      puedeCancelar,
+      horasHastaReserva: Math.max(0, Math.floor(horasHastaReserva)),
+      horasMinimas: minHoras,
+      mensaje: puedeCancelar
+        ? `Puedes cancelar esta reserva sin penalidad (faltan ${Math.floor(horasHastaReserva)} horas)`
+        : `La reserva es en menos de ${minHoras} horas. La cancelacion tardía podría tener penalidad.`,
+    };
   }
 
   // Admin methods
@@ -215,5 +264,149 @@ export class ReservasService {
       where: { id },
       data: { estado: 'CANCELADA' },
     });
+  }
+
+  async getReportes(fechaInicio?: string, fechaFin?: string) {
+    const inicio = fechaInicio ? new Date(fechaInicio) : new Date(new Date().setMonth(new Date().getMonth() - 1));
+    const fin = fechaFin ? new Date(fechaFin) : new Date();
+    inicio.setHours(0, 0, 0, 0);
+    fin.setHours(23, 59, 59, 999);
+
+    // Reservas por cancha
+    const reservasPorCancha = await this.prisma.reserva.groupBy({
+      by: ['canchaId'],
+      _count: { id: true },
+      where: {
+        fecha: { gte: inicio, lte: fin },
+      },
+    });
+
+    const canchas = await this.prisma.cancha.findMany({
+      select: { id: true, nombre: true, tipo: true },
+    });
+
+    const reservasPorCanchaConNombre = reservasPorCancha.map((r) => {
+      const cancha = canchas.find((c) => c.id === r.canchaId);
+      return {
+        canchaId: r.canchaId,
+        nombre: cancha?.nombre || 'Desconocida',
+        tipo: cancha?.tipo || 'OTRO',
+        cantidad: r._count.id,
+      };
+    });
+
+    // Reservas por estado
+    const reservasPorEstado = await this.prisma.reserva.groupBy({
+      by: ['estado'],
+      _count: { id: true },
+      where: {
+        fecha: { gte: inicio, lte: fin },
+      },
+    });
+
+    // Ingresos por metodo de pago
+    const ingresosPorMetodo = await this.prisma.pago.groupBy({
+      by: ['metodo'],
+      _sum: { monto: true },
+      _count: { id: true },
+      where: {
+        estado: 'COMPLETADO',
+        createdAt: { gte: inicio, lte: fin },
+      },
+    });
+
+    // Ingresos diarios del periodo
+    const pagos = await this.prisma.pago.findMany({
+      where: {
+        estado: 'COMPLETADO',
+        createdAt: { gte: inicio, lte: fin },
+      },
+      select: {
+        monto: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const ingresosDiarios = pagos.reduce((acc: any[], pago) => {
+      const fecha = pago.createdAt.toISOString().split('T')[0];
+      const existing = acc.find((i) => i.fecha === fecha);
+      if (existing) {
+        existing.monto += Number(pago.monto);
+      } else {
+        acc.push({ fecha, monto: Number(pago.monto) });
+      }
+      return acc;
+    }, []);
+
+    // Top clientes
+    const topClientes = await this.prisma.reserva.groupBy({
+      by: ['usuarioId'],
+      _count: { id: true },
+      where: {
+        fecha: { gte: inicio, lte: fin },
+        estado: { in: ['CONFIRMADA', 'COMPLETADA'] },
+      },
+      orderBy: { _count: { id: 'desc' } },
+      take: 5,
+    });
+
+    const usuarios = await this.prisma.usuario.findMany({
+      where: { id: { in: topClientes.map((c) => c.usuarioId) } },
+      select: { id: true, nombre: true, apellido: true },
+    });
+
+    const topClientesConNombre = topClientes.map((c) => {
+      const usuario = usuarios.find((u) => u.id === c.usuarioId);
+      return {
+        nombre: usuario ? `${usuario.nombre} ${usuario.apellido}` : 'Desconocido',
+        reservas: c._count.id,
+      };
+    });
+
+    // Totales
+    const totalReservas = await this.prisma.reserva.count({
+      where: { fecha: { gte: inicio, lte: fin } },
+    });
+
+    const totalIngresos = await this.prisma.pago.aggregate({
+      _sum: { monto: true },
+      where: {
+        estado: 'COMPLETADO',
+        createdAt: { gte: inicio, lte: fin },
+      },
+    });
+
+    const totalCanceladas = await this.prisma.reserva.count({
+      where: {
+        fecha: { gte: inicio, lte: fin },
+        estado: 'CANCELADA',
+      },
+    });
+
+    return {
+      periodo: {
+        inicio: inicio.toISOString().split('T')[0],
+        fin: fin.toISOString().split('T')[0],
+      },
+      resumen: {
+        totalReservas,
+        totalIngresos: Number(totalIngresos._sum.monto) || 0,
+        totalCanceladas,
+        tasaCancelacion: totalReservas > 0 ? ((totalCanceladas / totalReservas) * 100).toFixed(1) : 0,
+      },
+      reservasPorCancha: reservasPorCanchaConNombre,
+      reservasPorEstado: reservasPorEstado.map((r) => ({
+        estado: r.estado,
+        cantidad: r._count.id,
+      })),
+      ingresosPorMetodo: ingresosPorMetodo.map((i) => ({
+        metodo: i.metodo,
+        total: Number(i._sum.monto) || 0,
+        cantidad: i._count.id,
+      })),
+      ingresosDiarios,
+      topClientes: topClientesConNombre,
+    };
   }
 }

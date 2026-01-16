@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { useToast } from '@/components/Toast'
 
 interface Reserva {
   id: string
@@ -20,6 +21,13 @@ interface Reserva {
     estado: string
     referencia: string
   } | null
+}
+
+interface PoliticaCancelacion {
+  puedeCancelar: boolean
+  horasHastaReserva: number
+  horasMinimas: number
+  mensaje: string
 }
 
 const estadoColors: Record<string, string> = {
@@ -40,6 +48,8 @@ export default function MisReservasPage() {
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<string>('todas')
   const [cancelando, setCancelando] = useState<string | null>(null)
+  const [modalCancelar, setModalCancelar] = useState<{ reserva: Reserva; politica: PoliticaCancelacion } | null>(null)
+  const { showSuccess, showError, showWarning } = useToast()
 
   useEffect(() => {
     cargarReservas()
@@ -56,15 +66,26 @@ export default function MisReservasPage() {
     }
   }
 
-  const handleCancelar = async (id: string) => {
-    if (!confirm('¿Estás seguro de cancelar esta reserva?')) return
-
-    setCancelando(id)
+  const handleMostrarCancelar = async (reserva: Reserva) => {
     try {
-      await api.cancelarReserva(id)
+      const politica = await api.verificarPoliticaCancelacion(reserva.id)
+      setModalCancelar({ reserva, politica })
+    } catch (error: any) {
+      showError(error.message || 'Error al verificar politica')
+    }
+  }
+
+  const handleConfirmarCancelar = async (forzar = false) => {
+    if (!modalCancelar) return
+
+    setCancelando(modalCancelar.reserva.id)
+    try {
+      await api.cancelarReserva(modalCancelar.reserva.id, forzar)
+      showSuccess('Reserva cancelada exitosamente')
+      setModalCancelar(null)
       cargarReservas()
     } catch (error: any) {
-      alert(error.message || 'Error al cancelar')
+      showError(error.message || 'Error al cancelar')
     } finally {
       setCancelando(null)
     }
@@ -152,11 +173,10 @@ export default function MisReservasPage() {
 
                   {(reserva.estado === 'PENDIENTE' || reserva.estado === 'CONFIRMADA') && (
                     <button
-                      onClick={() => handleCancelar(reserva.id)}
-                      disabled={cancelando === reserva.id}
+                      onClick={() => handleMostrarCancelar(reserva)}
                       className="text-red-600 hover:text-red-700 text-sm"
                     >
-                      {cancelando === reserva.id ? 'Cancelando...' : 'Cancelar'}
+                      Cancelar
                     </button>
                   )}
 
@@ -176,6 +196,80 @@ export default function MisReservasPage() {
           <Link href="/canchas" className="btn-primary">
             Hacer mi primera reserva
           </Link>
+        </div>
+      )}
+
+      {/* Modal de Cancelacion */}
+      {modalCancelar && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md animate-fadeIn">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 rounded-full bg-red-100">
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-center text-gray-800 mb-2">
+                Cancelar Reserva
+              </h3>
+              <p className="text-center text-gray-600 mb-4">
+                {modalCancelar.reserva.cancha.nombre} - {formatFecha(modalCancelar.reserva.fecha)} {modalCancelar.reserva.horaInicio}
+              </p>
+
+              {modalCancelar.politica.puedeCancelar ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-green-800 font-medium">Cancelacion sin penalidad</p>
+                      <p className="text-green-700 text-sm">{modalCancelar.politica.mensaje}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <p className="text-amber-800 font-medium">Cancelacion tardia</p>
+                      <p className="text-amber-700 text-sm">{modalCancelar.politica.mensaje}</p>
+                      <p className="text-amber-600 text-xs mt-1">
+                        La politica requiere cancelar con al menos {modalCancelar.politica.horasMinimas} horas de anticipacion.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setModalCancelar(null)}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                  disabled={cancelando !== null}
+                >
+                  Volver
+                </button>
+                <button
+                  onClick={() => handleConfirmarCancelar(!modalCancelar.politica.puedeCancelar)}
+                  disabled={cancelando !== null}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  {cancelando ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Cancelando...
+                    </>
+                  ) : (
+                    'Confirmar Cancelacion'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

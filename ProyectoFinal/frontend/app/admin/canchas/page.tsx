@@ -11,6 +11,7 @@ interface Cancha {
   descripcion: string
   precioPorHora: number
   activa: boolean
+  imagen?: string
   horarios?: Horario[]
 }
 
@@ -60,7 +61,8 @@ const initialFormData = {
   tipo: '',
   descripcion: '',
   precioPorHora: 0,
-  activa: true
+  activa: true,
+  imagen: ''
 }
 
 const initialHorarios: Horario[] = [
@@ -83,6 +85,8 @@ export default function AdminCanchasPage() {
   const [formData, setFormData] = useState(initialFormData)
   const [horarios, setHorarios] = useState<Horario[]>(initialHorarios)
   const [selectedCancha, setSelectedCancha] = useState<Cancha | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const { showToast } = useToast()
 
   useEffect(() => {
@@ -103,6 +107,7 @@ export default function AdminCanchasPage() {
   const handleNueva = () => {
     setEditando(null)
     setFormData(initialFormData)
+    setImagePreview(null)
     setModalOpen(true)
   }
 
@@ -113,9 +118,43 @@ export default function AdminCanchasPage() {
       tipo: cancha.tipo,
       descripcion: cancha.descripcion,
       precioPorHora: cancha.precioPorHora,
-      activa: cancha.activa
+      activa: cancha.activa,
+      imagen: cancha.imagen || ''
     })
+    setImagePreview(cancha.imagen ? api.getImageUrl(cancha.imagen) : null)
     setModalOpen(true)
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.match(/^image\/(jpeg|jpg|png|gif|webp)$/)) {
+      showToast('Solo se permiten imagenes (jpg, png, gif, webp)', 'error')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('La imagen no puede ser mayor a 5MB', 'error')
+      return
+    }
+
+    setUploading(true)
+    try {
+      const result = await api.uploadFile(file)
+      setFormData({ ...formData, imagen: result.filename })
+      setImagePreview(api.getImageUrl(result.filename))
+      showToast('Imagen subida correctamente', 'success')
+    } catch (error: any) {
+      showToast(error.message || 'Error al subir la imagen', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setFormData({ ...formData, imagen: '' })
+    setImagePreview(null)
   }
 
   const handleHorarios = async (cancha: Cancha) => {
@@ -231,12 +270,28 @@ export default function AdminCanchasPage() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {canchas.map((cancha) => (
             <div key={cancha.id} className={`bg-white rounded-xl shadow-sm overflow-hidden border transition-all hover:shadow-md ${!cancha.activa ? 'opacity-60' : ''}`}>
-              <div className={`h-32 flex items-center justify-center ${
-                cancha.tipo === 'FUTBOL' ? 'bg-gradient-to-br from-green-500 to-green-700' :
-                cancha.tipo === 'TENIS' ? 'bg-gradient-to-br from-yellow-500 to-amber-600' : 'bg-gradient-to-br from-orange-500 to-orange-700'
-              }`}>
-                {tipoIcons[cancha.tipo]}
-              </div>
+              {cancha.imagen ? (
+                <div className="h-40 bg-gray-100 relative">
+                  <img
+                    src={api.getImageUrl(cancha.imagen)}
+                    alt={cancha.nombre}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className={`absolute top-2 right-2 px-2 py-1 text-xs rounded-full font-medium ${
+                    cancha.tipo === 'FUTBOL' ? 'bg-green-500 text-white' :
+                    cancha.tipo === 'TENIS' ? 'bg-yellow-500 text-white' : 'bg-orange-500 text-white'
+                  }`}>
+                    {cancha.tipo}
+                  </div>
+                </div>
+              ) : (
+                <div className={`h-32 flex items-center justify-center ${
+                  cancha.tipo === 'FUTBOL' ? 'bg-gradient-to-br from-green-500 to-green-700' :
+                  cancha.tipo === 'TENIS' ? 'bg-gradient-to-br from-yellow-500 to-amber-600' : 'bg-gradient-to-br from-orange-500 to-orange-700'
+                }`}>
+                  {tipoIcons[cancha.tipo]}
+                </div>
+              )}
               <div className="p-4">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-semibold text-lg text-gray-800">{cancha.nombre}</h3>
@@ -340,6 +395,55 @@ export default function AdminCanchasPage() {
                   placeholder="0.00"
                 />
               </div>
+              {/* Imagen */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Imagen de la Cancha
+                </label>
+                {imagePreview ? (
+                  <div className="relative">
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="w-full h-40 object-cover rounded-lg border"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                    {uploading ? (
+                      <div className="flex flex-col items-center">
+                        <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        <span className="mt-2 text-sm text-gray-500">Subiendo...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="mt-2 text-sm text-gray-500">Click para subir imagen</span>
+                        <span className="text-xs text-gray-400">JPG, PNG, GIF (max 5MB)</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      onChange={handleImageUpload}
+                      disabled={uploading}
+                    />
+                  </label>
+                )}
+              </div>
+
               {editando && (
                 <div className="flex items-center">
                   <input

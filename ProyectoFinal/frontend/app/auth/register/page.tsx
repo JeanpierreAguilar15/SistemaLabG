@@ -54,7 +54,7 @@ export default function RegisterPage() {
         password: formData.password,
       })
 
-      api.setToken(response.token)
+      api.setTokens(response.token, response.refreshToken)
       showSuccess(`Bienvenido a SportCenter, ${formData.nombre}! Tu cuenta ha sido creada.`)
 
       setTimeout(() => {
