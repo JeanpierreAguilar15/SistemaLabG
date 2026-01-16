@@ -72,31 +72,40 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 animated-gradient pattern-dots items-center justify-center p-12">
-        <div className="max-w-lg text-center">
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 items-center justify-center p-12 relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 right-10 w-40 h-40 border-2 border-white rounded-full"></div>
+          <div className="absolute top-60 left-10 w-20 h-20 border-2 border-white rounded-full"></div>
+          <div className="absolute bottom-10 right-20 w-28 h-28 border-2 border-white rounded-full"></div>
+          <div className="absolute bottom-60 left-40 w-16 h-16 border-2 border-white rounded-full"></div>
+        </div>
+        <div className="max-w-lg text-center relative z-10">
           <div className="mb-8">
-            <div className="inline-flex items-center justify-center w-24 h-24 bg-white/20 backdrop-blur-sm rounded-3xl mb-6 float">
-              <span className="text-6xl">🏆</span>
+            <div className="inline-flex items-center justify-center w-24 h-24 bg-white/10 backdrop-blur-sm rounded-3xl mb-6 border border-white/20">
+              <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+              </svg>
             </div>
           </div>
           <h2 className="text-4xl font-bold text-white mb-4">
             Unete a la comunidad deportiva
           </h2>
-          <p className="text-xl text-white/80 mb-8">
+          <p className="text-xl text-blue-100 mb-8">
             Miles de deportistas ya reservan sus canchas con nosotros. Registrate gratis y empieza a jugar.
           </p>
           <div className="grid grid-cols-3 gap-4 max-w-xs mx-auto">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
+            <div className="bg-blue-500/20 backdrop-blur-sm rounded-xl p-4 text-center border border-blue-400/20">
               <p className="text-2xl font-bold text-white">5+</p>
-              <p className="text-xs text-white/70">Canchas</p>
+              <p className="text-xs text-blue-200">Canchas</p>
             </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
+            <div className="bg-blue-500/20 backdrop-blur-sm rounded-xl p-4 text-center border border-blue-400/20">
               <p className="text-2xl font-bold text-white">500+</p>
-              <p className="text-xs text-white/70">Reservas</p>
+              <p className="text-xs text-blue-200">Reservas</p>
             </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
+            <div className="bg-blue-500/20 backdrop-blur-sm rounded-xl p-4 text-center border border-blue-400/20">
               <p className="text-2xl font-bold text-white">4.9</p>
-              <p className="text-xs text-white/70">Rating</p>
+              <p className="text-xs text-blue-200">Rating</p>
             </div>
           </div>
         </div>

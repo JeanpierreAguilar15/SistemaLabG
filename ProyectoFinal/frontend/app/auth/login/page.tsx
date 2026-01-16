@@ -173,28 +173,44 @@ export default function LoginPage() {
       </div>
 
       {/* Right Side - Image/Branding */}
-      <div className="hidden lg:flex lg:w-1/2 animated-gradient pattern-dots items-center justify-center p-12">
-        <div className="max-w-lg text-center">
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 items-center justify-center p-12 relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 left-10 w-32 h-32 border-2 border-white rounded-full"></div>
+          <div className="absolute top-40 right-20 w-20 h-20 border-2 border-white rounded-full"></div>
+          <div className="absolute bottom-20 left-20 w-24 h-24 border-2 border-white rounded-full"></div>
+          <div className="absolute bottom-40 right-10 w-16 h-16 border-2 border-white rounded-full"></div>
+        </div>
+        <div className="max-w-lg text-center relative z-10">
           <div className="mb-8">
-            <div className="inline-flex items-center justify-center w-24 h-24 bg-white/20 backdrop-blur-sm rounded-3xl mb-6">
-              <span className="text-6xl">⚽</span>
+            <div className="inline-flex items-center justify-center w-24 h-24 bg-white/10 backdrop-blur-sm rounded-3xl mb-6 border border-white/20">
+              <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
             </div>
           </div>
           <h2 className="text-4xl font-bold text-white mb-4">
             Tu cancha perfecta te espera
           </h2>
-          <p className="text-xl text-white/80 mb-8">
+          <p className="text-xl text-blue-100 mb-8">
             Reserva futbol, tenis o basquet en minutos. Sin llamadas, sin esperas.
           </p>
           <div className="flex justify-center space-x-4">
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-              <span className="text-3xl">🎾</span>
+            <div className="w-16 h-16 bg-blue-500/30 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-blue-400/30">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" strokeWidth={1.5} />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6l4 2" />
+              </svg>
             </div>
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-              <span className="text-3xl">🏀</span>
+            <div className="w-16 h-16 bg-blue-500/30 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-blue-400/30">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
             </div>
-            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-              <span className="text-3xl">⚽</span>
+            <div className="w-16 h-16 bg-blue-500/30 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-blue-400/30">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
           </div>
         </div>
