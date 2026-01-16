@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsuariosModule } from '@modules/usuarios/usuarios.module';
+import { NotificacionesModule } from '@modules/notificaciones/notificaciones.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { UsuariosModule } from '@modules/usuarios/usuarios.module';
       }),
     }),
     UsuariosModule,
+    NotificacionesModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

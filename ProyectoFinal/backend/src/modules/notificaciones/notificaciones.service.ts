@@ -235,4 +235,48 @@ export class NotificacionesService {
       return { success: false, message: 'Error enviando email' };
     }
   }
+
+  async enviarRecuperacionPassword(email: string, data: { nombre: string; resetUrl: string }) {
+    const content = `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </div>
+      <h2>Hola ${data.nombre}!</h2>
+      <p>Recibimos una solicitud para restablecer tu contrasena. Si no realizaste esta solicitud, puedes ignorar este correo.</p>
+
+      <p>Para restablecer tu contrasena, haz clic en el siguiente boton:</p>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${data.resetUrl}" class="button" style="color: white;">Restablecer Contrasena</a>
+      </div>
+
+      <p style="color: #64748b; font-size: 14px;">
+        Este enlace expirara en 1 hora por razones de seguridad.
+      </p>
+
+      <p style="color: #64748b; font-size: 14px;">
+        Si el boton no funciona, copia y pega el siguiente enlace en tu navegador:
+      </p>
+      <p style="word-break: break-all; font-size: 12px; color: #3b82f6;">
+        ${data.resetUrl}
+      </p>
+    `;
+
+    try {
+      await this.transporter.sendMail({
+        from: this.fromEmail,
+        to: email,
+        subject: 'Recuperar Contrasena - SportCenter',
+        html: this.getEmailTemplate(content, 'Recuperacion de Contrasena'),
+      });
+      console.log('Email de recuperacion de password enviado a:', email);
+      return { success: true, message: 'Email enviado' };
+    } catch (error) {
+      console.error('Error enviando email de recuperacion:', error);
+      return { success: false, message: 'Error enviando email' };
+    }
+  }
 }

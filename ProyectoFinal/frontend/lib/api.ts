@@ -65,6 +65,27 @@ class ApiClient {
     });
   }
 
+  async forgotPassword(email: string) {
+    return this.request<any>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(token: string, password: string) {
+    return this.request<any>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    });
+  }
+
+  async changePassword(currentPassword: string, newPassword: string) {
+    return this.request<any>('/auth/change-password', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  }
+
   // Usuarios
   async getPerfil() {
     return this.request<any>('/usuarios/perfil');
@@ -197,6 +218,27 @@ class ApiClient {
   async toggleUsuarioActivo(id: string) {
     return this.request<any>(`/usuarios/admin/${id}/toggle-activo`, {
       method: 'PATCH',
+    });
+  }
+
+  // Admin - Pagos
+  async getAllPagos(estado?: string) {
+    const params = new URLSearchParams();
+    if (estado) params.append('estado', estado);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any[]>(`/pagos/admin/all${query}`);
+  }
+
+  async aprobarPago(id: string) {
+    return this.request<any>(`/pagos/admin/${id}/aprobar`, {
+      method: 'PATCH',
+    });
+  }
+
+  async rechazarPago(id: string, motivo?: string) {
+    return this.request<any>(`/pagos/admin/${id}/rechazar`, {
+      method: 'PATCH',
+      body: JSON.stringify({ motivo }),
     });
   }
 }

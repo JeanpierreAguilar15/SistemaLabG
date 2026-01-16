@@ -13,7 +13,6 @@ export class PagosService {
   ) {}
 
   async procesarPago(usuarioId: string, data: any) {
-    // Verificar que la reserva existe y pertenece al usuario
     const reserva = await this.reservasService.findById(data.reservaId);
 
     if (reserva.usuarioId !== usuarioId) {
@@ -28,14 +27,16 @@ export class PagosService {
       throw new BadRequestException('No se puede pagar una reserva cancelada');
     }
 
-    // Crear el pago
+    const esPresencial = data.metodo === 'EFECTIVO';
+    const estadoPago = esPresencial ? 'PENDIENTE' : 'COMPLETADO';
+
     const pago = await this.prisma.pago.create({
       data: {
         reservaId: data.reservaId,
         usuarioId,
         monto: reserva.cancha.precioPorHora,
         metodo: data.metodo as MetodoPago,
-        estado: 'COMPLETADO',
+        estado: estadoPago,
         referencia: this.generarReferencia(),
       },
       include: {
@@ -48,41 +49,39 @@ export class PagosService {
       },
     });
 
-    // Actualizar estado de la reserva a CONFIRMADA
-    await this.prisma.reserva.update({
-      where: { id: data.reservaId },
-      data: { estado: 'CONFIRMADA' },
-    });
+    // Solo confirmar reserva si el pago es completado (tarjeta)
+    if (!esPresencial) {
+      await this.prisma.reserva.update({
+        where: { id: data.reservaId },
+        data: { estado: 'CONFIRMADA' },
+      });
 
-    // Enviar email de confirmacion
-    const metodosNombre: Record<string, string> = {
-      EFECTIVO: 'Efectivo',
-      TARJETA: 'Tarjeta de Credito/Debito',
-      TRANSFERENCIA: 'Transferencia Bancaria',
-      QR: 'Pago QR',
-    };
-
-    await this.notificacionesService.enviarConfirmacionPago(
-      pago.usuario.email,
-      {
-        nombre: `${pago.usuario.nombre} ${pago.usuario.apellido}`,
-        cancha: reserva.cancha.nombre,
-        fecha: new Date(reserva.fecha).toLocaleDateString('es-ES', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }),
-        horaInicio: reserva.horaInicio,
-        horaFin: reserva.horaFin,
-        monto: Number(pago.monto),
-        metodo: metodosNombre[data.metodo] || data.metodo,
-        referencia: pago.referencia || '',
-      },
-    );
+      // Enviar email de confirmacion solo para pagos completados
+      await this.enviarEmailConfirmacion(pago, reserva, data.metodo);
+    } else {
+      // Para pago presencial, enviar email de reserva pendiente
+      await this.notificacionesService.enviarConfirmacionReserva(
+        pago.usuario.email,
+        {
+          nombre: `${pago.usuario.nombre} ${pago.usuario.apellido}`,
+          cancha: reserva.cancha.nombre,
+          fecha: new Date(reserva.fecha).toLocaleDateString('es-ES', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }),
+          horaInicio: reserva.horaInicio,
+          horaFin: reserva.horaFin,
+          monto: Number(reserva.cancha.precioPorHora),
+        },
+      );
+    }
 
     return {
-      message: 'Pago procesado exitosamente',
+      message: esPresencial
+        ? 'Reserva registrada. Recuerda pagar al llegar al local.'
+        : 'Pago procesado exitosamente',
       pago,
       comprobante: {
         referencia: pago.referencia,
@@ -91,8 +90,78 @@ export class PagosService {
         cancha: reserva.cancha.nombre,
         fechaReserva: reserva.fecha,
         horario: `${reserva.horaInicio} - ${reserva.horaFin}`,
+        estadoPago: estadoPago,
       },
     };
+  }
+
+  // Admin: Aprobar pago presencial
+  async aprobarPago(pagoId: string) {
+    const pago = await this.findById(pagoId);
+
+    if (pago.estado === 'COMPLETADO') {
+      throw new BadRequestException('Este pago ya esta completado');
+    }
+
+    const pagoActualizado = await this.prisma.pago.update({
+      where: { id: pagoId },
+      data: { estado: 'COMPLETADO' },
+      include: {
+        reserva: { include: { cancha: true } },
+        usuario: { select: { email: true, nombre: true, apellido: true } },
+      },
+    });
+
+    // Confirmar la reserva
+    await this.prisma.reserva.update({
+      where: { id: pago.reservaId },
+      data: { estado: 'CONFIRMADA' },
+    });
+
+    // Enviar email de confirmacion
+    await this.enviarEmailConfirmacion(pagoActualizado, pago.reserva, pago.metodo);
+
+    return {
+      message: 'Pago aprobado exitosamente',
+      pago: pagoActualizado,
+    };
+  }
+
+  // Admin: Rechazar pago
+  async rechazarPago(pagoId: string, motivo?: string) {
+    const pago = await this.findById(pagoId);
+
+    if (pago.estado === 'COMPLETADO') {
+      throw new BadRequestException('No se puede rechazar un pago completado');
+    }
+
+    await this.prisma.pago.update({
+      where: { id: pagoId },
+      data: { estado: 'RECHAZADO' },
+    });
+
+    // Cancelar la reserva
+    await this.prisma.reserva.update({
+      where: { id: pago.reservaId },
+      data: { estado: 'CANCELADA' },
+    });
+
+    return { message: 'Pago rechazado y reserva cancelada' };
+  }
+
+  // Admin: Obtener todos los pagos
+  async findAll(estado?: string) {
+    const where: any = {};
+    if (estado) where.estado = estado;
+
+    return this.prisma.pago.findMany({
+      where,
+      include: {
+        reserva: { include: { cancha: true } },
+        usuario: { select: { id: true, nombre: true, apellido: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async findByUsuario(usuarioId: string) {
@@ -125,6 +194,34 @@ export class PagosService {
     }
 
     return pago;
+  }
+
+  private async enviarEmailConfirmacion(pago: any, reserva: any, metodo: string) {
+    const metodosNombre: Record<string, string> = {
+      EFECTIVO: 'Efectivo (Presencial)',
+      TARJETA: 'Tarjeta de Credito/Debito',
+      TRANSFERENCIA: 'Transferencia Bancaria',
+      QR: 'Pago QR',
+    };
+
+    await this.notificacionesService.enviarConfirmacionPago(
+      pago.usuario.email,
+      {
+        nombre: `${pago.usuario.nombre} ${pago.usuario.apellido}`,
+        cancha: reserva.cancha.nombre,
+        fecha: new Date(reserva.fecha).toLocaleDateString('es-ES', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
+        horaInicio: reserva.horaInicio,
+        horaFin: reserva.horaFin,
+        monto: Number(pago.monto),
+        metodo: metodosNombre[metodo] || metodo,
+        referencia: pago.referencia || '',
+      },
+    );
   }
 
   private generarReferencia(): string {

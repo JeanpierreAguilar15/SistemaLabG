@@ -88,4 +88,17 @@ export class UsuariosService {
       },
     });
   }
+
+  async findByIdWithPassword(id: string) {
+    return this.prisma.usuario.findUnique({
+      where: { id },
+    });
+  }
+
+  async updatePassword(id: string, hashedPassword: string) {
+    return this.prisma.usuario.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+  }
 }
