@@ -4,9 +4,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { useToast } from '@/components/Toast'
 
 export default function RegisterPage() {
   const router = useRouter()
+  const { showSuccess, showError, showWarning } = useToast()
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -28,12 +30,16 @@ export default function RegisterPage() {
     setError('')
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Las contrasenas no coinciden')
+      const msg = 'Las contrasenas no coinciden'
+      setError(msg)
+      showWarning(msg)
       return
     }
 
     if (formData.password.length < 6) {
-      setError('La contrasena debe tener al menos 6 caracteres')
+      const msg = 'La contrasena debe tener al menos 6 caracteres'
+      setError(msg)
+      showWarning(msg)
       return
     }
 
@@ -49,9 +55,15 @@ export default function RegisterPage() {
       })
 
       api.setToken(response.token)
-      router.push('/portal')
+      showSuccess(`Bienvenido a SportCenter, ${formData.nombre}! Tu cuenta ha sido creada.`)
+
+      setTimeout(() => {
+        router.push('/portal')
+      }, 1500)
     } catch (err: any) {
-      setError(err.message || 'Error al registrarse')
+      const errorMsg = err.message || 'Error al registrarse'
+      setError(errorMsg)
+      showError(errorMsg)
     } finally {
       setLoading(false)
     }

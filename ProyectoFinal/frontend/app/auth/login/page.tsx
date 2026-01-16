@@ -4,9 +4,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { useToast } from '@/components/Toast'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { showSuccess, showError } = useToast()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -22,13 +24,19 @@ export default function LoginPage() {
       const response = await api.login(email, password)
       api.setToken(response.token)
 
-      if (response.usuario.rol === 'ADMIN') {
-        router.push('/admin')
-      } else {
-        router.push('/portal')
-      }
+      showSuccess(`Bienvenido de vuelta, ${response.usuario.nombre}!`)
+
+      setTimeout(() => {
+        if (response.usuario.rol === 'ADMIN') {
+          router.push('/admin')
+        } else {
+          router.push('/portal')
+        }
+      }, 1000)
     } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesion')
+      const errorMsg = err.message || 'Error al iniciar sesion'
+      setError(errorMsg)
+      showError(errorMsg)
     } finally {
       setLoading(false)
     }

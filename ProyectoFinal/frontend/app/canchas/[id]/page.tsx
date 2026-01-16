@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import Navbar from '@/components/Navbar'
+import { useToast } from '@/components/Toast'
 
 interface Cancha {
   id: string
@@ -44,6 +45,7 @@ const tipoGradients: Record<string, string> = {
 export default function CanchaDetallePage() {
   const params = useParams()
   const router = useRouter()
+  const { showSuccess, showError, showInfo } = useToast()
   const canchaId = params.id as string
 
   const [cancha, setCancha] = useState<Cancha | null>(null)
@@ -97,6 +99,7 @@ export default function CanchaDetallePage() {
     const token = api.getToken()
     if (!token) {
       setShowLoginModal(true)
+      showInfo('Necesitas iniciar sesion para reservar')
       return
     }
 
@@ -111,9 +114,15 @@ export default function CanchaDetallePage() {
         horaFin: selectedSlot.horaFin,
       })
 
-      router.push(`/portal/reservas/${reserva.reserva.id}/pagar`)
+      showSuccess('Reserva creada exitosamente! Redirigiendo al pago...')
+
+      setTimeout(() => {
+        router.push(`/portal/reservas/${reserva.reserva.id}/pagar`)
+      }, 1500)
     } catch (err: any) {
-      setError(err.message || 'Error al crear la reserva')
+      const errorMsg = err.message || 'Error al crear la reserva'
+      setError(errorMsg)
+      showError(errorMsg)
     } finally {
       setReservando(false)
     }
