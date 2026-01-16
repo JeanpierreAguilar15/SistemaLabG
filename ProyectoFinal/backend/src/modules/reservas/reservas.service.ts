@@ -27,29 +27,39 @@ export class ReservasService {
     // Obtener precio de la cancha
     const cancha = await this.canchasService.findById(data.canchaId);
 
-    const reserva = await this.prisma.reserva.create({
-      data: {
-        usuarioId,
-        canchaId: data.canchaId,
-        fecha: new Date(data.fecha),
-        horaInicio: data.horaInicio,
-        horaFin: data.horaFin,
-        notas: data.notas,
-        estado: 'PENDIENTE',
-      },
-      include: {
-        cancha: true,
-        usuario: {
-          select: { id: true, nombre: true, apellido: true, email: true },
+    try {
+      const reserva = await this.prisma.reserva.create({
+        data: {
+          usuarioId,
+          canchaId: data.canchaId,
+          fecha: new Date(data.fecha),
+          horaInicio: data.horaInicio,
+          horaFin: data.horaFin,
+          notas: data.notas,
+          estado: 'PENDIENTE',
         },
-      },
-    });
+        include: {
+          cancha: true,
+          usuario: {
+            select: { id: true, nombre: true, apellido: true, email: true },
+          },
+        },
+      });
 
-    return {
-      message: 'Reserva creada exitosamente',
-      reserva,
-      montoPagar: cancha.precioPorHora,
-    };
+      return {
+        message: 'Reserva creada exitosamente',
+        reserva,
+        montoPagar: cancha.precioPorHora,
+      };
+    } catch (error: any) {
+      // Handle unique constraint violation (race condition)
+      if (error.code === 'P2002') {
+        throw new BadRequestException(
+          'Este horario acaba de ser reservado por otro usuario. Por favor selecciona otro horario.',
+        );
+      }
+      throw error;
+    }
   }
 
   async findByUsuario(usuarioId: string) {
