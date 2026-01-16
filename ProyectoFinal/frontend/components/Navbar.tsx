@@ -49,8 +49,8 @@ export default function Navbar() {
   const isActive = (path: string) => pathname === path
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-slate-900 ${
-      isScrolled ? 'shadow-xl shadow-black/20' : ''
+    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-slate-800/95 backdrop-blur-sm ${
+      isScrolled ? 'shadow-lg shadow-black/10' : ''
     }`}>
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
