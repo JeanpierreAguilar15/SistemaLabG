@@ -150,3 +150,17 @@ model Pago {
 
   @@map("pagos")
 }
+
+// ============================================
+// MÓDULO: CONFIGURACIÓN
+// ============================================
+
+model ConfiguracionSistema {
+  id        String   @id @default(uuid())
+  clave     String   @unique
+  valor     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("configuracion_sistema")
+}
