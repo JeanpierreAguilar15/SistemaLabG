@@ -121,12 +121,12 @@ export class CanchasService {
 
   async updateHorarios(id: string, horarios: any[]) {
     // Delete existing horarios and create new ones
-    await this.prisma.horarioDisponible.deleteMany({
+    await this.prisma.horarioCancha.deleteMany({
       where: { canchaId: id }
     });
 
     // Create new horarios
-    const newHorarios = await this.prisma.horarioDisponible.createMany({
+    await this.prisma.horarioCancha.createMany({
       data: horarios.map(h => ({
         canchaId: id,
         diaSemana: h.diaSemana,
