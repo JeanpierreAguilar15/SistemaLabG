@@ -75,9 +75,9 @@ export class PagosService {
         }),
         horaInicio: reserva.horaInicio,
         horaFin: reserva.horaFin,
-        monto: pago.monto,
+        monto: Number(pago.monto),
         metodo: metodosNombre[data.metodo] || data.metodo,
-        referencia: pago.referencia,
+        referencia: pago.referencia || '',
       },
     );
 
