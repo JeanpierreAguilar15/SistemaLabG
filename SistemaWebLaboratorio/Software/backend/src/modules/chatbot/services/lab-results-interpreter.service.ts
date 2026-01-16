@@ -310,26 +310,74 @@ IMPORTANTE EN EL RESUMEN:
       cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
     }
 
+    // Función auxiliar para intentar reparar JSON truncado
+    const repairTruncatedJson = (text: string): string => {
+      let repaired = text;
+
+      // Contar brackets y braces abiertos
+      let braceCount = 0;
+      let bracketCount = 0;
+      let inString = false;
+      let escape = false;
+
+      for (const char of repaired) {
+        if (escape) {
+          escape = false;
+          continue;
+        }
+        if (char === '\\') {
+          escape = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = !inString;
+          continue;
+        }
+        if (!inString) {
+          if (char === '{') braceCount++;
+          if (char === '}') braceCount--;
+          if (char === '[') bracketCount++;
+          if (char === ']') bracketCount--;
+        }
+      }
+
+      // Si estamos dentro de un string, cerrarlo
+      if (inString) {
+        repaired += '"';
+      }
+
+      // Cerrar brackets y braces pendientes
+      while (bracketCount > 0) {
+        repaired += ']';
+        bracketCount--;
+      }
+      while (braceCount > 0) {
+        repaired += '}';
+        braceCount--;
+      }
+
+      return repaired;
+    };
+
     // Intentar parsear con diferentes niveles de limpieza
     const cleaningStrategies = [
       // Estrategia 1: Limpieza básica
       (text: string) => text
-        .replace(/[\x00-\x1F\x7F]/g, ' ') // Caracteres de control
-        .replace(/,\s*}/g, '}') // Comas trailing antes de }
-        .replace(/,\s*]/g, ']'), // Comas trailing antes de ]
+        .replace(/[\x00-\x1F\x7F]/g, ' ')
+        .replace(/,\s*}/g, '}')
+        .replace(/,\s*]/g, ']'),
 
-      // Estrategia 2: Corregir comas faltantes entre elementos de array
+      // Estrategia 2: Corregir comas faltantes
       (text: string) => text
         .replace(/[\x00-\x1F\x7F]/g, ' ')
         .replace(/,\s*}/g, '}')
         .replace(/,\s*]/g, ']')
-        .replace(/}\s*{/g, '},{') // Objetos sin coma entre ellos
-        .replace(/"\s*{/g, '",{') // String seguido de objeto sin coma
-        .replace(/}\s*"/g, '},"'), // Objeto seguido de string sin coma
+        .replace(/}\s*{/g, '},{')
+        .replace(/"\s*{/g, '",{')
+        .replace(/}\s*"/g, '},"'),
 
-      // Estrategia 3: Normalizar espacios y saltos de línea dentro de strings
+      // Estrategia 3: Normalizar newlines dentro de strings
       (text: string) => {
-        // Reemplazar newlines dentro de strings JSON por espacios
         let result = '';
         let inString = false;
         let escape = false;
@@ -351,7 +399,7 @@ IMPORTANTE EN EL RESUMEN:
             continue;
           }
           if (inString && (char === '\n' || char === '\r')) {
-            result += ' '; // Reemplazar newline por espacio
+            result += ' ';
             continue;
           }
           result += char;
@@ -363,14 +411,14 @@ IMPORTANTE EN EL RESUMEN:
           .replace(/}\s*{/g, '},{');
       },
 
-      // Estrategia 4: Limpieza agresiva - quitar caracteres no ASCII problemáticos
+      // Estrategia 4: Limpieza agresiva
       (text: string) => text
         .replace(/[\x00-\x1F\x7F]/g, ' ')
-        .replace(/[""]/g, '"') // Comillas tipográficas
-        .replace(/['']/g, "'") // Apóstrofes tipográficos
-        .replace(/…/g, '...') // Elipsis
-        .replace(/–/g, '-') // Guión largo
-        .replace(/—/g, '-') // Guión más largo
+        .replace(/[""]/g, '"')
+        .replace(/['']/g, "'")
+        .replace(/…/g, '...')
+        .replace(/–/g, '-')
+        .replace(/—/g, '-')
         .replace(/,\s*}/g, '}')
         .replace(/,\s*]/g, ']')
         .replace(/}\s*{/g, '},{')
@@ -379,34 +427,21 @@ IMPORTANTE EN EL RESUMEN:
         .replace(/\t/g, ' ')
         .replace(/\s+/g, ' '),
 
-      // Estrategia 5: Escapar comillas problemáticas dentro de valores string
+      // Estrategia 5: Reparar JSON truncado
       (text: string) => {
-        // Esta estrategia intenta arreglar comillas sin escapar dentro de strings
-        // Busca patrones como ": "valor con "comillas" dentro" y los escapa
         let result = text
           .replace(/[\x00-\x1F\x7F]/g, ' ')
+          .replace(/[""]/g, '"')
+          .replace(/['']/g, "'")
           .replace(/\n/g, ' ')
-          .replace(/\r/g, ' ');
-
-        // Reemplazar comillas tipográficas primero
-        result = result.replace(/[""]/g, '"').replace(/['']/g, "'");
-
-        // Intentar arreglar comillas dentro de valores de interpretacion
-        // Patrón: "interpretacion": "texto con "comillas" dentro"
-        result = result.replace(
-          /"(interpretacion|resumen_general|observaciones)":\s*"([^}]+?)"/g,
-          (match, key, value) => {
-            // Escapar comillas internas (no las del inicio/fin)
-            const escaped = value.replace(/"/g, '\\"');
-            return `"${key}": "${escaped}"`;
-          }
-        );
-
-        return result
+          .replace(/\r/g, ' ')
           .replace(/,\s*}/g, '}')
           .replace(/,\s*]/g, ']')
           .replace(/}\s*{/g, '},{')
           .replace(/\s+/g, ' ');
+
+        // Reparar JSON truncado
+        return repairTruncatedJson(result);
       },
     ];
 
@@ -432,7 +467,6 @@ IMPORTANTE EN EL RESUMEN:
       } catch (error) {
         lastError = error;
         if (i === cleaningStrategies.length - 1) {
-          // Log del error y contexto alrededor de la posición del error
           const errorMatch = error.message.match(/position (\d+)/);
           if (errorMatch) {
             const pos = parseInt(errorMatch[1]);
@@ -447,86 +481,132 @@ IMPORTANTE EN EL RESUMEN:
     // Si todo falla, intentar extraer información con regex mejorado
     this.logger.warn('Todas las estrategias de parsing fallaron, extrayendo con regex');
 
-    // Intentar extraer resumen_general con patrón más flexible
-    let resumen = '';
-    const resumenPatterns = [
-      /"resumen_general"\s*:\s*"((?:[^"\\]|\\.)*)"/s,  // Estándar con escapes
-      /resumen_general["']?\s*:\s*["']([^"']{20,})["']/i,  // Básico
-      /"resumen_general"\s*:\s*"([^}]+)(?=",\s*"recomendaciones)/s,  // Hasta recomendaciones
-    ];
-    for (const pattern of resumenPatterns) {
-      const match = responseText.match(pattern);
-      if (match && match[1]) {
-        resumen = match[1].replace(/\\"/g, '"').replace(/\\n/g, ' ').trim();
-        if (resumen.length > 20) break;
+    // Extraer paciente
+    let paciente: any = undefined;
+    const pacienteMatch = responseText.match(/"paciente"\s*:\s*\{([^}]+)\}/);
+    if (pacienteMatch) {
+      try {
+        paciente = JSON.parse(`{${pacienteMatch[1]}}`);
+      } catch {
+        const nombreMatch = pacienteMatch[1].match(/"nombre"\s*:\s*"([^"]+)"/);
+        if (nombreMatch) {
+          paciente = { nombre: nombreMatch[1] };
+        }
       }
     }
 
-    // Intentar extraer recomendaciones con patrón más flexible
+    // Extraer fecha_examen
+    let fecha_examen: string | undefined;
+    const fechaMatch = responseText.match(/"fecha_examen"\s*:\s*"([^"]+)"/);
+    if (fechaMatch) {
+      fecha_examen = fechaMatch[1];
+    }
+
+    // Extraer laboratorio
+    let laboratorio: string | undefined;
+    const labMatch = responseText.match(/"laboratorio"\s*:\s*"([^"]+)"/);
+    if (labMatch) {
+      laboratorio = labMatch[1];
+    }
+
+    // Extraer resultados - mejorado para el formato de Gemini
+    const resultados: any[] = [];
+
+    // Buscar el array de resultados
+    const resultadosMatch = responseText.match(/"resultados"\s*:\s*\[([\s\S]*?)(?:\](?=\s*,?\s*"(?:resumen|recomendaciones|advertencias))|\]$)/);
+    if (resultadosMatch) {
+      const resultadosStr = resultadosMatch[1];
+
+      // Buscar cada objeto individualmente con regex más flexible
+      const objetoRegex = /\{\s*"examen"\s*:\s*"([^"]+)"[\s\S]*?"valor"\s*:\s*"?([^",}\n]+)"?[\s\S]*?"estado"\s*:\s*"([^"]+)"(?:[\s\S]*?"interpretacion"\s*:\s*"([^"]*(?:\\.[^"]*)*)")?[^}]*\}/g;
+
+      let match;
+      while ((match = objetoRegex.exec(resultadosStr)) !== null) {
+        resultados.push({
+          examen: match[1],
+          valor: match[2].trim(),
+          estado: match[3],
+          interpretacion: match[4] ? match[4].replace(/\\"/g, '"').replace(/\\n/g, ' ') : 'Ver documento original.',
+        });
+      }
+
+      // Si no encontró con el regex complejo, intentar uno más simple
+      if (resultados.length === 0) {
+        const simpleRegex = /"examen"\s*:\s*"([^"]+)"/g;
+        let simpleMatch;
+        while ((simpleMatch = simpleRegex.exec(resultadosStr)) !== null) {
+          resultados.push({
+            examen: simpleMatch[1],
+            valor: 'Ver PDF',
+            estado: 'INDETERMINADO',
+            interpretacion: 'Ver documento original para más detalles.',
+          });
+        }
+      }
+    }
+
+    // Extraer resumen_general - múltiples patrones
+    let resumen = '';
+    const resumenPatterns = [
+      /"resumen_general"\s*:\s*"((?:[^"\\]|\\["\\\/bfnrt]|\\u[0-9a-fA-F]{4})*)"/,
+      /"resumen_general"\s*:\s*"([^"]{20,}?)(?:"|$)/,
+    ];
+    for (const pattern of resumenPatterns) {
+      const match = responseText.match(pattern);
+      if (match && match[1] && match[1].length > 20) {
+        resumen = match[1].replace(/\\"/g, '"').replace(/\\n/g, ' ').trim();
+        break;
+      }
+    }
+
+    // Extraer recomendaciones
     const recomendaciones: string[] = [];
     const recomMatch = responseText.match(/"recomendaciones"\s*:\s*\[([\s\S]*?)\]/);
     if (recomMatch) {
-      const recomStr = recomMatch[1];
-      // Buscar strings entre comillas, manejando escapes
-      const items = recomStr.match(/"((?:[^"\\]|\\.)*)"/g);
+      const items = recomMatch[1].match(/"((?:[^"\\]|\\.)*)"/g);
       if (items) {
         items.forEach(item => {
-          const cleaned = item.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, ' ');
+          const cleaned = item.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, ' ').trim();
           if (cleaned.length > 5) recomendaciones.push(cleaned);
         });
       }
     }
 
-    // Intentar extraer advertencias
+    // Extraer advertencias
     const advertencias: string[] = [];
     const advMatch = responseText.match(/"advertencias"\s*:\s*\[([\s\S]*?)\]/);
     if (advMatch) {
-      const advStr = advMatch[1];
-      const items = advStr.match(/"((?:[^"\\]|\\.)*)"/g);
+      const items = advMatch[1].match(/"((?:[^"\\]|\\.)*)"/g);
       if (items) {
         items.forEach(item => {
-          const cleaned = item.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, ' ');
+          const cleaned = item.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, ' ').trim();
           if (cleaned.length > 5) advertencias.push(cleaned);
         });
       }
     }
 
-    // Intentar extraer resultados individuales con patrón más robusto
-    const resultados: any[] = [];
-    // Buscar cada objeto de resultado individualmente
-    const resultadosSection = responseText.match(/"resultados"\s*:\s*\[([\s\S]*?)\](?=\s*,\s*"resumen)/);
-    if (resultadosSection) {
-      // Dividir por objetos (buscar patrón de inicio de objeto con "examen")
-      const objetosRegex = /\{\s*"examen"\s*:\s*"([^"]+)"[^}]*"valor"\s*:\s*"?([^",}\]]+)"?[^}]*"estado"\s*:\s*"([^"]+)"[^}]*\}/g;
-      let match;
-      while ((match = objetosRegex.exec(resultadosSection[1])) !== null) {
-        resultados.push({
-          examen: match[1],
-          valor: match[2].trim(),
-          estado: match[3],
-          interpretacion: 'Ver documento original para más detalles.',
-        });
-      }
-    }
-
     // Log de lo que se pudo extraer
-    this.logger.log(`Extracción regex: ${resultados.length} resultados, ${recomendaciones.length} recomendaciones, resumen: ${resumen ? 'Sí' : 'No'}`);
+    this.logger.log(`Extracción regex: ${resultados.length} resultados, ${recomendaciones.length} recomendaciones, resumen: ${resumen ? 'Sí' : 'No'}, paciente: ${paciente ? 'Sí' : 'No'}`);
 
-    // Si no se extrajo nada, devolver mensaje más informativo
-    if (!resumen && resultados.length === 0 && recomendaciones.length === 0) {
+    // Si se extrajo algo útil, devolverlo
+    if (resultados.length > 0 || resumen || recomendaciones.length > 0) {
       return {
-        resultados: [],
-        resumen_general: 'El análisis se completó pero hubo un problema al procesar el formato de la respuesta. Por favor, intenta nuevamente o consulta directamente con tu médico.',
-        recomendaciones: ['Consulta con tu médico para una interpretación profesional de tus resultados.'],
-        advertencias: [],
+        paciente,
+        fecha_examen,
+        laboratorio,
+        resultados,
+        resumen_general: resumen || `Se encontraron ${resultados.length} resultado(s) en el análisis. Consulte con su médico para una interpretación completa.`,
+        recomendaciones: recomendaciones.length > 0 ? recomendaciones : ['Consulte con su médico para una interpretación profesional de sus resultados.'],
+        advertencias,
       };
     }
 
+    // Si no se extrajo nada, mensaje informativo
     return {
-      resultados,
-      resumen_general: resumen || 'No se pudo extraer el resumen completo. Revisa los resultados individuales.',
-      recomendaciones: recomendaciones.length > 0 ? recomendaciones : ['Consulta con tu médico para una interpretación profesional de tus resultados.'],
-      advertencias,
+      resultados: [],
+      resumen_general: 'El análisis se completó pero hubo un problema al procesar el formato de la respuesta. Por favor, intenta nuevamente o consulta directamente con tu médico.',
+      recomendaciones: ['Consulta con tu médico para una interpretación profesional de tus resultados.'],
+      advertencias: [],
     };
   }
 
