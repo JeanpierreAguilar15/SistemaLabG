@@ -1,15 +1,16 @@
 import {
   Injectable,
+  Inject,
+  forwardRef,
   NotFoundException,
   BadRequestException,
   Logger,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '@prisma/prisma.service';
-import { EventsGateway } from '../events/events.gateway';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { WhatsAppService } from '../comunicaciones/whatsapp.service';
+import { InventarioService } from '../inventario/inventario.service';
+import { AdminEventsService } from '../admin/admin-events.service';
 import { CreateResultadoDto, UpdateResultadoDto, CreateMuestraDto } from './dto';
 import { randomUUID } from 'crypto';
 
@@ -19,10 +20,12 @@ export class ResultadosService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(forwardRef(() => EventsGateway))
-    private readonly eventsGateway: EventsGateway,
     private readonly pdfGenerator: PdfGeneratorService,
     private readonly whatsappService: WhatsAppService,
+    @Inject(forwardRef(() => InventarioService))
+    private readonly inventarioService: InventarioService,
+    @Inject(forwardRef(() => AdminEventsService))
+    private readonly adminEventsService: AdminEventsService,
   ) {}
 
   // ==================== MUESTRAS ====================
@@ -54,7 +57,6 @@ export class ResultadosService {
     const muestra = await this.prisma.muestra.create({
       data: {
         codigo_paciente: data.codigo_paciente,
-        codigo_cita: data.codigo_cita,
         id_muestra: data.id_muestra,
         tipo_muestra: data.tipo_muestra,
         fecha_toma: data.fecha_toma ? new Date(data.fecha_toma) : new Date(),
@@ -239,7 +241,6 @@ export class ResultadosService {
 
   /**
    * Validar resultado y generar PDF (Admin/Técnico)
-   * IMPORTANTE: Requiere que el pago esté confirmado (PAGADA)
    */
   async validarResultado(codigo_resultado: number, validado_por: number) {
     const resultado = await this.prisma.resultado.findUnique({
@@ -248,11 +249,6 @@ export class ResultadosService {
         muestra: {
           include: {
             paciente: true,
-            cita: {
-              include: {
-                cotizacion: true,
-              },
-            },
           },
         },
         examen: true,
@@ -261,26 +257,6 @@ export class ResultadosService {
 
     if (!resultado) {
       throw new NotFoundException('Resultado no encontrado');
-    }
-
-    // VALIDACIÓN DE PAGO CONFIRMADO
-    // Los resultados solo se pueden validar si el pago está confirmado
-    if (resultado.muestra.cita?.cotizacion) {
-      const cotizacion = resultado.muestra.cita.cotizacion;
-
-      if (cotizacion.estado !== 'PAGADA') {
-        throw new BadRequestException(
-          `No se puede validar el resultado sin pago confirmado. ` +
-          `Estado de cotización: ${cotizacion.estado}. ` +
-          (cotizacion.estado === 'PENDIENTE_PAGO_VENTANILLA'
-            ? 'El paciente debe pagar en ventanilla antes de entregar resultados.'
-            : 'El paciente debe completar el pago primero.'),
-        );
-      }
-
-      this.logger.log(
-        `Pago verificado para resultado ${codigo_resultado} | Cotización: ${cotizacion.numero_cotizacion} | Estado: PAGADA`,
-      );
     }
 
     // Generar código de verificación único
@@ -340,32 +316,20 @@ export class ResultadosService {
       `Resultado validado: ${codigo_resultado} | Validado por: ${validado_por}`,
     );
 
-    // NOTA: El consumo de insumos se realiza al completar la cita (toma de muestra)
-    // en agenda.service.ts -> descontarInsumosMultiplesExamenes()
-    // No duplicar el descuento aquí
-
-    // Notificar al paciente vía WebSocket
-    this.eventsGateway.notifyResultUpdate({
-      resultId: codigo_resultado,
-      patientId: resultado.muestra.codigo_paciente,
-      examName: resultado.examen.nombre,
-      status: 'ready',
+    this.adminEventsService.emitResultadoValidated(codigo_resultado, validado_por, {
+      paciente: `${resultadoValidado.muestra.paciente.nombres} ${resultadoValidado.muestra.paciente.apellidos}`,
+      examen: resultadoValidado.examen.nombre,
+      codigo_examen: resultado.codigo_examen,
     });
 
-    // Notificar a admins
-    this.eventsGateway.notifyAdminEvent({
-      eventType: 'resultados.resultado.validado',
-      entityType: 'resultado',
-      entityId: codigo_resultado,
-      action: 'validated',
-      userId: validado_por,
-      data: {
-        paciente: `${resultado.muestra.paciente.nombres} ${resultado.muestra.paciente.apellidos}`,
-        examen: resultado.examen.nombre,
-      },
-    });
+    // Descontar insumos del inventario usando el servicio completo
+    // (FIFO de lotes, manejo de reactivos con frascos, alertas de stock)
+    await this.descontarInsumosAutomatico(
+      resultado.codigo_examen,
+      codigo_resultado,
+      validado_por,
+    );
 
-    // === NOTIFICACIÓN WHATSAPP AL PACIENTE ===
     try {
       await this.enviarNotificacionWhatsApp(
         resultado.muestra.codigo_paciente,
@@ -375,7 +339,6 @@ export class ResultadosService {
         codigo_verificacion,
       );
     } catch (error) {
-      // No fallar la validación por errores de WhatsApp
       this.logger.warn(
         `Error enviando WhatsApp para resultado ${codigo_resultado}: ${error.message}`,
       );
@@ -398,14 +361,7 @@ export class ResultadosService {
       include: {
         muestra: {
           include: {
-            paciente: {
-              select: {
-                codigo_usuario: true,
-                nombres: true,
-                apellidos: true,
-                email: true,
-              },
-            },
+            paciente: true,
           },
         },
         examen: true,
@@ -424,6 +380,8 @@ export class ResultadosService {
 
     // Construir URL relativa del PDF
     const url_pdf = `/uploads/resultados/${filename}`;
+
+    const estadoAnterior = resultado.estado;
 
     // Actualizar resultado con el PDF subido y marcarlo como validado
     const resultadoActualizado = await this.prisma.resultado.update({
@@ -456,31 +414,34 @@ export class ResultadosService {
       `PDF subido manualmente para resultado ${codigo_resultado} por usuario ${validado_por}`,
     );
 
-    // TODO: Implementar notificación WebSocket cuando se complete el EventsGateway
-    // this.eventsGateway.notifyUser(resultado.muestra.codigo_paciente, {
-    //   eventType: 'resultados.resultado.listo',
-    //   title: 'Resultado disponible',
-    //   message: `Tu resultado de ${resultado.examen.nombre} ya está disponible para descargar`,
-    //   data: {
-    //     codigo_resultado,
-    //     codigo_verificacion,
-    //   },
-    //   status: 'ready',
-    // });
-
-    // Notificar a admins
-    this.eventsGateway.notifyAdminEvent({
-      eventType: 'resultados.resultado.uploaded',
-      entityType: 'resultado',
-      entityId: codigo_resultado,
-      action: 'pdf_uploaded',
-      userId: validado_por,
-      data: {
-        paciente: `${resultado.muestra.paciente.nombres} ${resultado.muestra.paciente.apellidos}`,
-        examen: resultado.examen.nombre,
-        filename,
-      },
+    this.adminEventsService.emitResultadoPdfUploaded(codigo_resultado, validado_por, {
+      examen: resultado.examen.nombre,
+      codigo_examen: resultado.codigo_examen,
     });
+
+    // Solo descontar y notificar si el resultado NO estaba ya validado
+    const yaEstabValidado = ['LISTO', 'VALIDADO', 'ENTREGADO'].includes(estadoAnterior);
+    if (!yaEstabValidado) {
+      await this.descontarInsumosAutomatico(
+        resultado.codigo_examen,
+        codigo_resultado,
+        validado_por,
+      );
+
+      try {
+        await this.enviarNotificacionWhatsApp(
+          resultado.muestra.codigo_paciente,
+          resultado.muestra.paciente.telefono,
+          resultado.muestra.paciente.nombres,
+          resultado.examen.nombre,
+          codigo_verificacion,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Error enviando WhatsApp para resultado ${codigo_resultado}: ${error.message}`,
+        );
+      }
+    }
 
     return resultadoActualizado;
   }
@@ -488,6 +449,30 @@ export class ResultadosService {
   /**
    * Obtener resultados del paciente autenticado
    */
+  async getMyDashboardStats(codigo_paciente: number) {
+    const [resultadosListos, resultadosEnProceso] = await Promise.all([
+      this.prisma.resultado.count({
+        where: {
+          muestra: { codigo_paciente },
+          estado: { in: ['LISTO', 'VALIDADO', 'ENTREGADO'] },
+        },
+      }),
+      this.prisma.resultado.count({
+        where: {
+          muestra: { codigo_paciente },
+          estado: 'EN_PROCESO',
+        },
+      }),
+    ]);
+
+    return {
+      stats: {
+        resultadosListos,
+        resultadosEnProceso,
+      },
+    };
+  }
+
   async getMyResultados(codigo_paciente: number) {
     const resultados = await this.prisma.resultado.findMany({
       where: {
@@ -524,8 +509,8 @@ export class ResultadosService {
   }
 
   /**
-   * Obtener resultados del paciente AGRUPADOS por muestra/cita
-   * Si el paciente agendó 3 exámenes en una cita, todos se muestran juntos
+   * Obtener resultados del paciente AGRUPADOS por muestra/cotización
+   * Si el paciente solicitó 3 exámenes en una cotización, todos se muestran juntos
    */
   async getMyResultadosAgrupados(codigo_paciente: number) {
     // Obtener muestras con sus resultados
@@ -541,30 +526,6 @@ export class ResultadosService {
         },
       },
       include: {
-        cita: {
-          include: {
-            slot: {
-              include: {
-                servicio: true,
-                sede: true,
-              },
-            },
-            cotizacion: {
-              include: {
-                detalles: {
-                  include: {
-                    examen: {
-                      select: {
-                        codigo_examen: true,
-                        nombre: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
         resultados: {
           where: {
             estado: {
@@ -600,20 +561,6 @@ export class ResultadosService {
       fecha_toma: muestra.fecha_toma,
       tipo_muestra: muestra.tipo_muestra,
       estado: muestra.estado,
-      cita: muestra.cita
-        ? {
-            codigo_cita: muestra.cita.codigo_cita,
-            fecha: muestra.cita.slot?.fecha,
-            hora: muestra.cita.slot?.hora_inicio,
-            servicio: muestra.cita.slot?.servicio?.nombre,
-            sede: muestra.cita.slot?.sede?.nombre,
-          }
-        : null,
-      examenes_solicitados:
-        muestra.cita?.cotizacion?.detalles?.map((d) => ({
-          codigo: d.examen.codigo_examen,
-          nombre: d.examen.nombre,
-        })) || [],
       resultados: muestra.resultados.map((r) => ({
         codigo_resultado: r.codigo_resultado,
         examen: r.examen.nombre,
@@ -835,21 +782,11 @@ export class ResultadosService {
       `Resultado actualizado: ${codigo_resultado} | Admin: ${adminId}`,
     );
 
-    // Si se marca como LISTO, notificar al paciente
-    if (data.estado === 'LISTO') {
-      this.eventsGateway.notifyResultUpdate({
-        resultId: codigo_resultado,
-        patientId: resultado.muestra.codigo_paciente,
-        examName: resultado.examen.nombre,
-        status: 'ready',
-      });
-    }
-
     return updated;
   }
 
   /**
-   * Obtener todos los resultados AGRUPADOS por paciente/cita (Admin)
+   * Obtener todos los resultados AGRUPADOS por paciente/cotización (Admin)
    * Para una vista más organizada en el panel de administración
    */
   async getAllResultadosAgrupados(filters?: {
@@ -888,25 +825,6 @@ export class ResultadosService {
             email: true,
           },
         },
-        cita: {
-          include: {
-            slot: {
-              include: {
-                sede: {
-                  select: {
-                    nombre: true,
-                  },
-                },
-              },
-            },
-            cotizacion: {
-              select: {
-                numero_cotizacion: true,
-                estado: true,
-              },
-            },
-          },
-        },
         resultados: {
           include: {
             examen: {
@@ -937,16 +855,6 @@ export class ResultadosService {
       tipo_muestra: muestra.tipo_muestra,
       estado_muestra: muestra.estado,
       paciente: muestra.paciente,
-      cita: muestra.cita
-        ? {
-            codigo_cita: muestra.cita.codigo_cita,
-            fecha: muestra.cita.slot?.fecha,
-            hora_inicio: muestra.cita.slot?.hora_inicio,
-            sede: muestra.cita.slot?.sede?.nombre,
-            cotizacion: muestra.cita.cotizacion?.numero_cotizacion,
-            estado_pago: muestra.cita.cotizacion?.estado,
-          }
-        : null,
       resultados: muestra.resultados.map((r) => ({
         codigo_resultado: r.codigo_resultado,
         examen: r.examen,
@@ -1117,5 +1025,48 @@ export class ResultadosService {
     mensaje += `_Este mensaje es automático. Por favor no responder._`;
 
     return mensaje;
+  }
+
+  /**
+   * Descuenta insumos del inventario al validar un resultado.
+   * Política: si no hay stock suficiente, se valida igual con warning (no bloquea).
+   * Usa el servicio completo de inventario: FIFO de lotes, manejo de reactivos, alertas.
+   */
+  private async descontarInsumosAutomatico(
+    codigo_examen: number,
+    referencia_id: number,
+    userId: number,
+  ): Promise<void> {
+    try {
+      const resultado = await this.inventarioService.descontarInsumosExamen(
+        codigo_examen,
+        referencia_id,
+        userId,
+      );
+
+      if (resultado.success && resultado.movimientos.length > 0) {
+        this.logger.log(
+          `Insumos descontados para resultado #${referencia_id}: ${resultado.mensaje}`,
+        );
+        this.adminEventsService.emitResultadoInsumosDeducted(referencia_id, userId, {
+          movimientos: resultado.movimientos.length,
+          mensaje: resultado.mensaje,
+          alertas_reactivos: resultado.alertas_reactivos,
+        });
+      }
+
+      if (resultado.alertas_reactivos?.length > 0) {
+        this.logger.warn(
+          `Alertas de reactivos tras resultado #${referencia_id}: ${resultado.alertas_reactivos.join(', ')}`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `No se pudieron descontar insumos para resultado #${referencia_id}: ${error.message}`,
+      );
+      this.adminEventsService.emitResultadoInsumosFailed(referencia_id, userId, {
+        error: error.message,
+      });
+    }
   }
 }

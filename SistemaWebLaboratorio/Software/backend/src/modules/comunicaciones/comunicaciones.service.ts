@@ -87,7 +87,7 @@ export class ComunicacionesService {
         </div>
         <h2 style="color: #333;">¡Bienvenido, ${user.nombres}!</h2>
         <p style="color: #555; line-height: 1.6;">
-          Gracias por registrarte en nuestro portal de pacientes. Ahora podrás agendar citas, ver tus resultados y gestionar tus cotizaciones en línea.
+          Gracias por registrarte en nuestro portal de pacientes. Ahora podrás ver tus resultados en línea.
         </p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${this.configService.get('FRONTEND_URL')}/login" style="background-color: #0070f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
@@ -264,109 +264,4 @@ export class ComunicacionesService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  /**
-   * Enviar email de confirmación de cita
-   */
-  async sendAppointmentConfirmationEmail(
-    user: { email: string; nombres: string },
-    appointment: {
-      fecha: string;
-      hora: string;
-      servicio: string;
-      sede: string;
-    },
-  ) {
-    const html = `
-      <!DOCTYPE html>
-      <html lang="es">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      </head>
-      <body style="margin: 0; padding: 0; background-color: #f4f7fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f7fa; padding: 40px 20px;">
-          <tr>
-            <td align="center">
-              <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-                <!-- Header -->
-                <tr>
-                  <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
-                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">
-                      ✅ Cita Confirmada
-                    </h1>
-                  </td>
-                </tr>
-
-                <!-- Content -->
-                <tr>
-                  <td style="padding: 40px 30px;">
-                    <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 25px;">
-                      Hola <strong>${user.nombres}</strong>,
-                    </p>
-
-                    <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
-                      Tu cita ha sido confirmada exitosamente. Aquí están los detalles:
-                    </p>
-
-                    <!-- Detalles de la cita -->
-                    <div style="background-color: #f0fdf4; border-radius: 12px; padding: 25px; margin: 0 0 30px;">
-                      <table width="100%" cellpadding="8" cellspacing="0">
-                        <tr>
-                          <td style="color: #64748b; font-size: 14px; width: 40%;">📅 Fecha:</td>
-                          <td style="color: #1e293b; font-size: 16px; font-weight: 600;">${appointment.fecha}</td>
-                        </tr>
-                        <tr>
-                          <td style="color: #64748b; font-size: 14px;">🕐 Hora:</td>
-                          <td style="color: #1e293b; font-size: 16px; font-weight: 600;">${appointment.hora}</td>
-                        </tr>
-                        <tr>
-                          <td style="color: #64748b; font-size: 14px;">🔬 Servicio:</td>
-                          <td style="color: #1e293b; font-size: 16px; font-weight: 600;">${appointment.servicio}</td>
-                        </tr>
-                        <tr>
-                          <td style="color: #64748b; font-size: 14px;">📍 Sede:</td>
-                          <td style="color: #1e293b; font-size: 16px; font-weight: 600;">${appointment.sede}</td>
-                        </tr>
-                      </table>
-                    </div>
-
-                    <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 0;">
-                      Recuerda llegar 10 minutos antes de tu cita y traer tu documento de identidad.
-                    </p>
-                  </td>
-                </tr>
-
-                <!-- Footer -->
-                <tr>
-                  <td style="background-color: #f8fafc; padding: 25px 30px; border-top: 1px solid #e2e8f0; text-align: center;">
-                    <p style="color: #64748b; font-size: 13px; margin: 0;">
-                      📞 (02) 1234-5678 | ✉️ info@labfranz.com
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-
-    if (!this.transporter) {
-      this.logger.warn(`[MOCK EMAIL] Appointment confirmation to ${user.email}`);
-      return;
-    }
-
-    try {
-      await this.transporter.sendMail({
-        from: '"Laboratorio Franz" <' + this.configService.get('SMTP_USER') + '>',
-        to: user.email,
-        subject: `✅ Cita Confirmada - ${appointment.fecha} ${appointment.hora} - Laboratorio Franz`,
-        html,
-      });
-      this.logger.log(`Appointment confirmation email sent to ${user.email}`);
-    } catch (error) {
-      this.logger.error(`Error sending appointment confirmation to ${user.email}`, error);
-    }
-  }
 }

@@ -61,12 +61,9 @@ async function bootstrap() {
     .setVersion('1.0')
     .addTag('auth', 'Autenticación y autorización')
     .addTag('usuarios', 'Gestión de usuarios')
-    .addTag('agenda', 'Gestión de citas y horarios')
-    .addTag('catalogo', 'Catálogo de exámenes y precios')
-    .addTag('pagos', 'Cotizaciones, pagos y facturación')
+    .addTag('catalogo', 'Catálogo de exámenes')
     .addTag('resultados', 'Resultados de laboratorio')
     .addTag('inventario', 'Gestión de inventario')
-    .addTag('comunicaciones', 'Chat y notificaciones')
     .addBearerAuth(
       {
         type: 'http',

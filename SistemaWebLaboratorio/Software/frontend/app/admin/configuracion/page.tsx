@@ -5,7 +5,7 @@ import { useAuthStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { validateEmail, validatePhoneEcuador, validateTimeRange } from '@/lib/utils'
+import { validateEmail, validatePhoneEcuador } from '@/lib/utils'
 import { systemConfigService, SystemConfig } from '@/lib/services/system-config.service'
 
 interface LabConfig {
@@ -13,10 +13,6 @@ interface LabConfig {
   email: string
   telefono: string
   direccion: string
-  horaInicio: string
-  horaFin: string
-  duracionSlot: number
-  capacidadDefecto: number
 }
 
 interface SecurityConfig {
@@ -36,7 +32,6 @@ interface BlockedUser {
 
 interface SystemStats {
   totalUsuarios: number
-  totalCitas: number
   totalExamenes: number
   totalResultados: number
 }
@@ -48,15 +43,10 @@ export default function ConfigurationPage() {
     email: 'contacto@labfranz.com',
     telefono: '+593 2 234 5678',
     direccion: 'Av. Principal 123, Quito, Ecuador',
-    horaInicio: '08:00',
-    horaFin: '18:00',
-    duracionSlot: 30,
-    capacidadDefecto: 5,
   })
 
   const [stats, setStats] = useState<SystemStats>({
     totalUsuarios: 0,
-    totalCitas: 0,
     totalExamenes: 0,
     totalResultados: 0,
   })
@@ -106,7 +96,7 @@ export default function ConfigurationPage() {
         setBlockedUsers(data)
       }
     } catch (error) {
-      console.error('Error loading security config:', error)
+      setMessage({ type: 'error', text: 'Error al cargar configuración de seguridad' })
     }
   }
 
@@ -179,15 +169,11 @@ export default function ConfigurationPage() {
         if (c.clave === 'LAB_EMAIL') newConfig.email = c.valor
         if (c.clave === 'LAB_TELEFONO') newConfig.telefono = c.valor
         if (c.clave === 'LAB_DIRECCION') newConfig.direccion = c.valor
-        if (c.clave === 'AGENDA_HORA_INICIO') newConfig.horaInicio = c.valor
-        if (c.clave === 'AGENDA_HORA_FIN') newConfig.horaFin = c.valor
-        if (c.clave === 'AGENDA_DURACION_SLOT') newConfig.duracionSlot = Number(c.valor)
-        if (c.clave === 'AGENDA_CAPACIDAD_DEFECTO') newConfig.capacidadDefecto = Number(c.valor)
       })
       setConfig(newConfig)
       setTempConfig(newConfig)
     } catch (error) {
-      console.error('Error loading configurations:', error)
+      setMessage({ type: 'error', text: 'Error al cargar configuraciones' })
     }
   }
 
@@ -202,13 +188,12 @@ export default function ConfigurationPage() {
         const data = await response.json()
         setStats({
           totalUsuarios: data.users.total,
-          totalCitas: data.appointments.total,
           totalExamenes: data.exams.total,
-          totalResultados: data.results.pending + data.appointments.completed,
+          totalResultados: data.results.pending,
         })
       }
     } catch (error) {
-      console.error('Error loading stats:', error)
+      setMessage({ type: 'error', text: 'Error al cargar estadísticas' })
     } finally {
       setLoadingStats(false)
     }
@@ -217,7 +202,7 @@ export default function ConfigurationPage() {
   const updateConfigValue = async (key: string, value: string, group: string, type: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON' = 'STRING', isPublic: boolean = false) => {
     const existing = systemConfigs.find(c => c.clave === key)
     if (existing) {
-      await systemConfigService.update(existing.codigo_config, { valor: value })
+      await systemConfigService.update(existing.codigo_config, { valor: value }, accessToken!)
     } else {
       await systemConfigService.create({
         clave: key,
@@ -225,7 +210,7 @@ export default function ConfigurationPage() {
         grupo: group,
         tipo_dato: type,
         es_publico: isPublic
-      })
+      }, accessToken!)
     }
   }
 
@@ -243,19 +228,6 @@ export default function ConfigurationPage() {
           updateConfigValue('LAB_EMAIL', tempConfig.email, 'GENERAL', 'STRING', true),
           updateConfigValue('LAB_TELEFONO', tempConfig.telefono, 'GENERAL', 'STRING', true),
           updateConfigValue('LAB_DIRECCION', tempConfig.direccion, 'GENERAL', 'STRING', true),
-        ])
-      }
-
-      if (section === 'appointments') {
-        if (!validateTimeRange(tempConfig.horaInicio, tempConfig.horaFin)) throw new Error('Rango de horas inválido')
-        if (![15, 30, 45, 60].includes(tempConfig.duracionSlot)) throw new Error('Duración de slot inválida')
-        if (tempConfig.capacidadDefecto < 1 || tempConfig.capacidadDefecto > 20) throw new Error('Capacidad inválida')
-
-        await Promise.all([
-          updateConfigValue('AGENDA_HORA_INICIO', tempConfig.horaInicio, 'AGENDA', 'STRING', true),
-          updateConfigValue('AGENDA_HORA_FIN', tempConfig.horaFin, 'AGENDA', 'STRING', true),
-          updateConfigValue('AGENDA_DURACION_SLOT', tempConfig.duracionSlot.toString(), 'AGENDA', 'NUMBER', true),
-          updateConfigValue('AGENDA_CAPACIDAD_DEFECTO', tempConfig.capacidadDefecto.toString(), 'AGENDA', 'NUMBER', true),
         ])
       }
 
@@ -408,13 +380,6 @@ export default function ConfigurationPage() {
           </div>
           <div className="space-y-3">
             <div className="flex items-center justify-between py-2 px-3 bg-lab-neutral-50 rounded-lg">
-              <span className="text-sm text-lab-neutral-700">Recordatorios de Citas</span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked />
-                <div className="w-11 h-6 bg-lab-neutral-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-lab-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-lab-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lab-primary-600"></div>
-              </label>
-            </div>
-            <div className="flex items-center justify-between py-2 px-3 bg-lab-neutral-50 rounded-lg">
               <span className="text-sm text-lab-neutral-700">Notificaciones de Resultados</span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" className="sr-only peer" defaultChecked />
@@ -528,14 +493,10 @@ export default function ConfigurationPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center p-4 bg-lab-primary-50 rounded-lg">
               <p className="text-3xl font-bold text-lab-primary-600">{stats.totalUsuarios}</p>
               <p className="text-sm text-lab-neutral-600 mt-1">Usuarios Registrados</p>
-            </div>
-            <div className="text-center p-4 bg-lab-info-50 rounded-lg">
-              <p className="text-3xl font-bold text-lab-info-600">{stats.totalCitas}</p>
-              <p className="text-sm text-lab-neutral-600 mt-1">Citas Totales</p>
             </div>
             <div className="text-center p-4 bg-lab-success-50 rounded-lg">
               <p className="text-3xl font-bold text-lab-success-600">{stats.totalExamenes}</p>

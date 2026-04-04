@@ -36,6 +36,14 @@ export default function PerfilPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
 
+  useEffect(() => {
+    if (message) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      const timer = setTimeout(() => setMessage(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
+
   const [profileData, setProfileData] = useState<UserProfile>({
     codigo_usuario: user?.codigo_usuario || 0,
     cedula: user?.cedula || '',
@@ -60,7 +68,7 @@ export default function PerfilPage() {
     {
       tipo: 'NOTIFICACIONES',
       label: 'Recibir Notificaciones por Email',
-      descripcion: 'Acepto recibir notificaciones por email sobre mis citas y resultados',
+      descripcion: 'Acepto recibir notificaciones por email sobre mis resultados',
       aceptado: false,
     },
     {
@@ -106,7 +114,7 @@ export default function PerfilPage() {
         })
       }
     } catch (error) {
-      console.error('Error loading profile:', error)
+      // Silently fail - profile loads with defaults
     } finally {
       setLoading(false)
     }
@@ -130,7 +138,7 @@ export default function PerfilPage() {
         )
       }
     } catch (error) {
-      console.error('Error loading consentimientos:', error)
+      // Silently fail
     }
   }
 
@@ -143,7 +151,10 @@ export default function PerfilPage() {
   }
 
   const handleSaveProfile = async () => {
-    // Validar teléfonos antes de enviar
+    if (!profileData.telefono || !profileData.telefono.trim()) {
+      setMessage({ type: 'error', text: 'El teléfono es obligatorio para recibir notificaciones de tus resultados' })
+      return
+    }
     if (!validatePhone(profileData.telefono)) {
       setMessage({ type: 'error', text: 'Formato de teléfono inválido. Use: 0987654321 (móvil) o 022345678 (fijo)' })
       return
@@ -322,7 +333,7 @@ export default function PerfilPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="telefono">Teléfono</Label>
+              <Label htmlFor="telefono">Teléfono *</Label>
               <Input
                 id="telefono"
                 value={profileData.telefono}

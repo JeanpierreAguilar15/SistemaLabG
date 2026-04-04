@@ -54,7 +54,9 @@ export default function RegisterPage() {
       newErrors.email = 'Correo electronico invalido'
     }
 
-    if (formData.telefono && !/^(09\d{8}|0[2-7]\d{7})$/.test(formData.telefono)) {
+    if (!formData.telefono.trim()) {
+      newErrors.telefono = 'El telefono es obligatorio para recibir notificaciones de resultados'
+    } else if (!/^(09\d{8}|0[2-7]\d{7})$/.test(formData.telefono)) {
       newErrors.telefono = 'Telefono debe ser formato ecuatoriano (09XXXXXXXX o 02XXXXXXX)'
     }
 
@@ -238,7 +240,7 @@ export default function RegisterPage() {
             {/* Row 3: Telefono & Genero */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="telefono" className="text-lab-neutral-700 font-medium text-sm">Telefono (opcional)</Label>
+                <Label htmlFor="telefono" className="text-lab-neutral-700 font-medium text-sm">Telefono *</Label>
                 <Input
                   id="telefono"
                   type="tel"
@@ -497,8 +499,8 @@ export default function RegisterPage() {
                 </svg>
               </div>
               <div>
-                <p className="font-medium text-sm">Agenda citas facilmente</p>
-                <p className="text-xs text-white/60">Reserva en cualquier momento</p>
+                <p className="font-medium text-sm">Consulta tus resultados en linea</p>
+                <p className="text-xs text-white/60">Disponible en cualquier momento</p>
               </div>
             </div>
             <div className="flex items-center gap-3 bg-white/10 rounded-lg p-3">

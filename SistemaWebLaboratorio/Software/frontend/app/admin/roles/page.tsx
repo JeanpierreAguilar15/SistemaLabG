@@ -82,7 +82,6 @@ export default function RolesManagement() {
         setRoles(data)
       }
     } catch (error) {
-      console.error('Error loading roles:', error)
       setMessage({ type: 'error', text: 'Error al cargar los roles' })
     } finally {
       setLoading(false)
@@ -102,7 +101,7 @@ export default function RolesManagement() {
         setPermissions(data)
       }
     } catch (error) {
-      console.error('Error loading permissions:', error)
+      setMessage({ type: 'error', text: 'Error al cargar los permisos' })
     }
   }
 
@@ -246,7 +245,6 @@ export default function RolesManagement() {
         }
       }
     } catch (error) {
-      console.error('Error submitting role:', error)
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
@@ -277,7 +275,6 @@ export default function RolesManagement() {
         })
       }
     } catch (error) {
-      console.error('Error deleting role:', error)
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     } finally {
       setConfirmDelete({ show: false, roleId: null, roleName: '' })
@@ -311,7 +308,6 @@ export default function RolesManagement() {
         })
       }
     } catch (error) {
-      console.error('Error deactivating role:', error)
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     } finally {
       setConfirmDeactivate({ show: false, roleId: null, userCount: 0 })
@@ -549,7 +545,7 @@ export default function RolesManagement() {
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             {/* Background overlay */}
             <div
-              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              className="fixed inset-0 transition-opacity bg-black/50"
               onClick={handleCloseModal}
             ></div>
 
@@ -685,7 +681,7 @@ export default function RolesManagement() {
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             {/* Background overlay */}
             <div
-              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              className="fixed inset-0 transition-opacity bg-black/50"
               onClick={() => setShowPermissionsModal(false)}
             ></div>
 
@@ -753,7 +749,7 @@ export default function RolesManagement() {
       {confirmDelete.show && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setConfirmDelete({ show: false, roleId: null, roleName: '' })}></div>
+            <div className="fixed inset-0 transition-opacity bg-black/50" onClick={() => setConfirmDelete({ show: false, roleId: null, roleName: '' })}></div>
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="flex items-center space-x-3 mb-4">
@@ -795,7 +791,7 @@ export default function RolesManagement() {
       {confirmDeactivate.show && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setConfirmDeactivate({ show: false, roleId: null, userCount: 0 })}></div>
+            <div className="fixed inset-0 transition-opacity bg-black/50" onClick={() => setConfirmDeactivate({ show: false, roleId: null, userCount: 0 })}></div>
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="flex items-center space-x-3 mb-4">

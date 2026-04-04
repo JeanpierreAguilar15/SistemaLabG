@@ -4,17 +4,8 @@ export * from './user.dto';
 // Role DTOs
 export * from './role.dto';
 
-// Service DTOs
-export * from './service.dto';
-
-// Location DTOs
-export * from './location.dto';
-
 // Exam DTOs
 export * from './exam.dto';
-
-// Price DTOs
-export * from './price.dto';
 
 // Category DTOs
 export * from './category.dto';

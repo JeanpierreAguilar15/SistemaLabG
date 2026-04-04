@@ -33,15 +33,6 @@ interface Paciente {
   email: string
 }
 
-interface Cita {
-  codigo_cita: number
-  fecha: string
-  hora_inicio: string
-  sede: string | null
-  cotizacion: string | null
-  estado_pago: string | null
-}
-
 interface MuestraAgrupada {
   codigo_muestra: number
   id_muestra: string
@@ -49,7 +40,6 @@ interface MuestraAgrupada {
   tipo_muestra: string
   estado_muestra: string
   paciente: Paciente
-  cita: Cita | null
   resultados: ResultadoAgrupado[]
   total_examenes: number
   examenes_listos: number
@@ -100,7 +90,6 @@ export default function ResultadosAdminPage() {
         setMuestras(result)
       }
     } catch (error) {
-      console.error('Error loading resultados:', error)
       setMessage({ type: 'error', text: 'Error al cargar resultados' })
     } finally {
       setLoading(false)
@@ -285,17 +274,6 @@ export default function ResultadosAdminPage() {
     }
   }
 
-  const getEstadoPagoBadge = (estado: string | null) => {
-    switch (estado) {
-      case 'PAGADA':
-        return 'bg-lab-success-100 text-lab-success-800'
-      case 'PENDIENTE_PAGO_VENTANILLA':
-        return 'bg-lab-warning-100 text-lab-warning-800'
-      default:
-        return 'bg-lab-neutral-100 text-lab-neutral-600'
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -339,7 +317,7 @@ export default function ResultadosAdminPage() {
       <div>
         <h1 className="text-3xl font-bold text-lab-neutral-900">Gestion de Resultados</h1>
         <p className="text-lab-neutral-600 mt-2">
-          Resultados organizados por paciente y cita. Cada fila agrupa todos los examenes de una misma muestra.
+          Resultados organizados por paciente y muestra. Cada fila agrupa todos los examenes de una misma muestra.
         </p>
         <div className="mt-3 bg-lab-info-50 border border-lab-info-200 rounded-lg p-3">
           <p className="text-sm text-lab-info-800">
@@ -435,15 +413,6 @@ export default function ResultadosAdminPage() {
                         </div>
                       </div>
 
-                      {/* Payment status */}
-                      {muestra.cita && (
-                        <div className="text-right">
-                          <div className="text-sm text-lab-neutral-500">Pago</div>
-                          <span className={`text-xs px-2 py-1 rounded ${getEstadoPagoBadge(muestra.cita.estado_pago)}`}>
-                            {muestra.cita.estado_pago === 'PAGADA' ? 'Pagado' : 'Pendiente'}
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -451,23 +420,6 @@ export default function ResultadosAdminPage() {
                 {/* Expanded content - individual exams */}
                 {expandedMuestras.has(muestra.codigo_muestra) && (
                   <div className="border-t border-lab-neutral-200 bg-white">
-                    {/* Cita info */}
-                    {muestra.cita && (
-                      <div className="px-4 py-3 bg-lab-primary-50 border-b border-lab-primary-100 text-sm">
-                        <div className="flex items-center gap-4 text-lab-primary-800">
-                          <span>Cita #{muestra.cita.codigo_cita}</span>
-                          <span>|</span>
-                          <span>Sede: {muestra.cita.sede || 'N/A'}</span>
-                          {muestra.cita.cotizacion && (
-                            <>
-                              <span>|</span>
-                              <span>Cotizacion: {muestra.cita.cotizacion}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
                     {/* Exams table */}
                     <table className="w-full">
                       <thead>
@@ -596,7 +548,7 @@ export default function ResultadosAdminPage() {
 
       {/* Upload PDF Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6 border-b border-lab-neutral-200">
               <h2 className="text-2xl font-bold text-lab-neutral-900">

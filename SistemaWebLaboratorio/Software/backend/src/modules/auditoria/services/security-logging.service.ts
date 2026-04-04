@@ -1,6 +1,5 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@prisma/prisma.service';
-import { EventsGateway } from '../../events/events.gateway';
 
 /**
  * Motivos de fallo de login
@@ -67,8 +66,6 @@ export class SecurityLoggingService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(forwardRef(() => EventsGateway))
-    private readonly eventsGateway: EventsGateway,
   ) {}
 
   /**
@@ -235,18 +232,8 @@ export class SecurityLoggingService {
       });
 
       this.logger.warn(
-        `🚨 Security Alert [${params.nivel}]: ${params.tipo} - ${params.descripcion}`,
+        `Security Alert [${params.nivel}]: ${params.tipo} - ${params.descripcion}`,
       );
-
-      // Notificar en tiempo real vía WebSocket a administradores
-      this.eventsGateway.notifySecurityAlert({
-        alertId: alerta.codigo_alerta,
-        type: params.tipo,
-        level: params.nivel,
-        description: params.descripcion,
-        ipAddress: params.ipAddress,
-        timestamp: alerta.fecha_alerta,
-      });
     } catch (error) {
       this.logger.error(`Error creating security alert: ${error.message}`);
     }

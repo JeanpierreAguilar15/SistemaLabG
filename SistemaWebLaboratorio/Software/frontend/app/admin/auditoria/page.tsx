@@ -58,7 +58,6 @@ export default function AuditoriaPage() {
         setLogs(logs)
       }
     } catch (error) {
-      console.error('Error loading logs:', error)
     } finally {
       setLoading(false)
     }
@@ -124,7 +123,6 @@ export default function AuditoriaPage() {
         alert('Error al generar el PDF')
       }
     } catch (error) {
-      console.error('Error generating PDF:', error)
       alert('Error de conexión al servidor')
     } finally {
       setGeneratingPdf(false)
@@ -257,7 +255,7 @@ export default function AuditoriaPage() {
       </Card>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-lab-neutral-600">Total de Logs</div>

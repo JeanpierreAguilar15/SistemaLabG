@@ -33,9 +33,7 @@ Ejecutar scripts SQL en orden:
 psql -U postgres -f ../../database/00_create_database.sql
 psql -U postgres -d laboratorio_franz_db -f ../../database/01_create_schemas.sql
 psql -U postgres -d laboratorio_franz_db -f ../../database/02_schema_usuarios.sql
-psql -U postgres -d laboratorio_franz_db -f ../../database/03_schema_agenda.sql
 psql -U postgres -d laboratorio_franz_db -f ../../database/04_schema_catalogo.sql
-psql -U postgres -d laboratorio_franz_db -f ../../database/05_schema_pagos.sql
 psql -U postgres -d laboratorio_franz_db -f ../../database/06_schema_resultados_inventario_comunicaciones_auditoria.sql
 ```
 
@@ -64,10 +62,11 @@ Swagger: `http://localhost:3001/api/docs`
 
 - **auth**: Registro, login, JWT, refresh tokens
 - **users**: Gestión de usuarios y perfiles
-- **agenda**: Citas y horarios (stub)
-- **catalogo**: Exámenes y precios (stub)
-- **pagos**: Cotizaciones y pagos (stub)
-- **resultados**: Resultados de laboratorio (stub)
-- **inventario**: Gestión de inventario (stub)
-- **comunicaciones**: Chat y notificaciones (stub)
-- **auditoria**: Logs y trazabilidad (stub)
+- **admin**: Panel administrativo, dashboard, configuración
+- **catalogo**: Catálogo de exámenes y categorías
+- **resultados**: Muestras, resultados, generación de PDFs
+- **inventario**: Gestión de inventario, reactivos, lotes, alertas, OCR
+- **comunicaciones**: WhatsApp, email, notificaciones
+- **auditoria**: Logs de actividad, errores, seguridad
+- **chatbot**: Interpretación de resultados con IA (Gemini)
+- **system-config**: Configuración del sistema

@@ -67,6 +67,9 @@ export default function MovimientosStockPage() {
   const [filterFechaDesde, setFilterFechaDesde] = useState('')
   const [filterFechaHasta, setFilterFechaHasta] = useState('')
 
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
+
   // Modal de nuevo movimiento
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({
@@ -141,7 +144,7 @@ export default function MovimientosStockPage() {
         setItems(items.filter((item: ItemInventario) => item.stock_actual))
       }
     } catch (error) {
-      console.error('Error al cargar items:', error)
+      setMessage({ type: 'error', text: 'Error al cargar items' })
     }
   }
 
@@ -206,6 +209,16 @@ export default function MovimientosStockPage() {
     })
   }
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [movimientos])
+
+  const totalPages = Math.ceil(movimientos.length / itemsPerPage)
+  const paginatedMovimientos = movimientos.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+
   const getTipoMovimientoStyle = (tipo: string) => {
     const option = TIPO_MOVIMIENTO_OPTIONS.find(opt => opt.value === tipo)
     return option || TIPO_MOVIMIENTO_OPTIONS[0]
@@ -268,7 +281,7 @@ export default function MovimientosStockPage() {
           <CardTitle>Filtros</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-lab-neutral-700 mb-1">
                 Item
@@ -366,7 +379,7 @@ export default function MovimientosStockPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {movimientos.map((mov) => {
+                  {paginatedMovimientos.map((mov) => {
                     const tipoStyle = getTipoMovimientoStyle(mov.tipo_movimiento)
                     return (
                       <tr key={mov.codigo_movimiento} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
@@ -411,11 +424,38 @@ export default function MovimientosStockPage() {
             </div>
           )}
         </CardContent>
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-lab-neutral-200 flex items-center justify-between">
+            <div className="text-sm text-lab-neutral-700">
+              Mostrando {(currentPage - 1) * itemsPerPage + 1} a{' '}
+              {Math.min(currentPage * itemsPerPage, movimientos.length)} de {movimientos.length}
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 text-sm border border-lab-neutral-300 rounded-lg hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Anterior
+              </button>
+              <span className="text-sm text-lab-neutral-600">
+                Página {currentPage} de {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 text-sm border border-lab-neutral-300 rounded-lg hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full">
             <div className="p-6 border-b border-lab-neutral-200">
               <h2 className="text-2xl font-bold text-lab-neutral-900">

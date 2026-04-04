@@ -13,25 +13,10 @@ export enum AdminEventType {
   ROLE_UPDATED = 'admin.role.updated',
   ROLE_DELETED = 'admin.role.deleted',
 
-  // Servicios
-  SERVICE_CREATED = 'admin.service.created',
-  SERVICE_UPDATED = 'admin.service.updated',
-  SERVICE_DELETED = 'admin.service.deleted',
-
-  // Sedes
-  LOCATION_CREATED = 'admin.location.created',
-  LOCATION_UPDATED = 'admin.location.updated',
-  LOCATION_DELETED = 'admin.location.deleted',
-
   // Exámenes
   EXAM_CREATED = 'admin.exam.created',
   EXAM_UPDATED = 'admin.exam.updated',
   EXAM_DELETED = 'admin.exam.deleted',
-
-  // Precios
-  PRICE_CREATED = 'admin.price.created',
-  PRICE_UPDATED = 'admin.price.updated',
-  PRICE_DELETED = 'admin.price.deleted',
 
   // Categorías
   CATEGORY_CREATED = 'admin.category.created',
@@ -58,6 +43,12 @@ export enum AdminEventType {
   PURCHASE_ORDER_EMITTED = 'admin.purchase_order.emitted',
   PURCHASE_ORDER_RECEIVED = 'admin.purchase_order.received',
   PURCHASE_ORDER_CANCELLED = 'admin.purchase_order.cancelled',
+
+  // Resultados
+  RESULTADO_VALIDATED = 'admin.resultado.validated',
+  RESULTADO_PDF_UPLOADED = 'admin.resultado.pdf_uploaded',
+  RESULTADO_INSUMOS_DEDUCTED = 'admin.resultado.insumos_deducted',
+  RESULTADO_INSUMOS_FAILED = 'admin.resultado.insumos_failed',
 }
 
 export interface RequestContext {
@@ -167,124 +158,6 @@ export class AdminEventsService {
     this.emitEvent(AdminEventType.EXAM_DELETED, {
       entityType: 'exam',
       entityId: examId,
-      action: 'deleted',
-      userId: adminId,
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  // Precios
-  emitPriceCreated(priceId: number, examId: number, adminId: number, data?: any, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.PRICE_CREATED, {
-      entityType: 'price',
-      entityId: priceId,
-      action: 'created',
-      userId: adminId,
-      data: { ...data, examId },
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  emitPriceUpdated(priceId: number, examId: number, adminId: number, data?: any, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.PRICE_UPDATED, {
-      entityType: 'price',
-      entityId: priceId,
-      action: 'updated',
-      userId: adminId,
-      data: { ...data, examId },
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  emitPriceDeleted(priceId: number, examId: number, adminId: number, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.PRICE_DELETED, {
-      entityType: 'price',
-      entityId: priceId,
-      action: 'deleted',
-      userId: adminId,
-      data: { examId },
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  // Servicios
-  emitServiceCreated(serviceId: number, adminId: number, data?: any, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.SERVICE_CREATED, {
-      entityType: 'service',
-      entityId: serviceId,
-      action: 'created',
-      userId: adminId,
-      data,
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  emitServiceUpdated(serviceId: number, adminId: number, data?: any, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.SERVICE_UPDATED, {
-      entityType: 'service',
-      entityId: serviceId,
-      action: 'updated',
-      userId: adminId,
-      data,
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  emitServiceDeleted(serviceId: number, adminId: number, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.SERVICE_DELETED, {
-      entityType: 'service',
-      entityId: serviceId,
-      action: 'deleted',
-      userId: adminId,
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  // Sedes
-  emitLocationCreated(locationId: number, adminId: number, data?: any, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.LOCATION_CREATED, {
-      entityType: 'location',
-      entityId: locationId,
-      action: 'created',
-      userId: adminId,
-      data,
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  emitLocationUpdated(locationId: number, adminId: number, data?: any, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.LOCATION_UPDATED, {
-      entityType: 'location',
-      entityId: locationId,
-      action: 'updated',
-      userId: adminId,
-      data,
-      timestamp: new Date(),
-      ipAddress: ctx?.ipAddress,
-      userAgent: ctx?.userAgent,
-    });
-  }
-
-  emitLocationDeleted(locationId: number, adminId: number, ctx?: RequestContext) {
-    this.emitEvent(AdminEventType.LOCATION_DELETED, {
-      entityType: 'location',
-      entityId: locationId,
       action: 'deleted',
       userId: adminId,
       timestamp: new Date(),
@@ -546,6 +419,50 @@ export class AdminEventsService {
       timestamp: new Date(),
       ipAddress: ctx?.ipAddress,
       userAgent: ctx?.userAgent,
+    });
+  }
+
+  emitResultadoValidated(resultadoId: number, userId: number, data?: any) {
+    this.emitEvent(AdminEventType.RESULTADO_VALIDATED, {
+      entityType: 'resultado',
+      entityId: resultadoId,
+      action: 'updated',
+      userId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitResultadoPdfUploaded(resultadoId: number, userId: number, data?: any) {
+    this.emitEvent(AdminEventType.RESULTADO_PDF_UPLOADED, {
+      entityType: 'resultado',
+      entityId: resultadoId,
+      action: 'updated',
+      userId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitResultadoInsumosDeducted(resultadoId: number, userId: number, data?: any) {
+    this.emitEvent(AdminEventType.RESULTADO_INSUMOS_DEDUCTED, {
+      entityType: 'resultado',
+      entityId: resultadoId,
+      action: 'updated',
+      userId,
+      data,
+      timestamp: new Date(),
+    });
+  }
+
+  emitResultadoInsumosFailed(resultadoId: number, userId: number, data?: any) {
+    this.emitEvent(AdminEventType.RESULTADO_INSUMOS_FAILED, {
+      entityType: 'resultado',
+      entityId: resultadoId,
+      action: 'updated',
+      userId,
+      data,
+      timestamp: new Date(),
     });
   }
 }

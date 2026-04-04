@@ -44,8 +44,7 @@ export default function UsersManagement() {
   const [confirmDeactivate, setConfirmDeactivate] = useState<{
     show: boolean
     userId: number | null
-    appointmentCount: number
-  }>({ show: false, userId: null, appointmentCount: 0 })
+  }>({ show: false, userId: null })
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -105,7 +104,7 @@ export default function UsersManagement() {
         setPagination(prev => ({ ...prev, ...result.pagination }))
       }
     } catch (error) {
-      console.error('Error loading users:', error)
+      setMessage({ type: 'error', text: 'Error al cargar usuarios' })
     } finally {
       setLoading(false)
     }
@@ -124,7 +123,7 @@ export default function UsersManagement() {
         setRoles(data)
       }
     } catch (error) {
-      console.error('Error loading roles:', error)
+      setMessage({ type: 'error', text: 'Error al cargar roles' })
     }
   }
 
@@ -267,27 +266,16 @@ export default function UsersManagement() {
         if (force) {
           setMessage({
             type: 'success',
-            text: 'Usuario desactivado y citas canceladas correctamente',
+            text: 'Usuario desactivado correctamente',
           })
         }
         loadUsers()
-        setConfirmDeactivate({ show: false, userId: null, appointmentCount: 0 })
+        setConfirmDeactivate({ show: false, userId: null })
       } else {
         const error = await response.json()
-        // Check if it's the pending appointments error
-        const appointmentMatch = error.message?.match(/tiene (\d+) cita\(s\) pendiente\(s\)/)
-        if (appointmentMatch) {
-          setConfirmDeactivate({
-            show: true,
-            userId: codigo_usuario,
-            appointmentCount: parseInt(appointmentMatch[1]),
-          })
-        } else {
-          setMessage({ type: 'error', text: error.message || 'Error al cambiar estado' })
-        }
+        setMessage({ type: 'error', text: error.message || 'Error al cambiar estado' })
       }
     } catch (error) {
-      console.error('Error toggling user status:', error)
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     }
   }
@@ -487,7 +475,13 @@ export default function UsersManagement() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => toggleUserStatus(user.codigo_usuario)}
+                              onClick={() => {
+                                if (user.activo) {
+                                  setConfirmDeactivate({ show: true, userId: user.codigo_usuario })
+                                } else {
+                                  toggleUserStatus(user.codigo_usuario)
+                                }
+                              }}
                               className={
                                 user.activo
                                   ? 'text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50'
@@ -547,7 +541,7 @@ export default function UsersManagement() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-xl max-w-2xl w-full my-8">
             <div className="p-6 border-b border-lab-neutral-200">
               <div className="flex justify-between items-center">
@@ -711,7 +705,7 @@ export default function UsersManagement() {
 
       {/* Confirmation Dialog for Deactivating User with Appointments */}
       {confirmDeactivate.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
             <div className="flex items-center space-x-3 mb-4">
               <div className="flex-shrink-0 w-10 h-10 bg-lab-warning-100 rounded-full flex items-center justify-center">
@@ -724,13 +718,12 @@ export default function UsersManagement() {
               </h3>
             </div>
             <p className="text-lab-neutral-600 mb-6">
-              Este usuario tiene <span className="font-semibold text-lab-warning-600">{confirmDeactivate.appointmentCount} cita(s) pendiente(s)</span>.
-              Si continúa, las citas serán canceladas automáticamente.
+              ¿Está seguro de que desea desactivar este usuario? El usuario no podrá acceder al sistema.
             </p>
             <div className="flex justify-end space-x-3">
               <Button
                 variant="outline"
-                onClick={() => setConfirmDeactivate({ show: false, userId: null, appointmentCount: 0 })}
+                onClick={() => setConfirmDeactivate({ show: false, userId: null })}
               >
                 Cancelar
               </Button>
@@ -738,7 +731,7 @@ export default function UsersManagement() {
                 className="bg-lab-danger-600 hover:bg-lab-danger-700 text-white"
                 onClick={() => confirmDeactivate.userId && toggleUserStatus(confirmDeactivate.userId, true)}
               >
-                Desactivar y cancelar citas
+                Desactivar usuario
               </Button>
             </div>
           </div>

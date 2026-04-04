@@ -33,14 +33,8 @@ import {
   ResetPasswordDto,
   CreateRoleDto,
   UpdateRoleDto,
-  CreateServiceDto,
-  UpdateServiceDto,
-  CreateLocationDto,
-  UpdateLocationDto,
   CreateExamDto,
   UpdateExamDto,
-  CreatePriceDto,
-  UpdatePriceDto,
   CreateCategoryDto,
   UpdateCategoryDto,
   CreateInventoryItemDto,
@@ -175,82 +169,6 @@ export class AdminController {
     return this.adminService.deleteRole(id, adminId);
   }
 
-  // ==================== SERVICIOS ====================
-
-  @Get('services')
-  async getAllServices() {
-    return this.adminService.getAllServices();
-  }
-
-  @Get('services/:id')
-  async getServiceById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getServiceById(id);
-  }
-
-  @Post('services')
-  @HttpCode(HttpStatus.CREATED)
-  async createService(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Body() data: CreateServiceDto,
-  ) {
-    return this.adminService.createService(data, adminId);
-  }
-
-  @Put('services/:id')
-  async updateService(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() data: UpdateServiceDto,
-  ) {
-    return this.adminService.updateService(id, data, adminId);
-  }
-
-  @Delete('services/:id')
-  async deleteService(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.adminService.deleteService(id, adminId);
-  }
-
-  // ==================== SEDES ====================
-
-  @Get('locations')
-  async getAllLocations() {
-    return this.adminService.getAllLocations();
-  }
-
-  @Get('locations/:id')
-  async getLocationById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getLocationById(id);
-  }
-
-  @Post('locations')
-  @HttpCode(HttpStatus.CREATED)
-  async createLocation(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Body() data: CreateLocationDto,
-  ) {
-    return this.adminService.createLocation(data, adminId);
-  }
-
-  @Put('locations/:id')
-  async updateLocation(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() data: UpdateLocationDto,
-  ) {
-    return this.adminService.updateLocation(id, data, adminId);
-  }
-
-  @Delete('locations/:id')
-  async deleteLocation(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.adminService.deleteLocation(id, adminId);
-  }
-
   // ==================== EXAMENES ====================
 
   @Get('exams')
@@ -296,53 +214,6 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.adminService.deleteExam(id, adminId);
-  }
-
-  // ==================== PRECIOS ====================
-
-  @Get('prices')
-  async getAllPrices(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query() filters?: any,
-  ) {
-    return this.adminService.getAllPrices(
-      page ? parseInt(page) : 1,
-      limit ? parseInt(limit) : 50,
-      filters,
-    );
-  }
-
-  @Get('prices/:id')
-  async getPriceById(@Param('id', ParseIntPipe) id: number) {
-    return this.adminService.getPriceById(id);
-  }
-
-  @Post('prices')
-  @HttpCode(HttpStatus.CREATED)
-  async createPrice(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Body() data: CreatePriceDto,
-  ) {
-    return this.adminService.createPrice(data, adminId);
-  }
-
-  @Put('prices/:id')
-  async updatePrice(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() data: UpdatePriceDto,
-  ) {
-    return this.adminService.updatePrice(id, data, adminId);
-  }
-
-  @Delete('prices/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async deletePrice(
-    @CurrentUser('codigo_usuario') adminId: number,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.adminService.deletePrice(id, adminId);
   }
 
   // ==================== CATEGORIAS ====================

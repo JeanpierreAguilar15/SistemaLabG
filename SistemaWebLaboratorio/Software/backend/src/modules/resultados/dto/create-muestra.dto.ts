@@ -10,15 +10,6 @@ export class CreateMuestraDto {
   codigo_paciente: number;
 
   @ApiProperty({
-    description: 'Código de la cita (opcional)',
-    example: 1,
-    required: false,
-  })
-  @IsOptional()
-  @IsInt()
-  codigo_cita?: number;
-
-  @ApiProperty({
     description: 'ID único de la muestra',
     example: 'MUE-2025-001',
   })

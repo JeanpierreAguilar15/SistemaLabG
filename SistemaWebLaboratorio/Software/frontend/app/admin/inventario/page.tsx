@@ -89,7 +89,7 @@ interface Estadisticas {
 }
 
 interface Message {
-  type: 'success' | 'error'
+  type: 'success' | 'error' | 'info'
   text: string
 }
 
@@ -101,7 +101,7 @@ const TIPO_MOVIMIENTO_OPTIONS = [
   { value: 'TRANSFERENCIA', label: 'Transferencia', color: 'bg-lab-neutral-100 text-lab-neutral-800', icon: '↔' },
 ]
 
-const TIPO_ALERTA_CONFIG = {
+const TIPO_ALERTA_CONFIG: Record<string, { label: string; color: string }> = {
   STOCK_CRITICO: { label: 'Sin Stock', color: 'bg-lab-danger-100 text-lab-danger-800' },
   STOCK_BAJO: { label: 'Stock Bajo', color: 'bg-lab-warning-100 text-lab-warning-800' },
   VENCIDO: { label: 'Vencido', color: 'bg-lab-danger-100 text-lab-danger-800' },
@@ -307,9 +307,11 @@ export default function InventarioPage() {
   const [kardexGlobal, setKardexGlobal] = useState<KardexGlobalResponse | null>(null)
   const [kardexGlobalLoading, setKardexGlobalLoading] = useState(false)
   const [kardexViewMode, setKardexViewMode] = useState<'global' | 'individual'>('global')
+  const [kardexGlobalPage, setKardexGlobalPage] = useState(1)
+  const kardexGlobalItemsPerPage = 20
 
   // Proveedores for lote form
-  const [proveedores, setProveedores] = useState<{ codigo_proveedor: number; razon_social: string }[]>([])
+  const [proveedores, setProveedores] = useState<{ codigo_proveedor: number; razon_social: string; activo?: boolean }[]>([])
 
   // Categorias state
   const [categorias, setCategorias] = useState<Categoria[]>([])
@@ -440,6 +442,10 @@ export default function InventarioPage() {
     }
   }, [activeTab])
 
+  useEffect(() => {
+    setKardexGlobalPage(1)
+  }, [kardexGlobal])
+
   // ==================== ITEMS FUNCTIONS ====================
   const loadItems = async () => {
     try {
@@ -556,7 +562,7 @@ export default function InventarioPage() {
         setCodigoSugerido(data.codigo_sugerido)
       }
     } catch (error) {
-      console.error('Error obteniendo sugerencia de código:', error)
+      setMessage({ type: 'error', text: 'Error al obtener sugerencia de código' })
     } finally {
       setCargandoSugerencia(false)
     }
@@ -902,7 +908,7 @@ export default function InventarioPage() {
         setEstadisticas(data)
       }
     } catch (error) {
-      console.error('Error loading stats:', error)
+      setMessage({ type: 'error', text: 'Error al cargar estadísticas' })
     }
   }
 
@@ -935,10 +941,10 @@ export default function InventarioPage() {
         const data = await response.json()
         setCategorias(data)
       } else {
-        console.error('Error al cargar categorías')
+        setMessage({ type: 'error', text: 'Error al cargar categorías' })
       }
     } catch (error) {
-      console.error('Error de conexión:', error)
+      setMessage({ type: 'error', text: 'Error de conexión al cargar categorías' })
     } finally {
       setCategoriasLoading(false)
     }
@@ -1153,7 +1159,7 @@ export default function InventarioPage() {
         setProveedores(data.filter((p: any) => p.activo))
       }
     } catch (error) {
-      console.error('Error loading suppliers:', error)
+      setMessage({ type: 'error', text: 'Error al cargar proveedores' })
     }
   }
 
@@ -1340,7 +1346,6 @@ export default function InventarioPage() {
       if (kardexFechaHasta) params.append('fecha_hasta', kardexFechaHasta)
 
       const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/kardex-global?${params.toString()}`
-      console.log('Llamando a Kardex Global:', url)
 
       const response = await fetch(url, {
         headers: {
@@ -1348,19 +1353,14 @@ export default function InventarioPage() {
         },
       })
 
-      console.log('Kardex Global response status:', response.status)
-
       if (response.ok) {
         const data = await response.json()
-        console.log('Kardex Global data recibida:', data)
         setKardexGlobal(data)
       } else {
         const errorData = await response.json().catch(() => ({}))
-        console.error('Kardex Global error:', response.status, errorData)
         setMessage({ type: 'error', text: errorData.message || `Error al cargar kardex global (${response.status})` })
       }
     } catch (error) {
-      console.error('Error en loadKardexGlobal:', error)
       setMessage({ type: 'error', text: 'Error de conexión al servidor' })
     } finally {
       setKardexGlobalLoading(false)
@@ -1399,7 +1399,6 @@ export default function InventarioPage() {
         setMessage({ type: 'error', text: errorData.message || 'Error al generar PDF' })
       }
     } catch (error) {
-      console.error('Error exportando PDF:', error)
       setMessage({ type: 'error', text: 'Error de conexión al exportar PDF' })
     }
   }
@@ -1419,6 +1418,13 @@ export default function InventarioPage() {
     setSelectedItemKardex('')
   }
 
+  const kardexGlobalItems = kardexGlobal?.items || []
+  const kardexGlobalTotalPages = Math.ceil(kardexGlobalItems.length / kardexGlobalItemsPerPage)
+  const paginatedKardexGlobalItems = kardexGlobalItems.slice(
+    (kardexGlobalPage - 1) * kardexGlobalItemsPerPage,
+    kardexGlobalPage * kardexGlobalItemsPerPage
+  )
+
   // ==================== GENERAR PEDIDO DE REPOSICIÓN ====================
   const openGenerarPedidoModal = () => {
     if (!kardexGlobal) {
@@ -1436,10 +1442,10 @@ export default function InventarioPage() {
         unidad_medida: item.unidad_medida,
         stock_actual: item.stock_actual,
         stock_minimo: item.stock_minimo,
-        costo_unitario: item.costo_unitario,
+        costo_unitario: Number(item.costo_unitario) || 0,
         estado_stock: item.estado_stock,
-        cantidad_pedir: Math.max(item.stock_minimo - item.stock_actual + 10, 1), // Sugiere cantidad
-        selected: true, // Pre-seleccionado
+        cantidad_pedir: Math.max(item.stock_minimo - item.stock_actual + 10, 1),
+        selected: true,
       }))
 
     if (itemsBajoStock.length === 0) {
@@ -1481,7 +1487,6 @@ export default function InventarioPage() {
         setMessage({ type: 'error', text: errorData.message || 'Error al generar PDF de pedido' })
       }
     } catch (error) {
-      console.error('Error descargando PDF de pedido:', error)
       setMessage({ type: 'error', text: 'Error de conexión al descargar PDF' })
     }
   }
@@ -1550,7 +1555,6 @@ export default function InventarioPage() {
         setMessage({ type: 'error', text: error.message || 'Error al crear orden de compra' })
       }
     } catch (error) {
-      console.error('Error generando orden:', error)
       setMessage({ type: 'error', text: 'Error de conexión al generar orden' })
     } finally {
       setGenerarPedidoLoading(false)
@@ -1789,11 +1793,11 @@ export default function InventarioPage() {
             className={`p-4 rounded-lg shadow-lg flex items-start gap-3 ${
               message.type === 'success'
                 ? 'bg-white border-l-4 border-green-500'
-                : 'bg-white border-l-4 border-red-500'
+                : 'bg-white border-l-4 border-lab-danger-500'
             }`}
           >
             <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-              message.type === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+              message.type === 'success' ? 'bg-green-100 text-green-600' : 'bg-lab-danger-100 text-lab-danger-600'
             }`}>
               {message.type === 'success' ? (
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1807,7 +1811,7 @@ export default function InventarioPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className={`font-medium text-sm ${
-                message.type === 'success' ? 'text-green-800' : 'text-red-800'
+                message.type === 'success' ? 'text-green-800' : 'text-lab-danger-800'
               }`}>
                 {message.type === 'success' ? 'Operación exitosa' : 'Error'}
               </p>
@@ -2111,7 +2115,7 @@ export default function InventarioPage() {
 
           {/* Item Form Modal */}
           {showItemForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
               <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full my-8">
                 <div className="p-6 border-b border-lab-neutral-200">
                   <h2 className="text-2xl font-bold text-lab-neutral-900">
@@ -2558,7 +2562,7 @@ export default function InventarioPage() {
 
           {/* Movement Form Modal */}
           {showMovForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full">
                 <div className="p-6 border-b border-lab-neutral-200">
                   <h2 className="text-2xl font-bold text-lab-neutral-900">
@@ -2658,7 +2662,7 @@ export default function InventarioPage() {
           {/* Estadísticas */}
           {estadisticas && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                 <Card>
                   <CardContent className="pt-6">
                     <div className="text-sm text-lab-neutral-600">Total Alertas</div>
@@ -3111,7 +3115,7 @@ export default function InventarioPage() {
 
           {/* Lote Form Modal */}
           {showLoteForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
               <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-8">
                 <div className="p-6 border-b border-lab-neutral-200">
                   <h2 className="text-2xl font-bold text-lab-neutral-900">
@@ -3391,7 +3395,7 @@ export default function InventarioPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {kardexGlobal.items.map((item) => (
+                            {paginatedKardexGlobalItems.map((item) => (
                               <tr key={item.codigo_item} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
                                 <td className="p-3 font-mono text-sm">{item.codigo_interno}</td>
                                 <td className="p-3 font-medium">{item.nombre}</td>
@@ -3438,6 +3442,33 @@ export default function InventarioPage() {
                         </table>
                       </div>
                     </CardContent>
+                    {kardexGlobalTotalPages > 1 && (
+                      <div className="px-6 py-4 border-t border-lab-neutral-200 flex items-center justify-between">
+                        <div className="text-sm text-lab-neutral-700">
+                          Mostrando {(kardexGlobalPage - 1) * kardexGlobalItemsPerPage + 1} a{' '}
+                          {Math.min(kardexGlobalPage * kardexGlobalItemsPerPage, kardexGlobalItems.length)} de {kardexGlobalItems.length}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => setKardexGlobalPage(p => Math.max(1, p - 1))}
+                            disabled={kardexGlobalPage === 1}
+                            className="px-3 py-1.5 text-sm border border-lab-neutral-300 rounded-lg hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Anterior
+                          </button>
+                          <span className="text-sm text-lab-neutral-600">
+                            Página {kardexGlobalPage} de {kardexGlobalTotalPages}
+                          </span>
+                          <button
+                            onClick={() => setKardexGlobalPage(p => Math.min(kardexGlobalTotalPages, p + 1))}
+                            disabled={kardexGlobalPage === kardexGlobalTotalPages}
+                            className="px-3 py-1.5 text-sm border border-lab-neutral-300 rounded-lg hover:bg-lab-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Siguiente
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </Card>
                 </>
               ) : (
@@ -3717,7 +3748,7 @@ export default function InventarioPage() {
 
           {/* Categoria Form Modal */}
           {showCategoriaForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
                 <div className="p-6 border-b border-lab-neutral-200">
                   <h2 className="text-2xl font-bold text-lab-neutral-900">
@@ -3772,7 +3803,7 @@ export default function InventarioPage() {
 
       {/* ==================== QUICK KARDEX MODAL ==================== */}
       {showQuickKardex && quickKardexItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full my-8 max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
               <div>
@@ -3893,7 +3924,7 @@ export default function InventarioPage() {
 
       {/* ==================== OCR FACTURA MODAL ==================== */}
       {showOcrModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full my-8 max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
               <div>
@@ -4256,7 +4287,7 @@ export default function InventarioPage() {
 
       {/* ==================== HISTORIAL DE CAMBIOS MODAL ==================== */}
       {showHistorialModal && historialItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full my-8 max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
               <div>
@@ -4408,7 +4439,7 @@ export default function InventarioPage() {
 
       {/* ==================== GENERAR PEDIDO DE REPOSICIÓN MODAL ==================== */}
       {showGenerarPedidoModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full my-8 max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-lab-neutral-200 flex justify-between items-start">
               <div>
@@ -4586,7 +4617,7 @@ export default function InventarioPage() {
 
       {/* Confirm Delete Item Modal */}
       {confirmDeleteItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-center w-12 h-12 mx-auto bg-lab-danger-100 rounded-full mb-4">
               <svg className="w-6 h-6 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -4616,7 +4647,7 @@ export default function InventarioPage() {
 
       {/* Confirm Delete Category Modal */}
       {confirmDeleteCategoria && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-center w-12 h-12 mx-auto bg-lab-danger-100 rounded-full mb-4">
               <svg className="w-6 h-6 text-lab-danger-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">

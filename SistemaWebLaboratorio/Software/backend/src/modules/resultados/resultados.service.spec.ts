@@ -1,14 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ResultadosService } from './resultados.service';
 import { PrismaService } from '@prisma/prisma.service';
-import { EventsGateway } from '../events/events.gateway';
 import { PdfGeneratorService } from './pdf-generator.service';
+import { WhatsAppService } from '../comunicaciones/whatsapp.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('ResultadosService', () => {
   let service: ResultadosService;
   let prisma: PrismaService;
-  let eventsGateway: EventsGateway;
   let pdfGenerator: PdfGeneratorService;
 
   const mockPrismaService = {
@@ -38,9 +37,9 @@ describe('ResultadosService', () => {
     $transaction: jest.fn(),
   };
 
-  const mockEventsGateway = {
-    notifyResultUpdate: jest.fn(),
-    notifyAdminEvent: jest.fn(),
+  const mockWhatsAppService = {
+    isConfigured: jest.fn().mockReturnValue(false),
+    sendMessage: jest.fn(),
   };
 
   const mockPdfGeneratorService = {
@@ -57,10 +56,6 @@ describe('ResultadosService', () => {
           useValue: mockPrismaService,
         },
         {
-          provide: EventsGateway,
-          useValue: mockEventsGateway,
-        },
-        {
           provide: PdfGeneratorService,
           useValue: mockPdfGeneratorService,
         },
@@ -69,7 +64,6 @@ describe('ResultadosService', () => {
 
     service = module.get<ResultadosService>(ResultadosService);
     prisma = module.get<PrismaService>(PrismaService);
-    eventsGateway = module.get<EventsGateway>(EventsGateway);
     pdfGenerator = module.get<PdfGeneratorService>(PdfGeneratorService);
 
     jest.clearAllMocks();
@@ -82,7 +76,6 @@ describe('ResultadosService', () => {
   describe('createMuestra', () => {
     const createMuestraDto = {
       codigo_paciente: 1,
-      codigo_cita: 1,
       id_muestra: 'MUE-001',
       tipo_muestra: 'Sangre',
       fecha_toma: '2025-11-17T10:00:00Z',
@@ -325,13 +318,6 @@ describe('ResultadosService', () => {
       expect(result.codigo_verificacion).toMatch(/^VER-/);
       expect(result.url_pdf).toContain('/uploads/resultados/');
       expect(mockPdfGeneratorService.generateResultadoPdf).toHaveBeenCalled();
-      expect(mockEventsGateway.notifyResultUpdate).toHaveBeenCalledWith({
-        resultId: 1,
-        patientId: 1,
-        examName: 'Glucosa',
-        status: 'ready',
-      });
-      expect(mockEventsGateway.notifyAdminEvent).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if resultado does not exist', async () => {
@@ -542,12 +528,6 @@ describe('ResultadosService', () => {
       const result = await service.updateResultado(1, updateDto, 2);
 
       expect(result).toEqual(updatedResultado);
-      expect(mockEventsGateway.notifyResultUpdate).toHaveBeenCalledWith({
-        resultId: 1,
-        patientId: 1,
-        examName: 'Glucosa',
-        status: 'ready',
-      });
     });
 
     it('should throw NotFoundException if resultado does not exist', async () => {

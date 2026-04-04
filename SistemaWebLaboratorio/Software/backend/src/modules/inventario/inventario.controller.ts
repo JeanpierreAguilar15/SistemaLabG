@@ -42,7 +42,7 @@ import {
 @ApiTags('Inventario')
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'LABORATORISTA')
+@Roles('ADMIN', 'PERSONAL_LAB')
 export class InventarioController {
   constructor(
     private readonly inventarioService: InventarioService,

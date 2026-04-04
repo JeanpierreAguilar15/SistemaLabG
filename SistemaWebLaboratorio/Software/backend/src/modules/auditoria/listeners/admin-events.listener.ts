@@ -1,13 +1,11 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '@prisma/prisma.service';
 import { AdminEventPayload } from '../../admin/admin-events.service';
-import { EventsGateway } from '../../events/events.gateway';
 
 /**
- * Listener que registra todos los eventos administrativos en la tabla de auditoría
+ * Listener que registra todos los eventos administrativos en la tabla de auditoria
  * Proporciona trazabilidad completa de todas las acciones admin
- * También emite notificaciones en tiempo real vía WebSocket
  */
 @Injectable()
 export class AdminEventsListener {
@@ -15,8 +13,6 @@ export class AdminEventsListener {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(forwardRef(() => EventsGateway))
-    private readonly eventsGateway: EventsGateway,
   ) {}
 
   /**
@@ -41,18 +37,8 @@ export class AdminEventsListener {
       });
 
       this.logger.log(
-        `📝 Audit logged: ${payload.entityType}.${payload.action} by user ${payload.userId}`,
+        `Audit logged: ${payload.entityType}.${payload.action} by user ${payload.userId}`,
       );
-
-      // Emitir notificación en tiempo real a admins
-      this.eventsGateway.notifyAdminEvent({
-        eventType: payload.eventType,
-        entityType: payload.entityType,
-        entityId: payload.entityId,
-        action: payload.action,
-        userId: payload.userId,
-        data: payload.data,
-      });
     } catch (error) {
       this.logger.error(`Failed to log admin event: ${error.message}`, error.stack);
 
@@ -99,17 +85,24 @@ export class AdminEventsListener {
     );
   }
 
-  @OnEvent('admin.price.updated')
-  async handlePriceUpdated(payload: AdminEventPayload) {
-    this.logger.log(
-      `💰 PRICE CHANGE: Price ${payload.entityId} updated by admin ${payload.userId}`,
-    );
-  }
-
   @OnEvent('admin.inventory.deleted')
   async handleInventoryDeleted(payload: AdminEventPayload) {
     this.logger.warn(
       `📦 INVENTORY DELETED: Item ${payload.entityId} was deactivated by admin ${payload.userId}`,
+    );
+  }
+
+  @OnEvent('admin.resultado.validated')
+  async handleResultadoValidated(payload: AdminEventPayload) {
+    this.logger.log(
+      `🧪 RESULTADO VALIDATED: #${payload.entityId} by user ${payload.userId} | ${payload.data?.examen}`,
+    );
+  }
+
+  @OnEvent('admin.resultado.insumos_failed')
+  async handleResultadoInsumosFailed(payload: AdminEventPayload) {
+    this.logger.warn(
+      `⚠️ INSUMOS DEDUCTION FAILED: Resultado #${payload.entityId} | ${payload.data?.error}`,
     );
   }
 

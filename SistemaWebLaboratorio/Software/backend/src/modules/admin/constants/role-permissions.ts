@@ -15,13 +15,9 @@ export const ROLE_PERMISSIONS: Record<number, RolePermissions> = {
   1: {
     nivel: 1,
     nombre_sugerido: 'Paciente',
-    descripcion: 'Usuario con acceso mínimo, solo puede ver sus propios resultados y citas',
+    descripcion: 'Usuario con acceso mínimo, solo puede ver sus propios resultados',
     permisos: [
       'Ver resultados propios',
-      'Agendar citas',
-      'Ver citas propias',
-      'Solicitar cotizaciones',
-      'Ver cotizaciones propias',
       'Actualizar perfil propio',
     ],
   },
@@ -31,7 +27,6 @@ export const ROLE_PERMISSIONS: Record<number, RolePermissions> = {
     descripcion: 'Paciente con acceso preferencial',
     permisos: [
       'Todos los permisos de nivel 1',
-      'Prioridad en agendamiento',
       'Descargar resultados en PDF',
       'Historial completo de exámenes',
     ],
@@ -41,11 +36,8 @@ export const ROLE_PERMISSIONS: Record<number, RolePermissions> = {
     nombre_sugerido: 'Recepcionista',
     descripcion: 'Personal de recepción y atención al cliente',
     permisos: [
-      'Gestionar citas de pacientes',
       'Registrar llegada de pacientes',
       'Ver información de pacientes',
-      'Generar cotizaciones',
-      'Procesar pagos',
       'Imprimir comprobantes',
     ],
   },
@@ -55,8 +47,6 @@ export const ROLE_PERMISSIONS: Record<number, RolePermissions> = {
     descripcion: 'Recepcionista con permisos adicionales',
     permisos: [
       'Todos los permisos de nivel 3',
-      'Cancelar citas',
-      'Modificar citas',
       'Registrar nuevos pacientes',
       'Actualizar datos de pacientes',
     ],
@@ -105,11 +95,10 @@ export const ROLE_PERMISSIONS: Record<number, RolePermissions> = {
     descripcion: 'Supervisor de área con permisos de gestión',
     permisos: [
       'Todos los permisos de niveles inferiores',
-      'Gestionar horarios del personal',
       'Ver reportes de productividad',
       'Aprobar/rechazar solicitudes',
       'Gestionar inventario completo',
-      'Configurar servicios y sedes',
+      'Configurar catálogo de exámenes',
     ],
   },
   9: {

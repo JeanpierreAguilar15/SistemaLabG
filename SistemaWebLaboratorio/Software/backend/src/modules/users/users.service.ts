@@ -257,24 +257,8 @@ export class UsersService {
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
       include: {
-        citas_como_paciente: {
-          where: {
-            estado: {
-              in: ['PENDIENTE', 'CONFIRMADA', 'EN_PROCESO'],
-            },
-          },
-        },
-        cotizaciones: {
-          where: {
-            estado: {
-              in: ['PENDIENTE', 'APROBADA'],
-            },
-          },
-        },
         _count: {
           select: {
-            citas_como_paciente: true,
-            cotizaciones: true,
             resultados_procesados: true,
           },
         },
@@ -285,30 +269,8 @@ export class UsersService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    // Verificar si tiene citas activas
-    if (user.citas_como_paciente.length > 0) {
-      throw new BadRequestException(
-        `No se puede desactivar el usuario porque tiene ${user.citas_como_paciente.length} cita(s) activa(s). ` +
-        'Por favor, cancele o complete las citas primero.'
-      );
-    }
-
-    // Verificar si tiene cotizaciones pendientes
-    if (user.cotizaciones.length > 0) {
-      throw new BadRequestException(
-        `No se puede desactivar el usuario porque tiene ${user.cotizaciones.length} cotización(es) pendiente(s). ` +
-        'Por favor, complete o cancele las cotizaciones primero.'
-      );
-    }
-
     // Generar advertencias
     const warnings = [];
-    if (user._count.citas_como_paciente > 0) {
-      warnings.push(`${user._count.citas_como_paciente} cita(s) en historial`);
-    }
-    if (user._count.cotizaciones > 0) {
-      warnings.push(`${user._count.cotizaciones} cotización(es) en historial`);
-    }
     if (user._count.resultados_procesados > 0) {
       warnings.push(`${user._count.resultados_procesados} resultado(s) procesado(s)`);
     }
@@ -340,37 +302,6 @@ export class UsersService {
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
-    }
-
-    // Si vamos a DESACTIVAR, verificar citas pendientes
-    if (user.activo) {
-      const citasPendientes = await this.prisma.cita.count({
-        where: {
-          codigo_paciente: codigo_usuario,
-          estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
-        },
-      });
-
-      if (citasPendientes > 0 && !force) {
-        throw new BadRequestException(
-          `No se puede desactivar: el usuario tiene ${citasPendientes} cita(s) pendiente(s). ` +
-          `Cancele las citas primero o use force=true para desactivar de todos modos.`
-        );
-      }
-
-      // Si force=true, cancelar las citas automaticamente
-      if (citasPendientes > 0 && force) {
-        await this.prisma.cita.updateMany({
-          where: {
-            codigo_paciente: codigo_usuario,
-            estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
-          },
-          data: {
-            estado: 'CANCELADA',
-            motivo_cancelacion: 'Cancelada automaticamente al desactivar usuario',
-          },
-        });
-      }
     }
 
     const updatedUser = await this.prisma.usuario.update({

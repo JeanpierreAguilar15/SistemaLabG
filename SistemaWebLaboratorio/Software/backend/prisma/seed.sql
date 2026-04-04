@@ -89,63 +89,6 @@ INSERT INTO usuarios.perfil_medico (
 ON CONFLICT (codigo_usuario) DO NOTHING;
 
 -- =====================================================
--- ESQUEMA: agenda
--- =====================================================
-
--- SERVICIOS
-INSERT INTO agenda.servicio (nombre, descripcion, activo) VALUES
-('Toma de Muestras', 'Servicio de extracción de muestras sanguíneas y otros fluidos', true),
-('Entrega de Resultados', 'Servicio de entrega y explicación de resultados', true),
-('Consulta Médica', 'Consulta médica especializada', true)
-ON CONFLICT DO NOTHING;
-
--- SEDES
-INSERT INTO agenda.sede (nombre, direccion, telefono, email, activo) VALUES
-('Sede Norte - Quito', 'Av. Eloy Alfaro N45-123, Quito', '023456789', 'norte@lab.com', true),
-('Sede Centro - Quito', 'Calle Venezuela N8-45, Quito', '022345678', 'centro@lab.com', true),
-('Sede Sur - Quito', 'Av. Maldonado S25-67, Quito', '024567890', 'sur@lab.com', true)
-ON CONFLICT DO NOTHING;
-
--- HORARIOS DE ATENCIÓN
-INSERT INTO agenda.horario_atencion (codigo_servicio, codigo_sede, dia_semana, hora_inicio, hora_fin, cupos_por_hora, activo) VALUES
--- Sede Norte - Lunes a Viernes
-(1, 1, 1, '07:00:00', '18:00:00', 4, true),
-(1, 1, 2, '07:00:00', '18:00:00', 4, true),
-(1, 1, 3, '07:00:00', '18:00:00', 4, true),
-(1, 1, 4, '07:00:00', '18:00:00', 4, true),
-(1, 1, 5, '07:00:00', '18:00:00', 4, true),
--- Sede Norte - Sábados
-(1, 1, 6, '08:00:00', '14:00:00', 3, true),
-
--- Sede Centro - Lunes a Viernes
-(1, 2, 1, '06:30:00', '19:00:00', 5, true),
-(1, 2, 2, '06:30:00', '19:00:00', 5, true),
-(1, 2, 3, '06:30:00', '19:00:00', 5, true),
-(1, 2, 4, '06:30:00', '19:00:00', 5, true),
-(1, 2, 5, '06:30:00', '19:00:00', 5, true)
-ON CONFLICT DO NOTHING;
-
--- SLOTS (próximas fechas)
-INSERT INTO agenda.slot (codigo_servicio, codigo_sede, fecha, hora_inicio, hora_fin, cupos_totales, cupos_disponibles, activo) VALUES
-(1, 1, CURRENT_DATE + INTERVAL '1 day', '08:00:00', '09:00:00', 4, 2, true),
-(1, 1, CURRENT_DATE + INTERVAL '1 day', '09:00:00', '10:00:00', 4, 4, true),
-(1, 1, CURRENT_DATE + INTERVAL '1 day', '10:00:00', '11:00:00', 4, 3, true),
-(1, 1, CURRENT_DATE + INTERVAL '2 days', '08:00:00', '09:00:00', 4, 4, true),
-(1, 1, CURRENT_DATE + INTERVAL '2 days', '09:00:00', '10:00:00', 4, 4, true),
-(1, 2, CURRENT_DATE + INTERVAL '1 day', '07:00:00', '08:00:00', 5, 5, true),
-(1, 2, CURRENT_DATE + INTERVAL '1 day', '08:00:00', '09:00:00', 5, 3, true),
-(1, 2, CURRENT_DATE + INTERVAL '1 day', '09:00:00', '10:00:00', 5, 5, true)
-ON CONFLICT DO NOTHING;
-
--- CITAS
-INSERT INTO agenda.cita (codigo_slot, codigo_paciente, estado, confirmada, observaciones) VALUES
-(1, 8, 'AGENDADA', true, 'Paciente requiere ayuno de 8 horas'),
-(1, 9, 'AGENDADA', true, 'Primera visita al laboratorio'),
-(3, 10, 'AGENDADA', false, 'Exámenes de control mensual'),
-(7, 11, 'AGENDADA', true, 'Control de rutina')
-ON CONFLICT DO NOTHING;
-
--- =====================================================
 -- ESQUEMA: catalogo
 -- =====================================================
 
@@ -193,119 +136,17 @@ INSERT INTO catalogo.examen (
 (6, 'ORI-002', 'Urocultivo', 'Cultivo de orina', false, NULL, 48, 'Orina', NULL, NULL, NULL, true)
 ON CONFLICT (codigo_interno) DO NOTHING;
 
--- PRECIOS
-INSERT INTO catalogo.precio (codigo_examen, precio, activo) VALUES
-(1, 12.50, true),
-(2, 8.00, true),
-(3, 15.00, true),
-(4, 5.00, true),
-(5, 25.00, true),
-(6, 6.50, true),
-(7, 6.00, true),
-(8, 7.50, true),
-(9, 10.00, true),
-(10, 18.00, true),
-(11, 12.00, true),
-(12, 15.00, true),
-(13, 14.00, true),
-(14, 20.00, true),
-(15, 8.00, true),
-(16, 22.00, true)
-ON CONFLICT DO NOTHING;
-
--- PAQUETES
-INSERT INTO catalogo.paquete (nombre, descripcion, precio_paquete, descuento, activo) VALUES
-('Chequeo Básico', 'Hemograma + Glucosa + Creatinina + Urea', 30.00, 15.00, true),
-('Perfil Completo', 'Hemograma + Glucosa + Perfil Lipídico + Función Hepática + Función Renal', 65.00, 20.00, true),
-('Control Diabético', 'Glucosa + HbA1c + Perfil Lipídico + Creatinina', 45.00, 18.00, true),
-('Perfil Tiroideo', 'TSH + T3 + T4 Libre', 40.00, 12.00, true)
-ON CONFLICT DO NOTHING;
-
--- PAQUETE EXÁMENES (relación muchos a muchos)
-INSERT INTO catalogo.paquete_examen (codigo_paquete, codigo_examen) VALUES
--- Chequeo Básico
-(1, 1), (1, 4), (1, 6), (1, 7),
--- Perfil Completo
-(2, 1), (2, 4), (2, 5), (2, 10), (2, 6), (2, 7),
--- Perfil Tiroideo
-(4, 12), (4, 13)
-ON CONFLICT DO NOTHING;
-
--- =====================================================
--- ESQUEMA: pagos
--- =====================================================
-
--- COTIZACIONES
-INSERT INTO pagos.cotizacion (
-  codigo_paciente, numero_cotizacion, fecha_cotizacion, fecha_expiracion,
-  subtotal, descuento, total, estado
-) VALUES
-(8, 'COT-2025-0001', CURRENT_TIMESTAMP, CURRENT_DATE + INTERVAL '7 days', 43.50, 0, 43.50, 'PENDIENTE'),
-(9, 'COT-2025-0002', CURRENT_TIMESTAMP, CURRENT_DATE + INTERVAL '7 days', 30.00, 4.50, 25.50, 'APROBADA'),
-(10, 'COT-2025-0003', CURRENT_TIMESTAMP - INTERVAL '2 days', CURRENT_DATE + INTERVAL '5 days', 65.00, 13.00, 52.00, 'APROBADA')
-ON CONFLICT (numero_cotizacion) DO NOTHING;
-
--- DETALLES COTIZACIÓN
-INSERT INTO pagos.cotizacion_detalle (codigo_cotizacion, codigo_examen, cantidad, precio_unitario, total_linea) VALUES
--- Cotización 1
-(1, 1, 1, 12.50, 12.50),
-(1, 4, 1, 5.00, 5.00),
-(1, 5, 1, 25.00, 25.00),
--- Cotización 2
-(2, 1, 1, 12.50, 12.50),
-(2, 4, 1, 5.00, 5.00),
-(2, 6, 1, 6.50, 6.50),
-(2, 7, 1, 6.00, 6.00),
--- Cotización 3
-(3, 1, 1, 12.50, 12.50),
-(3, 4, 1, 5.00, 5.00),
-(3, 5, 1, 25.00, 25.00),
-(3, 10, 1, 10.00, 10.00),
-(3, 6, 1, 6.50, 6.50),
-(3, 7, 1, 6.00, 6.00)
-ON CONFLICT DO NOTHING;
-
--- PAGOS
-INSERT INTO pagos.pago (
-  codigo_cotizacion, codigo_paciente, numero_pago, monto_total,
-  metodo_pago, estado, proveedor_pasarela
-) VALUES
-(2, 9, 'PAG-2025-0001', 25.50, 'TARJETA_CREDITO', 'COMPLETADO', 'Stripe'),
-(3, 10, 'PAG-2025-0002', 52.00, 'EFECTIVO', 'COMPLETADO', NULL)
-ON CONFLICT (numero_pago) DO NOTHING;
-
--- DETALLES PAGO
-INSERT INTO pagos.pago_detalle (codigo_pago, codigo_examen, cantidad, precio_unitario, total_linea) VALUES
--- Pago 1
-(1, 1, 1, 12.50, 12.50),
-(1, 4, 1, 5.00, 5.00),
-(1, 6, 1, 6.50, 6.50),
--- Pago 2
-(2, 1, 1, 12.50, 12.50),
-(2, 4, 1, 5.00, 5.00),
-(2, 5, 1, 25.00, 25.00),
-(2, 10, 1, 10.00, 10.00)
-ON CONFLICT DO NOTHING;
-
--- FACTURAS
-INSERT INTO pagos.factura (
-  codigo_pago, numero_factura, subtotal, iva, total, estado
-) VALUES
-(1, 'FAC-001-001-0000001', 25.50, 0, 25.50, 'EMITIDA'),
-(2, 'FAC-001-001-0000002', 52.00, 0, 52.00, 'EMITIDA')
-ON CONFLICT (numero_factura) DO NOTHING;
-
 -- =====================================================
 -- ESQUEMA: resultados
 -- =====================================================
 
 -- MUESTRAS
 INSERT INTO resultados.muestra (
-  codigo_paciente, codigo_cita, id_muestra, tipo_muestra, estado, tomada_por
+  codigo_paciente, id_muestra, tipo_muestra, estado, tomada_por
 ) VALUES
-(9, 2, 'M-2025-0001', 'Sangre venosa', 'PROCESADA', 4),
-(10, 3, 'M-2025-0002', 'Sangre venosa', 'PROCESADA', 4),
-(8, 1, 'M-2025-0003', 'Sangre venosa', 'EN_ANALISIS', 5)
+(9, 'M-2025-0001', 'Sangre venosa', 'PROCESADA', 4),
+(10, 'M-2025-0002', 'Sangre venosa', 'PROCESADA', 4),
+(8, 'M-2025-0003', 'Sangre venosa', 'EN_ANALISIS', 5)
 ON CONFLICT (id_muestra) DO NOTHING;
 
 -- RESULTADOS
@@ -402,10 +243,8 @@ ON CONFLICT DO NOTHING;
 INSERT INTO comunicaciones.notificacion (
   codigo_usuario, tipo, asunto, contenido, enviada, fecha_envio
 ) VALUES
-(8, 'EMAIL', 'Recordatorio de Cita', 'Estimado Juan, le recordamos su cita para mañana a las 08:00 AM en Sede Norte.', true, CURRENT_TIMESTAMP - INTERVAL '1 day'),
 (9, 'EMAIL', 'Resultados Disponibles', 'Estimada Laura, sus resultados de laboratorio ya están disponibles. Puede descargarlos desde su portal.', true, CURRENT_TIMESTAMP - INTERVAL '1 day'),
-(10, 'EMAIL', 'Resultados Disponibles', 'Estimado Miguel, sus resultados de laboratorio ya están disponibles. Puede descargarlos desde su portal.', true, CURRENT_TIMESTAMP - INTERVAL '6 hours'),
-(11, 'SMS', 'Confirmación de Cita', 'Hola Carmen, tu cita ha sido confirmada para mañana 09:00 AM Sede Centro. Lab Franz', true, CURRENT_TIMESTAMP)
+(10, 'EMAIL', 'Resultados Disponibles', 'Estimado Miguel, sus resultados de laboratorio ya están disponibles. Puede descargarlos desde su portal.', true, CURRENT_TIMESTAMP - INTERVAL '6 hours')
 ON CONFLICT DO NOTHING;
 
 -- =====================================================
@@ -417,7 +256,6 @@ INSERT INTO auditoria.log_actividad (
   codigo_usuario, accion, entidad, codigo_entidad, descripcion, ip_address
 ) VALUES
 (1, 'LOGIN', 'Usuario', 1, 'Inicio de sesión exitoso', '192.168.1.100'),
-(8, 'CREACION', 'Cita', 1, 'Nueva cita agendada', '192.168.1.105'),
 (2, 'ACTUALIZACION', 'Resultado', 1, 'Resultado validado', '192.168.1.110'),
 (6, 'CREACION', 'Paciente', 11, 'Nuevo paciente registrado', '192.168.1.115')
 ON CONFLICT DO NOTHING;

@@ -171,326 +171,6 @@ export class AdminService {
     return deletedRole;
   }
 
-  // ==================== SERVICIOS ====================
-
-  async getAllServices() {
-    return this.prisma.servicio.findMany({
-      include: {
-        _count: {
-          select: { slots: true, horarios: true },
-        },
-      },
-      orderBy: { nombre: 'asc' },
-    });
-  }
-
-  async getServiceById(codigo_servicio: number) {
-    const service = await this.prisma.servicio.findUnique({
-      where: { codigo_servicio },
-      include: {
-        horarios: {
-          include: {
-            sede: true,
-          },
-        },
-      },
-    });
-
-    if (!service) {
-      throw new NotFoundException('Servicio no encontrado');
-    }
-
-    return service;
-  }
-
-  async createService(data: Prisma.ServicioCreateInput, adminId: number) {
-    // Validar nombre único (case insensitive)
-    const existingService = await this.prisma.servicio.findFirst({
-      where: {
-        nombre: { equals: data.nombre as string, mode: 'insensitive' },
-      },
-    });
-
-    if (existingService) {
-      throw new BadRequestException(
-        `Ya existe un servicio con el nombre "${existingService.nombre}". ` +
-        'Los nombres de servicios deben ser únicos.'
-      );
-    }
-
-    const service = await this.prisma.servicio.create({
-      data,
-    });
-
-    // Emitir evento de creación de servicio
-    this.eventsService.emitServiceCreated(
-      service.codigo_servicio,
-      adminId,
-      { nombre: service.nombre, activo: service.activo },
-    );
-
-    return service;
-  }
-
-  async updateService(codigo_servicio: number, data: Prisma.ServicioUpdateInput, adminId: number) {
-    const service = await this.prisma.servicio.findUnique({
-      where: { codigo_servicio },
-    });
-
-    if (!service) {
-      throw new NotFoundException('Servicio no encontrado');
-    }
-
-    // Validar nombre único si se está actualizando el nombre (case insensitive)
-    if (data.nombre) {
-      const existingService = await this.prisma.servicio.findFirst({
-        where: {
-          nombre: { equals: data.nombre as string, mode: 'insensitive' },
-          codigo_servicio: { not: codigo_servicio },
-        },
-      });
-
-      if (existingService) {
-        throw new BadRequestException(
-          `Ya existe un servicio con el nombre "${existingService.nombre}". ` +
-          'Los nombres de servicios deben ser únicos.'
-        );
-      }
-    }
-
-    const updatedService = await this.prisma.servicio.update({
-      where: { codigo_servicio },
-      data,
-    });
-
-    // Emitir evento de actualización de servicio
-    this.eventsService.emitServiceUpdated(
-      codigo_servicio,
-      adminId,
-      { changedFields: Object.keys(data) },
-    );
-
-    return updatedService;
-  }
-
-  async deleteService(codigo_servicio: number, adminId: number) {
-    const service = await this.prisma.servicio.findUnique({
-      where: { codigo_servicio },
-      include: {
-        _count: {
-          select: { horarios: true, slots: true },
-        },
-      },
-    });
-
-    if (!service) {
-      throw new NotFoundException('Servicio no encontrado');
-    }
-
-    // Verificar si tiene horarios activos
-    const horariosActivos = await this.prisma.horarioAtencion.count({
-      where: {
-        codigo_servicio,
-        activo: true,
-      },
-    });
-
-    if (horariosActivos > 0) {
-      throw new BadRequestException(
-        `No se puede desactivar: el servicio tiene ${horariosActivos} horario(s) de atención activo(s). ` +
-        'Desactive los horarios primero.'
-      );
-    }
-
-    // Verificar si tiene citas pendientes
-    const citasPendientes = await this.prisma.cita.count({
-      where: {
-        slot: {
-          codigo_servicio,
-        },
-        estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
-      },
-    });
-
-    if (citasPendientes > 0) {
-      throw new BadRequestException(
-        `No se puede desactivar: el servicio tiene ${citasPendientes} cita(s) pendiente(s). ` +
-        'Cancele o complete las citas primero.'
-      );
-    }
-
-    // Desactivar en lugar de eliminar
-    const result = await this.prisma.servicio.update({
-      where: { codigo_servicio },
-      data: { activo: false },
-    });
-
-    // Emitir evento de eliminación de servicio (soft delete)
-    this.eventsService.emitServiceDeleted(codigo_servicio, adminId);
-
-    return result;
-  }
-
-  // ==================== SEDES ====================
-
-  async getAllLocations() {
-    return this.prisma.sede.findMany({
-      include: {
-        _count: {
-          select: { slots: true, horarios: true },
-        },
-      },
-      orderBy: { nombre: 'asc' },
-    });
-  }
-
-  async getLocationById(codigo_sede: number) {
-    const location = await this.prisma.sede.findUnique({
-      where: { codigo_sede },
-      include: {
-        horarios: {
-          include: {
-            servicio: true,
-          },
-        },
-      },
-    });
-
-    if (!location) {
-      throw new NotFoundException('Sede no encontrada');
-    }
-
-    return location;
-  }
-
-  async createLocation(data: Prisma.SedeCreateInput, adminId: number) {
-    // Validar nombre único (case insensitive)
-    const existingLocation = await this.prisma.sede.findFirst({
-      where: {
-        nombre: { equals: data.nombre as string, mode: 'insensitive' },
-      },
-    });
-
-    if (existingLocation) {
-      throw new BadRequestException(
-        `Ya existe una sede con el nombre "${existingLocation.nombre}". ` +
-        'Los nombres de sedes deben ser únicos.'
-      );
-    }
-
-    const location = await this.prisma.sede.create({
-      data,
-    });
-
-    // Emitir evento de creación de sede
-    this.eventsService.emitLocationCreated(
-      location.codigo_sede,
-      adminId,
-      { nombre: location.nombre, direccion: location.direccion, activo: location.activo },
-    );
-
-    return location;
-  }
-
-  async updateLocation(codigo_sede: number, data: Prisma.SedeUpdateInput, adminId: number) {
-    const location = await this.prisma.sede.findUnique({
-      where: { codigo_sede },
-    });
-
-    if (!location) {
-      throw new NotFoundException('Sede no encontrada');
-    }
-
-    // Validar nombre único si se está actualizando el nombre (case insensitive)
-    if (data.nombre) {
-      const existingLocation = await this.prisma.sede.findFirst({
-        where: {
-          nombre: { equals: data.nombre as string, mode: 'insensitive' },
-          codigo_sede: { not: codigo_sede },
-        },
-      });
-
-      if (existingLocation) {
-        throw new BadRequestException(
-          `Ya existe una sede con el nombre "${existingLocation.nombre}". ` +
-          'Los nombres de sedes deben ser únicos.'
-        );
-      }
-    }
-
-    const updatedLocation = await this.prisma.sede.update({
-      where: { codigo_sede },
-      data,
-    });
-
-    // Emitir evento de actualización de sede
-    this.eventsService.emitLocationUpdated(
-      codigo_sede,
-      adminId,
-      { changedFields: Object.keys(data) },
-    );
-
-    return updatedLocation;
-  }
-
-  async deleteLocation(codigo_sede: number, adminId: number) {
-    const location = await this.prisma.sede.findUnique({
-      where: { codigo_sede },
-      include: {
-        _count: {
-          select: { horarios: true, slots: true },
-        },
-      },
-    });
-
-    if (!location) {
-      throw new NotFoundException('Sede no encontrada');
-    }
-
-    // Verificar si tiene horarios activos
-    const horariosActivos = await this.prisma.horarioAtencion.count({
-      where: {
-        codigo_sede,
-        activo: true,
-      },
-    });
-
-    if (horariosActivos > 0) {
-      throw new BadRequestException(
-        `No se puede desactivar: la sede tiene ${horariosActivos} horario(s) de atención activo(s). ` +
-        'Desactive los horarios primero.'
-      );
-    }
-
-    // Verificar si tiene citas pendientes
-    const citasPendientes = await this.prisma.cita.count({
-      where: {
-        slot: {
-          codigo_sede,
-        },
-        estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
-      },
-    });
-
-    if (citasPendientes > 0) {
-      throw new BadRequestException(
-        `No se puede desactivar: la sede tiene ${citasPendientes} cita(s) pendiente(s). ` +
-        'Cancele o complete las citas primero.'
-      );
-    }
-
-    // Desactivar en lugar de eliminar
-    const result = await this.prisma.sede.update({
-      where: { codigo_sede },
-      data: { activo: false },
-    });
-
-    // Emitir evento de eliminación de sede (soft delete)
-    this.eventsService.emitLocationDeleted(codigo_sede, adminId);
-
-    return result;
-  }
-
   // ==================== EXAMENES ====================
 
   async getAllExams(page: number = 1, limit: number = 50, filters?: any) {
@@ -518,11 +198,6 @@ export class AdminService {
         where,
         include: {
           categoria: true,
-          precios: {
-            where: { activo: true },
-            orderBy: { fecha_inicio: 'desc' },
-            take: 1,
-          },
         },
         orderBy: { nombre: 'asc' },
         skip,
@@ -547,14 +222,6 @@ export class AdminService {
       where: { codigo_examen },
       include: {
         categoria: true,
-        precios: {
-          orderBy: { fecha_inicio: 'desc' },
-        },
-        examenes_en_paquetes: {
-          include: {
-            paquete: true,
-          },
-        },
       },
     });
 
@@ -674,21 +341,6 @@ export class AdminService {
       throw new NotFoundException('Examen no encontrado');
     }
 
-    // Verificar si el examen está en paquetes activos
-    const paquetesActivos = await this.prisma.paqueteExamen.count({
-      where: {
-        codigo_examen,
-        paquete: { activo: true },
-      },
-    });
-
-    if (paquetesActivos > 0) {
-      throw new BadRequestException(
-        `No se puede desactivar: el examen esta incluido en ${paquetesActivos} paquete(s) activo(s). ` +
-        'Retire el examen de los paquetes o desactive los paquetes primero.'
-      );
-    }
-
     // Verificar si tiene resultados pendientes
     const resultadosPendientes = await this.prisma.resultado.count({
       where: {
@@ -704,23 +356,6 @@ export class AdminService {
       );
     }
 
-    // Verificar si está en cotizaciones pendientes
-    const cotizacionesPendientes = await this.prisma.cotizacionDetalle.count({
-      where: {
-        codigo_examen,
-        cotizacion: {
-          estado: { in: ['PENDIENTE', 'PENDIENTE_PAGO_VENTANILLA', 'PAGO_EN_PROCESO'] },
-        },
-      },
-    });
-
-    if (cotizacionesPendientes > 0) {
-      throw new BadRequestException(
-        `No se puede desactivar: el examen esta en ${cotizacionesPendientes} cotizacion(es) pendiente(s). ` +
-        'Espere a que se procesen o cancelen las cotizaciones primero.'
-      );
-    }
-
     // Desactivar en lugar de eliminar
     const result = await this.prisma.examen.update({
       where: { codigo_examen },
@@ -729,148 +364,6 @@ export class AdminService {
 
     // Emitir evento de eliminación de examen
     this.eventsService.emitExamDeleted(codigo_examen, adminId);
-
-    return result;
-  }
-
-  // ==================== PRECIOS ====================
-
-  async getAllPrices(page: number = 1, limit: number = 50, filters?: any) {
-    const skip = (page - 1) * limit;
-
-    const where: Prisma.PrecioWhereInput = {};
-
-    if (filters?.codigo_examen) {
-      where.codigo_examen = parseInt(filters.codigo_examen);
-    }
-
-    if (filters?.activo !== undefined) {
-      where.activo = filters.activo === 'true';
-    }
-
-    const [prices, total] = await Promise.all([
-      this.prisma.precio.findMany({
-        where,
-        include: {
-          examen: {
-            select: {
-              codigo_examen: true,
-              nombre: true,
-              codigo_interno: true,
-            },
-          },
-        },
-        orderBy: { fecha_inicio: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.precio.count({ where }),
-    ]);
-
-    return {
-      data: prices,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  async getPriceById(codigo_precio: number) {
-    const price = await this.prisma.precio.findUnique({
-      where: { codigo_precio },
-      include: {
-        examen: true,
-      },
-    });
-
-    if (!price) {
-      throw new NotFoundException('Precio no encontrado');
-    }
-
-    return price;
-  }
-
-  async createPrice(data: any, adminId: number) {
-    const price = await this.prisma.precio.create({
-      data: {
-        precio: data.precio,
-        fecha_inicio: data.fecha_inicio || new Date(),
-        fecha_fin: data.fecha_fin,
-        activo: data.activo !== undefined ? data.activo : true,
-        examen: {
-          connect: { codigo_examen: data.codigo_examen },
-        },
-      },
-      include: {
-        examen: true,
-      },
-    });
-
-    // Emitir evento de creación de precio
-    this.eventsService.emitPriceCreated(
-      price.codigo_precio,
-      data.codigo_examen,
-      adminId,
-      { precio: price.precio, fecha_inicio: price.fecha_inicio },
-    );
-
-    return price;
-  }
-
-  async updatePrice(codigo_precio: number, data: any, adminId: number) {
-    const price = await this.prisma.precio.findUnique({
-      where: { codigo_precio },
-    });
-
-    if (!price) {
-      throw new NotFoundException('Precio no encontrado');
-    }
-
-    const updateData: any = {};
-    if (data.precio !== undefined) updateData.precio = data.precio;
-    if (data.fecha_inicio !== undefined) updateData.fecha_inicio = data.fecha_inicio;
-    if (data.fecha_fin !== undefined) updateData.fecha_fin = data.fecha_fin;
-    if (data.activo !== undefined) updateData.activo = data.activo;
-
-    const updatedPrice = await this.prisma.precio.update({
-      where: { codigo_precio },
-      data: updateData,
-      include: {
-        examen: true,
-      },
-    });
-
-    // Emitir evento de actualización de precio
-    this.eventsService.emitPriceUpdated(
-      codigo_precio,
-      price.codigo_examen,
-      adminId,
-      { changedFields: Object.keys(updateData) },
-    );
-
-    return updatedPrice;
-  }
-
-  async deletePrice(codigo_precio: number, adminId: number) {
-    const price = await this.prisma.precio.findUnique({
-      where: { codigo_precio },
-    });
-
-    if (!price) {
-      throw new NotFoundException('Precio no encontrado');
-    }
-
-    // Desactivar en lugar de eliminar (soft delete)
-    const result = await this.prisma.precio.update({
-      where: { codigo_precio },
-      data: { activo: false },
-    });
-
-    // Emitir evento de eliminación de precio
-    this.eventsService.emitPriceDeleted(codigo_precio, price.codigo_examen, adminId);
 
     return result;
   }
@@ -1341,24 +834,14 @@ export class AdminService {
     try {
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       const [
         totalUsers,
         activeUsers,
         totalExams,
-        totalAppointments,
-        todayAppointments,
-        completedAppointments,
         pendingResults,
         lowStockItems,
-        monthlyRevenue,
-        totalRevenue,
-        totalQuotations,
-        approvedQuotations,
-        pendingQuotations,
         recentExams,
-        recentPatients,
       ] = await Promise.all([
         // Usuarios
         this.prisma.usuario.count(),
@@ -1366,22 +849,6 @@ export class AdminService {
 
         // Exámenes
         this.prisma.examen.count({ where: { activo: true } }),
-
-        // Citas
-        this.prisma.cita.count(),
-        this.prisma.cita.count({
-          where: {
-            slot: {
-              fecha: {
-                gte: today,
-                lt: new Date(today.getTime() + 24 * 60 * 60 * 1000),
-              },
-            },
-          },
-        }),
-        this.prisma.cita.count({
-          where: { estado: 'COMPLETADA' },
-        }),
 
         // Resultados pendientes
         this.prisma.resultado.count({
@@ -1395,25 +862,6 @@ export class AdminService {
           WHERE activo = true AND stock_actual <= stock_minimo
         `.then(result => Number(result[0]?.count || 0)).catch(() => 0),
 
-        // Ingresos
-        this.prisma.pago.aggregate({
-          where: {
-            estado: 'COMPLETADO',
-            fecha_pago: { gte: startOfMonth },
-          },
-          _sum: { monto_total: true },
-        }).then(r => Number(r._sum.monto_total || 0)),
-
-        this.prisma.pago.aggregate({
-          where: { estado: 'COMPLETADO' },
-          _sum: { monto_total: true },
-        }).then(r => Number(r._sum.monto_total || 0)),
-
-        // Cotizaciones
-        this.prisma.cotizacion.count(),
-        this.prisma.cotizacion.count({ where: { estado: 'APROBADA' } }),
-        this.prisma.cotizacion.count({ where: { estado: 'PENDIENTE' } }),
-
         // Últimos exámenes
         this.prisma.examen.findMany({
           where: { activo: true },
@@ -1422,43 +870,6 @@ export class AdminService {
             nombre: true,
             codigo_interno: true,
             fecha_creacion: true,
-          },
-          orderBy: { fecha_creacion: 'desc' },
-          take: 5,
-        }),
-
-        // Últimos pacientes atendidos (citas completadas)
-        this.prisma.cita.findMany({
-          where: { estado: 'COMPLETADA' },
-          select: {
-            codigo_cita: true,
-            fecha_creacion: true,
-            paciente: {
-              select: {
-                codigo_usuario: true,
-                cedula: true,
-                nombres: true,
-                apellidos: true,
-              },
-            },
-            slot: {
-              select: {
-                fecha: true,
-                hora_inicio: true,
-              },
-            },
-            cotizacion: {
-              select: {
-                detalles: {
-                  select: {
-                    examen: {
-                      select: { nombre: true },
-                    },
-                  },
-                  take: 2,
-                },
-              },
-            },
           },
           orderBy: { fecha_creacion: 'desc' },
           take: 5,
@@ -1473,44 +884,16 @@ export class AdminService {
         exams: {
           total: totalExams,
         },
-        appointments: {
-          total: totalAppointments,
-          today: todayAppointments,
-          completed: completedAppointments,
-          completionRate: totalAppointments > 0
-            ? Math.round((completedAppointments / totalAppointments) * 100)
-            : 0,
-        },
         results: {
           pending: pendingResults,
         },
         inventory: {
           lowStock: lowStockItems,
         },
-        revenue: {
-          monthly: monthlyRevenue,
-          total: totalRevenue,
-        },
-        quotations: {
-          total: totalQuotations,
-          approved: approvedQuotations,
-          pending: pendingQuotations,
-          conversionRate: totalQuotations > 0
-            ? Math.round((approvedQuotations / totalQuotations) * 100)
-            : 0,
-        },
         recentExams: recentExams.map(exam => ({
           code: exam.codigo_interno,
           name: exam.nombre,
           date: exam.fecha_creacion,
-        })),
-        recentPatients: recentPatients.map(cita => ({
-          id: cita.codigo_cita,
-          cedula: cita.paciente.cedula,
-          nombre: `${cita.paciente.nombres} ${cita.paciente.apellidos}`,
-          fecha: cita.slot?.fecha || cita.fecha_creacion,
-          hora: cita.slot?.hora_inicio || null,
-          examenes: cita.cotizacion?.detalles?.map(d => d.examen.nombre).join(', ') || 'Sin examenes',
         })),
       };
     } catch (error) {
@@ -1519,13 +902,9 @@ export class AdminService {
       return {
         users: { total: 0, active: 0 },
         exams: { total: 0 },
-        appointments: { total: 0, today: 0, completed: 0, completionRate: 0 },
         results: { pending: 0 },
         inventory: { lowStock: 0 },
-        revenue: { monthly: 0, total: 0 },
-        quotations: { total: 0, approved: 0, pending: 0, conversionRate: 0 },
         recentExams: [],
-        recentPatients: [],
       };
     }
   }

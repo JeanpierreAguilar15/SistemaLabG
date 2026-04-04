@@ -145,40 +145,6 @@ test.describe('Admin Catalog - Packages Management', () => {
     });
 });
 
-test.describe('Admin Catalog - Quotations Management', () => {
-    test.beforeEach(async ({ page }) => {
-        await page.goto('/auth/login');
-        await page.locator('#identifier').fill(ADMIN_CREDENTIALS.email);
-        await page.locator('#password').fill(ADMIN_CREDENTIALS.password);
-        await page.getByRole('button', { name: /Iniciar Sesión/i }).click();
-        await page.waitForFunction(() => window.location.pathname.includes('/admin'), { timeout: 10000 });
-        await page.waitForTimeout(1000);
-    });
-
-    test('should navigate to quotations page', async ({ page }) => {
-        await page.getByRole('link', { name: /Cotizaciones/i }).first().click();
-        await page.waitForFunction(() => window.location.pathname === '/admin/cotizaciones', { timeout: 5000 });
-        await expect(page).toHaveURL('/admin/cotizaciones');
-    });
-
-    test('should display quotations list', async ({ page }) => {
-        await page.goto('/admin/cotizaciones');
-        await page.waitForLoadState('networkidle', { timeout: 30000 });
-        await page.waitForTimeout(6000);
-
-        await verifyDataDisplay(page);
-    });
-
-    test('should filter quotations by status', async ({ page }) => {
-        await page.goto('/admin/cotizaciones');
-        await page.waitForLoadState('networkidle', { timeout: 30000 });
-        await page.waitForTimeout(4000);
-
-        const hasStatus = await page.getByText(/Pendiente|Aprobada|Rechazada/i).first().isVisible({ timeout: 10000 }).catch(() => false);
-        expect(hasStatus !== undefined).toBeTruthy();
-    });
-});
-
 test.describe('Admin Catalog - Results Management', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto('/auth/login');

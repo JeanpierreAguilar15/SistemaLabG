@@ -17,10 +17,11 @@ import { Type } from 'class-transformer';
  * Estados de la orden de compra
  */
 export enum EstadoOrdenCompra {
-  BORRADOR = 'BORRADOR', // Creada pero no enviada
-  EMITIDA = 'EMITIDA', // Enviada al proveedor
-  RECIBIDA = 'RECIBIDA', // Productos recibidos y stock actualizado
-  CANCELADA = 'CANCELADA', // Orden cancelada
+  BORRADOR = 'BORRADOR',
+  EMITIDA = 'EMITIDA',
+  RECIBIDA_PARCIAL = 'RECIBIDA_PARCIAL',
+  RECIBIDA = 'RECIBIDA',
+  CANCELADA = 'CANCELADA',
 }
 
 /**

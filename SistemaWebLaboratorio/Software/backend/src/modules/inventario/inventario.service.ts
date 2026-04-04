@@ -1731,7 +1731,7 @@ export class InventarioService {
    */
   async descontarInsumosExamen(
     codigo_examen: number,
-    codigo_cita: number,
+    referencia_id: number,
     userId: number,
   ): Promise<{
     success: boolean;
@@ -1779,7 +1779,7 @@ export class InventarioService {
     // 1. PROCESAR REACTIVOS (fuera de transaccion para manejar apertura automatica)
     for (const insumo of insumosReactivos) {
       const cantidadPruebas = Number(insumo.cantidad_requerida);
-      const referencia = `Examen: ${insumo.examen.nombre} - Cita #${codigo_cita}`;
+      const referencia = `Examen: ${insumo.examen.nombre} - Orden #${referencia_id}`;
 
       try {
         const resultadoReactivo = await this.reactivosService.procesarUsoReactivoAutomatico(
@@ -1829,7 +1829,7 @@ export class InventarioService {
               codigo_item: item.codigo_item,
               tipo_movimiento: 'SALIDA',
               cantidad: cantidadRequerida,
-              motivo: `Uso en examen: ${insumo.examen.nombre} - Cita #${codigo_cita}`,
+              motivo: `Uso en examen: ${insumo.examen.nombre} - Orden #${referencia_id}`,
               stock_anterior: item.stock_actual,
               stock_nuevo: item.stock_actual - cantidadRequerida,
               realizado_por: userId,
@@ -1877,7 +1877,7 @@ export class InventarioService {
     }
 
     this.logger.log(
-      `Insumos descontados para examen ${codigo_examen}, cita ${codigo_cita}. ` +
+      `Insumos descontados para examen ${codigo_examen}, orden ${referencia_id}. ` +
       `${insumosReactivos.length} reactivos, ${insumosNormales.length} insumos normales.`
     );
 
@@ -1894,7 +1894,7 @@ export class InventarioService {
    */
   async descontarInsumosMultiplesExamenes(
     codigos_examenes: number[],
-    codigo_cita: number,
+    referencia_id: number,
     userId: number,
   ): Promise<{
     success: boolean;
@@ -1908,7 +1908,7 @@ export class InventarioService {
       try {
         const resultado = await this.descontarInsumosExamen(
           codigo_examen,
-          codigo_cita,
+          referencia_id,
           userId,
         );
         resultados.push({
@@ -2333,30 +2333,73 @@ export class InventarioService {
       throw new NotFoundException('Orden de compra no encontrada');
     }
 
-    // Validar transición de estado: solo EMITIDA puede pasar a RECIBIDA
-    if (orden.estado !== 'EMITIDA') {
+    if (orden.estado !== 'EMITIDA' && orden.estado !== 'RECIBIDA_PARCIAL') {
       throw new BadRequestException(
-        `No se puede recibir: la orden está en estado "${orden.estado}". Solo órdenes EMITIDA pueden ser recibidas.`
+        `No se puede recibir: la orden está en estado "${orden.estado}". Solo órdenes EMITIDA o RECIBIDA_PARCIAL pueden ser recibidas.`
       );
     }
 
-    // Usar transacción para crear lotes y actualizar stock
+    // Validar cantidades recibidas antes de procesar
+    if (data.items_recibidos?.length) {
+      for (const itemRecibido of data.items_recibidos) {
+        if (itemRecibido.cantidad_recibida <= 0) {
+          throw new BadRequestException(
+            `Cantidad recibida debe ser mayor a 0 para item ${itemRecibido.codigo_item}`,
+          );
+        }
+
+        const detalle = orden.detalles.find(d => d.codigo_item === itemRecibido.codigo_item);
+        if (!detalle) {
+          throw new BadRequestException(
+            `Item ${itemRecibido.codigo_item} no pertenece a esta orden de compra`,
+          );
+        }
+
+        if (itemRecibido.cantidad_recibida > detalle.cantidad) {
+          throw new BadRequestException(
+            `No se puede recibir más de lo pedido para "${detalle.item.nombre}". ` +
+            `Pedido: ${detalle.cantidad}, Recibido: ${itemRecibido.cantidad_recibida}`,
+          );
+        }
+      }
+    }
+
     return this.prisma.$transaction(async (prisma) => {
       const lotesCreados: any[] = [];
+      const detallesStock: any[] = [];
+      let todosCompletos = true;
 
       for (const detalle of orden.detalles) {
-        // Buscar si hay datos específicos de recepción para este item
         const datosRecepcion = data.items_recibidos?.find(
           (i) => i.codigo_item === detalle.codigo_item,
         );
 
-        const cantidadRecibida = datosRecepcion?.cantidad_recibida || detalle.cantidad;
+        // Si no se envían datos de recepción para este item, asumir completo
+        const cantidadRecibida = datosRecepcion?.cantidad_recibida ?? detalle.cantidad;
+
+        if (cantidadRecibida <= 0) continue;
+
+        if (cantidadRecibida < detalle.cantidad) {
+          todosCompletos = false;
+        }
+
         const numeroLote = datosRecepcion?.numero_lote || `OC-${orden.numero_orden}-${detalle.codigo_item}`;
         const fechaVencimiento = datosRecepcion?.fecha_vencimiento
           ? new Date(datosRecepcion.fecha_vencimiento)
           : null;
 
-        // 1. Crear lote
+        // Verificar que no exista un lote con el mismo número para este item
+        const loteExistente = await prisma.lote.findFirst({
+          where: { numero_lote: numeroLote, codigo_item: detalle.codigo_item },
+        });
+
+        if (loteExistente) {
+          throw new BadRequestException(
+            `Ya existe un lote "${numeroLote}" para item "${detalle.item.nombre}". ` +
+            `Use un número de lote diferente o esta orden ya fue recibida.`,
+          );
+        }
+
         const lote = await prisma.lote.create({
           data: {
             codigo_item: detalle.codigo_item,
@@ -2370,7 +2413,6 @@ export class InventarioService {
 
         lotesCreados.push(lote);
 
-        // 2. Obtener stock actual del item
         const item = await prisma.item.findUnique({
           where: { codigo_item: detalle.codigo_item },
         });
@@ -2378,7 +2420,6 @@ export class InventarioService {
         const stockAnterior = item?.stock_actual || 0;
         const stockNuevo = stockAnterior + cantidadRecibida;
 
-        // 3. Crear movimiento de COMPRA
         await prisma.movimiento.create({
           data: {
             codigo_item: detalle.codigo_item,
@@ -2393,21 +2434,30 @@ export class InventarioService {
           },
         });
 
-        // 4. Actualizar stock del item
         await prisma.item.update({
           where: { codigo_item: detalle.codigo_item },
           data: { stock_actual: { increment: cantidadRecibida } },
         });
+
+        detallesStock.push({
+          item: detalle.item.nombre,
+          codigo_item: detalle.codigo_item,
+          cantidad_pedida: detalle.cantidad,
+          cantidad_recibida: cantidadRecibida,
+          stock_anterior: stockAnterior,
+          stock_nuevo: stockNuevo,
+        });
       }
 
-      // 5. Actualizar estado de la orden
+      const nuevoEstado = todosCompletos ? 'RECIBIDA' : 'RECIBIDA_PARCIAL';
+
       const ordenActualizada = await prisma.ordenCompra.update({
         where: { codigo_orden_compra: id },
         data: {
-          estado: 'RECIBIDA',
-          fecha_entrega_real: new Date(),
+          estado: nuevoEstado,
+          fecha_entrega_real: todosCompletos ? new Date() : undefined,
           observaciones: data.observaciones_recepcion
-            ? `${orden.observaciones || ''}\n[Recepción]: ${data.observaciones_recepcion}`
+            ? `${orden.observaciones || ''}\n[Recepción ${todosCompletos ? 'completa' : 'parcial'}]: ${data.observaciones_recepcion}`
             : orden.observaciones,
         },
         include: {
@@ -2416,21 +2466,28 @@ export class InventarioService {
         },
       });
 
-      // Registrar auditoría
       await this.registrarAuditoria(
         adminId,
         'UPDATE',
         'OrdenCompra',
         id,
-        { estado: 'EMITIDA' },
-        { estado: 'RECIBIDA', lotes_creados: lotesCreados.length },
-        `Orden ${orden.numero_orden} recibida - ${lotesCreados.length} lotes creados`,
+        { estado: orden.estado },
+        {
+          estado: nuevoEstado,
+          lotes_creados: lotesCreados.length,
+          items_recibidos: detallesStock,
+        },
+        `Orden ${orden.numero_orden} ${todosCompletos ? 'recibida' : 'recibida parcialmente'} - ${lotesCreados.length} lotes, ${detallesStock.length} items`,
       );
 
       return {
         orden: ordenActualizada,
         lotes_creados: lotesCreados,
-        mensaje: `Orden recibida exitosamente. Se crearon ${lotesCreados.length} lotes y se actualizó el stock.`,
+        recepcion_parcial: !todosCompletos,
+        detalles_stock: detallesStock,
+        mensaje: todosCompletos
+          ? `Orden recibida completamente. Se crearon ${lotesCreados.length} lotes y se actualizó el stock.`
+          : `Recepción parcial registrada. Se crearon ${lotesCreados.length} lotes. Puede completar la recepción más adelante.`,
       };
     });
   }
@@ -2444,10 +2501,9 @@ export class InventarioService {
       throw new NotFoundException('Orden de compra no encontrada');
     }
 
-    // No permitir cancelar órdenes ya recibidas
-    if (orden.estado === 'RECIBIDA') {
+    if (orden.estado === 'RECIBIDA' || orden.estado === 'RECIBIDA_PARCIAL') {
       throw new BadRequestException(
-        'No se puede cancelar una orden ya recibida. Los lotes y movimientos ya fueron registrados.'
+        'No se puede cancelar una orden ya recibida (total o parcial). Los lotes y movimientos ya fueron registrados.'
       );
     }
 

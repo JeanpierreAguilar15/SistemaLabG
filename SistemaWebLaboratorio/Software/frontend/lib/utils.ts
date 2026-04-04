@@ -243,7 +243,7 @@ export function validateDateNotFuture(date: string | Date): boolean {
 }
 
 /**
- * Valida que una fecha no sea pasada (para agenda)
+ * Valida que una fecha no sea pasada
  */
 export function validateDateNotPast(date: string | Date): boolean {
   if (!date) return false

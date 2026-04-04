@@ -200,19 +200,6 @@ describe('AdminEventsListener', () => {
       await expect(listener.handleExamCreated(payload)).resolves.not.toThrow();
     });
 
-    it('should handle price updated event', async () => {
-      const payload: AdminEventPayload = {
-        entityType: 'price',
-        entityId: 1,
-        action: 'updated',
-        userId: 2,
-        data: {},
-        timestamp: new Date(),
-      };
-
-      await expect(listener.handlePriceUpdated(payload)).resolves.not.toThrow();
-    });
-
     it('should handle inventory deleted event', async () => {
       const payload: AdminEventPayload = {
         entityType: 'inventory',

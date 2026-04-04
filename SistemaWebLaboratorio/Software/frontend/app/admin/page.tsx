@@ -12,40 +12,16 @@ interface DashboardStats {
   exams: {
     total: number
   }
-  appointments: {
-    total: number
-    today: number
-    completed: number
-    completionRate: number
-  }
   results: {
     pending: number
   }
   inventory: {
     lowStock: number
   }
-  revenue: {
-    monthly: number
-    total: number
-  }
-  quotations: {
-    total: number
-    approved: number
-    pending: number
-    conversionRate: number
-  }
   recentExams: Array<{
     code: string
     name: string
     date: Date
-  }>
-  recentPatients: Array<{
-    id: number
-    cedula: string
-    nombre: string
-    fecha: Date
-    hora: string | null
-    examenes: string
   }>
 }
 
@@ -97,7 +73,6 @@ export default function AdminDashboard() {
         setError('Error al cargar las estadisticas del dashboard')
       }
     } catch (error) {
-      console.error('Error loading stats:', error)
       setError('Error de conexion. Verifique su red e intente nuevamente.')
     } finally {
       setLoading(false)
@@ -117,7 +92,7 @@ export default function AdminDashboard() {
         setLotesAbiertos(data || [])
       }
     } catch (error) {
-      console.error('Error loading lotes abiertos:', error)
+      setError('Error al cargar reactivos abiertos')
     }
   }
 
@@ -144,17 +119,17 @@ export default function AdminDashboard() {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+        <div className="bg-lab-danger-50 border border-lab-danger-200 rounded-xl p-4">
           <div className="flex items-center">
-            <svg className="w-5 h-5 text-red-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 text-lab-danger-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div className="flex-1">
-              <p className="text-sm font-medium text-red-800">{error}</p>
+              <p className="text-sm font-medium text-lab-danger-800">{error}</p>
             </div>
             <button
               onClick={() => { setLoading(true); loadStats(); loadLotesAbiertos(); }}
-              className="ml-4 px-3 py-1 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+              className="ml-4 px-3 py-1 text-sm bg-lab-danger-100 text-lab-danger-700 rounded-lg hover:bg-lab-danger-200 transition-colors"
             >
               Reintentar
             </button>
@@ -164,76 +139,21 @@ export default function AdminDashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Ingresos del Mes */}
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-lab-neutral-600">Ingresos del Mes</p>
-              <p className="text-3xl font-bold text-lab-success-600 mt-2">
-                ${(stats?.revenue.monthly || 0).toFixed(2)}
-              </p>
-              <p className="text-sm text-lab-neutral-500 mt-1">Total histórico: ${(stats?.revenue.total || 0).toFixed(2)}</p>
-            </div>
-            <div className="w-12 h-12 bg-lab-success-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        {/* Cotizaciones */}
-        <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-lab-neutral-600">Cotizaciones</p>
-              <p className="text-3xl font-bold text-lab-neutral-900 mt-2">{stats?.quotations.total || 0}</p>
-              <p className="text-sm text-lab-success-600 mt-1">
-                {stats?.quotations.conversionRate || 0}% convertidas
-              </p>
+              <p className="text-sm font-medium text-lab-neutral-600">Usuarios Activos</p>
+              <p className="text-3xl font-bold text-lab-primary-600 mt-2">{stats?.users.active || 0}</p>
+              <p className="text-sm text-lab-neutral-500 mt-1">de {stats?.users.total || 0} registrados</p>
             </div>
             <div className="w-12 h-12 bg-lab-primary-100 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-lab-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </div>
           </div>
         </div>
 
-        {/* Citas */}
-        <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-lab-neutral-600">Citas</p>
-              <p className="text-3xl font-bold text-lab-neutral-900 mt-2">{stats?.appointments.total || 0}</p>
-              <p className="text-sm text-lab-info-600 mt-1">
-                {stats?.appointments.completionRate || 0}% completadas • {stats?.appointments.today || 0} hoy
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-lab-info-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-lab-info-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        {/* Resultados Pendientes */}
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -243,12 +163,37 @@ export default function AdminDashboard() {
             </div>
             <div className="w-12 h-12 bg-lab-warning-100 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-lab-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-lab-neutral-600">Exámenes en Catálogo</p>
+              <p className="text-3xl font-bold text-lab-secondary-600 mt-2">{stats?.exams.total || 0}</p>
+              <p className="text-sm text-lab-neutral-500 mt-1">Servicios activos</p>
+            </div>
+            <div className="w-12 h-12 bg-lab-secondary-100 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-lab-secondary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-lab-neutral-600">Items Stock Bajo</p>
+              <p className={`text-3xl font-bold mt-2 ${(stats?.inventory.lowStock || 0) > 0 ? 'text-lab-danger-600' : 'text-lab-success-600'}`}>{stats?.inventory.lowStock || 0}</p>
+              <p className="text-sm text-lab-neutral-500 mt-1">{(stats?.inventory.lowStock || 0) > 0 ? 'Requieren reabastecimiento' : 'Stock saludable'}</p>
+            </div>
+            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${(stats?.inventory.lowStock || 0) > 0 ? 'bg-lab-danger-100' : 'bg-lab-success-100'}`}>
+              <svg className={`w-6 h-6 ${(stats?.inventory.lowStock || 0) > 0 ? 'text-lab-danger-600' : 'text-lab-success-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
             </div>
           </div>
@@ -283,36 +228,32 @@ export default function AdminDashboard() {
 
       {/* Business Insights Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Últimos Pacientes Atendidos */}
+        {/* Ultimos Examenes Agregados */}
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200">
           <div className="px-6 py-4 border-b border-lab-neutral-200">
-            <h2 className="text-lg font-semibold text-lab-neutral-900">Ultimos Pacientes Atendidos</h2>
-            <p className="text-sm text-lab-neutral-600 mt-1">5 pacientes mas recientes con citas completadas</p>
+            <h2 className="text-lg font-semibold text-lab-neutral-900">Ultimos Examenes Agregados</h2>
+            <p className="text-sm text-lab-neutral-600 mt-1">5 examenes mas recientes en el catalogo</p>
           </div>
           <div className="p-6">
-            {stats?.recentPatients && stats.recentPatients.length > 0 ? (
+            {stats?.recentExams && stats.recentExams.length > 0 ? (
               <div className="space-y-3">
-                {stats.recentPatients.map((patient) => (
-                  <div key={patient.id} className="flex items-center justify-between p-3 bg-lab-neutral-50 rounded-lg hover:bg-lab-neutral-100 transition-colors">
+                {stats.recentExams.map((exam) => (
+                  <div key={exam.code} className="flex items-center justify-between p-3 bg-lab-neutral-50 rounded-lg hover:bg-lab-neutral-100 transition-colors">
                     <div className="flex items-center space-x-3 flex-1">
-                      <div className="w-10 h-10 bg-lab-success-100 rounded-full flex items-center justify-center">
-                        <svg className="w-5 h-5 text-lab-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      <div className="w-10 h-10 bg-lab-secondary-100 rounded-full flex items-center justify-center">
+                        <svg className="w-5 h-5 text-lab-secondary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-lab-neutral-900 truncate">{patient.nombre}</p>
-                        <p className="text-xs text-lab-neutral-600">CI: {patient.cedula}</p>
-                        <p className="text-xs text-lab-neutral-500 truncate">{patient.examenes}</p>
+                        <p className="text-sm font-medium text-lab-neutral-900 truncate">{exam.name}</p>
+                        <p className="text-xs text-lab-neutral-600">Codigo: {exam.code}</p>
                       </div>
                     </div>
                     <div className="text-right ml-2">
                       <p className="text-xs text-lab-neutral-500">
-                        {new Date(patient.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                        {new Date(exam.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                       </p>
-                      {patient.hora && (
-                        <p className="text-xs text-lab-neutral-400">{patient.hora}</p>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -320,9 +261,9 @@ export default function AdminDashboard() {
             ) : (
               <div className="text-center py-8 text-lab-neutral-500">
                 <svg className="w-12 h-12 mx-auto text-lab-neutral-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <p>No hay pacientes atendidos recientemente</p>
+                <p>No hay examenes recientes en el catalogo</p>
               </div>
             )}
           </div>

@@ -9,9 +9,7 @@ import { getInitials, getGreeting } from '@/lib/utils'
 
 const navigation = [
   { name: 'Dashboard', href: '/portal', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-  { name: 'Mis Citas', href: '/portal/citas', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { name: 'Resultados', href: '/portal/resultados', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  { name: 'Cotizaciones', href: '/portal/cotizaciones', icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z' },
   { name: 'Mi Perfil', href: '/portal/perfil', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
 ]
 
@@ -136,7 +134,7 @@ export default function PortalLayout({
       {sidebarOpen && (
         <div className="md:hidden">
           <div className="fixed inset-0 z-40 flex">
-            <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)}></div>
+            <div className="fixed inset-0 bg-black/50" onClick={() => setSidebarOpen(false)}></div>
             <div className="relative flex w-full max-w-xs flex-1 flex-col bg-lab-primary-900">
               {/* Same content as desktop sidebar */}
               <div className="flex flex-col flex-grow pt-5 pb-4 overflow-y-auto">
@@ -164,11 +162,11 @@ export default function PortalLayout({
                     <div className="w-10 h-10 rounded-full bg-lab-primary-700 text-white flex items-center justify-center font-semibold">
                       {getInitials(user.nombres, user.apellidos)}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-white">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-white truncate">
                         {user.nombres} {user.apellidos}
                       </p>
-                      <p className="text-xs text-lab-primary-200">{user.email}</p>
+                      <p className="text-xs text-lab-primary-200 truncate">{user.email}</p>
                     </div>
                   </div>
                 </div>

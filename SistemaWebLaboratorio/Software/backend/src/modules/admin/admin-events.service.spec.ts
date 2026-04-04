@@ -153,27 +153,6 @@ describe('AdminEventsService', () => {
     });
   });
 
-  describe('Price Events', () => {
-    it('should emit price created event with exam ID', () => {
-      const priceId = 1;
-      const examId = 5;
-      const adminId = 2;
-      const data = { precio: 50.0 };
-
-      service.emitPriceCreated(priceId, examId, adminId, data);
-
-      expect(eventEmitter.emit).toHaveBeenCalledWith(
-        AdminEventType.PRICE_CREATED,
-        expect.objectContaining({
-          entityType: 'price',
-          entityId: priceId,
-          userId: adminId,
-          data: expect.objectContaining({ examId }),
-        }),
-      );
-    });
-  });
-
   describe('Category Events', () => {
     it('should emit category created event', () => {
       service.emitCategoryCreated(1, 2, { nombre: 'Hematología' });

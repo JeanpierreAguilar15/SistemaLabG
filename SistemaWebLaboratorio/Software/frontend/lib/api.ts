@@ -116,33 +116,6 @@ export const usersApi = {
   getProfile: (token: string) => request('/users/profile', { token }),
 }
 
-// Appointments (citas)
-export const appointmentsApi = {
-  getAvailableSlots: (token: string, servicio_id?: number, fecha?: string) => {
-    const params = new URLSearchParams()
-    if (servicio_id) params.append('servicio_id', servicio_id.toString())
-    if (fecha) params.append('fecha', fecha)
-    const query = params.toString() ? `?${params}` : ''
-    return request(`/appointments/slots${query}`, { token })
-  },
-
-  createAppointment: (token: string, data: { codigo_slot: number; observaciones?: string }) =>
-    request('/appointments', {
-      method: 'POST',
-      token,
-      body: JSON.stringify(data),
-    }),
-
-  getMyAppointments: (token: string) => request('/appointments/my', { token }),
-
-  cancelAppointment: (token: string, codigo_cita: number, motivo?: string) =>
-    request(`/appointments/${codigo_cita}/cancel`, {
-      method: 'PATCH',
-      token,
-      body: JSON.stringify({ motivo }),
-    }),
-}
-
 // Results (resultados)
 export const resultsApi = {
   // Paciente endpoints
@@ -251,7 +224,6 @@ export const resultsApi = {
 
   createMuestra: (token: string, data: {
     codigo_paciente: number
-    codigo_cita?: number
     id_muestra: string
     tipo_muestra?: string
     fecha_toma?: string
@@ -284,18 +256,6 @@ export const catalogApi = {
   },
 
   getCategories: () => request('/catalog/categories'),
-}
-
-// Quotations (cotizaciones)
-export const quotationsApi = {
-  create: (token: string, data: { exams: { codigo_examen: number; cantidad: number }[] }) =>
-    request('/quotations', {
-      method: 'POST',
-      token,
-      body: JSON.stringify(data),
-    }),
-
-  getMy: (token: string) => request('/quotations/my', { token }),
 }
 
 export const api = {

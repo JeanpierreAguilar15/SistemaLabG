@@ -22,20 +22,12 @@ describe('AdminService', () => {
             emitRoleCreated: jest.fn(),
             emitRoleUpdated: jest.fn(),
             emitRoleDeleted: jest.fn(),
-            emitServiceCreated: jest.fn(),
-            emitServiceUpdated: jest.fn(),
-            emitLocationCreated: jest.fn(),
-            emitLocationUpdated: jest.fn(),
             emitExamCreated: jest.fn(),
             emitExamUpdated: jest.fn(),
             emitExamDeleted: jest.fn(),
-            emitPriceCreated: jest.fn(),
-            emitPriceUpdated: jest.fn(),
             emitCategoryCreated: jest.fn(),
             emitCategoryUpdated: jest.fn(),
             emitCategoryDeleted: jest.fn(),
-            emitPackageCreated: jest.fn(),
-            emitPackageUpdated: jest.fn(),
             emitInventoryItemCreated: jest.fn(),
             emitInventoryItemUpdated: jest.fn(),
             emitInventoryItemDeleted: jest.fn(),
@@ -63,18 +55,6 @@ describe('AdminService', () => {
               update: jest.fn(),
               delete: jest.fn(),
             },
-            servicio: {
-              findMany: jest.fn(),
-              findUnique: jest.fn(),
-              create: jest.fn(),
-              update: jest.fn(),
-            },
-            sede: {
-              findMany: jest.fn(),
-              findUnique: jest.fn(),
-              create: jest.fn(),
-              update: jest.fn(),
-            },
             examen: {
               findMany: jest.fn(),
               findUnique: jest.fn(),
@@ -88,16 +68,6 @@ describe('AdminService', () => {
               create: jest.fn(),
               update: jest.fn(),
               delete: jest.fn(),
-            },
-            paquete: {
-              findMany: jest.fn(),
-              findUnique: jest.fn(),
-              create: jest.fn(),
-              update: jest.fn(),
-            },
-            paqueteExamen: {
-              deleteMany: jest.fn(),
-              createMany: jest.fn(),
             },
             item: {
               findMany: jest.fn(),
@@ -123,16 +93,8 @@ describe('AdminService', () => {
               findMany: jest.fn(),
               count: jest.fn(),
             },
-            cita: {
-              count: jest.fn(),
-            },
             resultado: {
               count: jest.fn(),
-            },
-            precio: {
-              create: jest.fn(),
-              update: jest.fn(),
-              findUnique: jest.fn(),
             },
           },
         },
@@ -235,7 +197,6 @@ describe('AdminService', () => {
           codigo_examen: 1,
           nombre: 'Hemograma',
           categoria: { nombre: 'Hematología' },
-          precios: [{ precio: 25.0, activo: true }],
         },
       ];
 
@@ -292,7 +253,6 @@ describe('AdminService', () => {
     it('should return comprehensive dashboard statistics', async () => {
       jest.spyOn(prisma.usuario, 'count').mockResolvedValue(100);
       jest.spyOn(prisma.examen, 'count').mockResolvedValue(50);
-      jest.spyOn(prisma.cita, 'count').mockResolvedValue(200);
       jest.spyOn(prisma.resultado, 'count').mockResolvedValue(10);
       jest.spyOn(prisma.item, 'count').mockResolvedValue(5);
       jest.spyOn(prisma.logActividad, 'findMany').mockResolvedValue([]);
@@ -301,7 +261,6 @@ describe('AdminService', () => {
 
       expect(result).toHaveProperty('users');
       expect(result).toHaveProperty('exams');
-      expect(result).toHaveProperty('appointments');
       expect(result).toHaveProperty('results');
       expect(result).toHaveProperty('inventory');
       expect(result).toHaveProperty('recentActivities');

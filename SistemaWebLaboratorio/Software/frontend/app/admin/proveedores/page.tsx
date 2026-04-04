@@ -358,7 +358,7 @@ export default function SuppliersManagement() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow-sm border border-lab-neutral-200 p-4">
           <div className="text-sm font-medium text-lab-neutral-500">Total Proveedores</div>
           <div className="text-2xl font-bold text-lab-neutral-900">{stats.total}</div>
@@ -423,7 +423,7 @@ export default function SuppliersManagement() {
 
       {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full my-8">
             <div className="p-6 border-b border-lab-neutral-200">
               <h2 className="text-2xl font-bold text-lab-neutral-900">
@@ -727,7 +727,7 @@ export default function SuppliersManagement() {
 
       {/* Confirmation Modal */}
       {confirmToggle && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className={`flex items-center justify-center w-12 h-12 mx-auto rounded-full mb-4 ${
               confirmToggle.activar ? 'bg-lab-success-100' : 'bg-lab-danger-100'

@@ -36,7 +36,7 @@ interface OrdenCompra {
   codigo_proveedor: number
   fecha_orden: string
   fecha_entrega_esperada: string | null
-  estado: 'BORRADOR' | 'EMITIDA' | 'RECIBIDA' | 'CANCELADA'
+  estado: 'BORRADOR' | 'EMITIDA' | 'RECIBIDA_PARCIAL' | 'RECIBIDA' | 'CANCELADA'
   subtotal: number
   impuestos: number
   total: number
@@ -63,6 +63,7 @@ interface OrderStats {
 const estadoColors: Record<string, string> = {
   BORRADOR: 'bg-gray-100 text-gray-800',
   EMITIDA: 'bg-blue-100 text-blue-800',
+  RECIBIDA_PARCIAL: 'bg-yellow-100 text-yellow-800',
   RECIBIDA: 'bg-green-100 text-green-800',
   CANCELADA: 'bg-red-100 text-red-800',
 }
@@ -70,6 +71,7 @@ const estadoColors: Record<string, string> = {
 const estadoLabels: Record<string, string> = {
   BORRADOR: 'Borrador',
   EMITIDA: 'Emitida',
+  RECIBIDA_PARCIAL: 'Recibida Parcial',
   RECIBIDA: 'Recibida',
   CANCELADA: 'Cancelada',
 }
@@ -138,7 +140,7 @@ export default function OrdenesCompraPage() {
         setPagination(result.pagination || null)
       }
     } catch (error) {
-      console.error('Error loading ordenes:', error)
+      setMessage({ type: 'error', text: 'Error al cargar órdenes' })
     } finally {
       setLoading(false)
     }
@@ -154,7 +156,7 @@ export default function OrdenesCompraPage() {
         setProveedores(data)
       }
     } catch (error) {
-      console.error('Error loading proveedores:', error)
+      setMessage({ type: 'error', text: 'Error al cargar proveedores' })
     }
   }
 
@@ -168,7 +170,7 @@ export default function OrdenesCompraPage() {
         setItems(result.data || result || [])
       }
     } catch (error) {
-      console.error('Error loading items:', error)
+      setMessage({ type: 'error', text: 'Error al cargar items' })
     }
   }
 
@@ -191,7 +193,7 @@ export default function OrdenesCompraPage() {
         const now = new Date()
         const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
         const recibidasMes = allOrders.filter((o) => {
-          if (o.estado !== 'RECIBIDA') return false
+          if (o.estado !== 'RECIBIDA' && o.estado !== 'RECIBIDA_PARCIAL') return false
           const fechaOrden = new Date(o.fecha_orden)
           return fechaOrden >= firstDayOfMonth
         })
@@ -208,7 +210,7 @@ export default function OrdenesCompraPage() {
         })
       }
     } catch (error) {
-      console.error('Error loading stats:', error)
+      setMessage({ type: 'error', text: 'Error al cargar estadísticas' })
     }
   }
 
@@ -369,7 +371,7 @@ export default function OrdenesCompraPage() {
         setShowDetailsModal(true)
       }
     } catch (error) {
-      console.error('Error loading order details:', error)
+      setMessage({ type: 'error', text: 'Error al cargar detalles de la orden' })
     }
   }
 
@@ -436,7 +438,6 @@ export default function OrdenesCompraPage() {
         setShowModal(true)
       }
     } catch (error) {
-      console.error('Error loading order for edit:', error)
       setMessage({ type: 'error', text: 'Error al cargar orden para edición' })
     }
   }
@@ -628,6 +629,7 @@ export default function OrdenesCompraPage() {
             <option value="all">Todos los estados</option>
             <option value="BORRADOR">Borrador</option>
             <option value="EMITIDA">Emitida</option>
+            <option value="RECIBIDA_PARCIAL">Recibida Parcial</option>
             <option value="RECIBIDA">Recibida</option>
             <option value="CANCELADA">Cancelada</option>
           </select>
@@ -691,7 +693,7 @@ export default function OrdenesCompraPage() {
                           </Button>
                         </>
                       )}
-                      {orden.estado === 'EMITIDA' && (
+                      {(orden.estado === 'EMITIDA' || orden.estado === 'RECIBIDA_PARCIAL') && (
                         <>
                           <Button
                             size="sm"
@@ -699,16 +701,18 @@ export default function OrdenesCompraPage() {
                             className="text-green-600"
                             onClick={() => setConfirmReceive(orden)}
                           >
-                            Recibir
+                            {orden.estado === 'RECIBIDA_PARCIAL' ? 'Completar Recepción' : 'Recibir'}
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600"
-                            onClick={() => setConfirmCancel(orden)}
-                          >
-                            Cancelar
-                          </Button>
+                          {orden.estado === 'EMITIDA' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600"
+                              onClick={() => setConfirmCancel(orden)}
+                            >
+                              Cancelar
+                            </Button>
+                          )}
                         </>
                       )}
                     </td>
@@ -767,7 +771,7 @@ export default function OrdenesCompraPage() {
 
       {/* Create Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-xl max-w-3xl w-full my-8">
             <div className="p-6 border-b">
               <div className="flex justify-between items-center">
@@ -910,7 +914,7 @@ export default function OrdenesCompraPage() {
 
       {/* Details Modal */}
       {showDetailsModal && selectedOrden && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-2xl w-full">
             <div className="p-6 border-b">
               <div className="flex justify-between items-center">
@@ -958,6 +962,7 @@ export default function OrdenesCompraPage() {
 
               <div>
                 <h3 className="font-semibold mb-2">Items</h3>
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
@@ -984,6 +989,7 @@ export default function OrdenesCompraPage() {
                     </tr>
                   </tfoot>
                 </table>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t">
@@ -998,7 +1004,7 @@ export default function OrdenesCompraPage() {
 
       {/* Emit Confirmation Modal */}
       {confirmEmit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-center w-12 h-12 mx-auto bg-blue-100 rounded-full mb-4">
               <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1028,7 +1034,7 @@ export default function OrdenesCompraPage() {
 
       {/* Receive Confirmation Modal */}
       {confirmReceive && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-center w-12 h-12 mx-auto bg-green-100 rounded-full mb-4">
               <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1058,7 +1064,7 @@ export default function OrdenesCompraPage() {
 
       {/* Cancel Confirmation Modal */}
       {confirmCancel && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
               <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">

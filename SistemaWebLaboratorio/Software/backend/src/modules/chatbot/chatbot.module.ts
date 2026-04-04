@@ -1,29 +1,20 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../../prisma/prisma.module';
-import { EventsModule } from '../events/events.module';
-import { ChatbotService } from './services/chatbot.service';
-import { ChatbotLoggingService } from './services/chatbot-logging.service';
-import { ChatbotAgendaService } from './services/chatbot-agenda.service';
 import { LabResultsInterpreterService } from './services/lab-results-interpreter.service';
+import { ChatHistoryService } from './services/chat-history.service';
 import { ChatbotController } from './controllers/chatbot.controller';
-import { ChatbotLoggingController } from './controllers/chatbot-logging.controller';
-import { ChatGateway } from './gateways/chat.gateway';
 
 @Module({
     imports: [
         ConfigModule,
         PrismaModule,
-        forwardRef(() => EventsModule),
     ],
-    controllers: [ChatbotController, ChatbotLoggingController],
+    controllers: [ChatbotController],
     providers: [
-        ChatbotAgendaService,
-        ChatbotService,
-        ChatbotLoggingService,
         LabResultsInterpreterService,
-        ChatGateway,
+        ChatHistoryService,
     ],
-    exports: [ChatbotService, ChatbotLoggingService, ChatGateway, ChatbotAgendaService, LabResultsInterpreterService],
+    exports: [LabResultsInterpreterService, ChatHistoryService],
 })
 export class ChatbotModule { }

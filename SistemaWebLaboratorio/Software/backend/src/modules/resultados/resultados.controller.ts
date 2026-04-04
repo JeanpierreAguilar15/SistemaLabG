@@ -176,7 +176,7 @@ export class ResultadosController {
   @Roles('ADMIN', 'PERSONAL_LAB')
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Obtener resultados AGRUPADOS por paciente/cita (Admin)',
+    summary: 'Obtener resultados AGRUPADOS por paciente/cotización (Admin)',
     description: 'Vista organizada donde cada muestra agrupa todos sus exámenes',
   })
   @ApiResponse({ status: 200, description: 'Lista de muestras con resultados agrupados' })
@@ -264,6 +264,15 @@ export class ResultadosController {
 
   // ==================== RESULTADOS (Paciente) ====================
 
+  @Get('my/dashboard')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener estadísticas del paciente para dashboard' })
+  @ApiResponse({ status: 200, description: 'Stats del paciente' })
+  async getMyDashboard(@CurrentUser('codigo_usuario') codigo_paciente: number) {
+    return this.resultadosService.getMyDashboardStats(codigo_paciente);
+  }
+
   @Get('my')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -277,8 +286,8 @@ export class ResultadosController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Obtener mis resultados AGRUPADOS por cita/muestra (Paciente)',
-    description: 'Si el paciente agendó 3 exámenes en una cita, todos se muestran juntos en una sola muestra',
+    summary: 'Obtener mis resultados AGRUPADOS por cotización/muestra (Paciente)',
+    description: 'Si el paciente solicitó 3 exámenes en una cotización, todos se muestran juntos en una sola muestra',
   })
   @ApiResponse({ status: 200, description: 'Lista de muestras con sus resultados agrupados' })
   async getMyResultadosAgrupados(@CurrentUser('codigo_usuario') codigo_paciente: number) {

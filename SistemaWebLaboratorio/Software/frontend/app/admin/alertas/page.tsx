@@ -124,7 +124,7 @@ export default function AlertasStockPage() {
         setWhatsappConfig(data)
       }
     } catch (error) {
-      console.error('Error loading WhatsApp config:', error)
+      setMessage({ type: 'error', text: 'Error al cargar configuración de WhatsApp' })
     }
   }
 
@@ -276,7 +276,7 @@ export default function AlertasStockPage() {
         setEstadisticas(data)
       }
     } catch (error) {
-      console.error('Error loading stats:', error)
+      setMessage({ type: 'error', text: 'Error al cargar estadísticas de alertas' })
     }
   }
 
@@ -296,7 +296,7 @@ export default function AlertasStockPage() {
         setItemsSinMovimiento(data.items || [])
       }
     } catch (error) {
-      console.error('Error loading items sin movimiento:', error)
+      setMessage({ type: 'error', text: 'Error al cargar items sin movimiento' })
     }
   }
 
@@ -405,7 +405,7 @@ export default function AlertasStockPage() {
         <>
       {/* Estadísticas */}
       {estadisticas && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="text-sm text-lab-neutral-600">Total Alertas</div>

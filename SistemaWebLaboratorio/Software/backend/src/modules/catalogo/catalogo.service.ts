@@ -6,7 +6,7 @@ export class CatalogoService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Obtiene el catálogo completo de exámenes con sus precios actuales
+   * Obtiene el catalogo completo de examenes
    */
   async getCatalogo() {
     const examenes = await this.prisma.examen.findMany({
@@ -18,15 +18,6 @@ export class CatalogoService {
           select: {
             nombre: true,
           },
-        },
-        precios: {
-          where: {
-            activo: true,
-          },
-          orderBy: {
-            fecha_inicio: 'desc',
-          },
-          take: 1,
         },
       },
       orderBy: {
@@ -40,7 +31,6 @@ export class CatalogoService {
       nombre: examen.nombre,
       descripcion: examen.descripcion,
       categoria: examen.categoria.nombre,
-      precio_actual: examen.precios[0]?.precio || 0,
       requiere_ayuno: examen.requiere_ayuno,
       requiere_preparacion_especial: !!examen.instrucciones_preparacion,
       instrucciones_preparacion: examen.instrucciones_preparacion,
@@ -54,7 +44,7 @@ export class CatalogoService {
   }
 
   /**
-   * Obtiene las categorías de exámenes activas
+   * Obtiene las categorias de examenes activas
    */
   async getCategorias() {
     const categorias = await this.prisma.categoriaExamen.findMany({
@@ -75,7 +65,7 @@ export class CatalogoService {
   }
 
   /**
-   * Obtiene un examen específico por su código
+   * Obtiene un examen especifico por su codigo
    */
   async getExamenById(codigo_examen: number) {
     const examen = await this.prisma.examen.findUnique({
@@ -87,15 +77,6 @@ export class CatalogoService {
           select: {
             nombre: true,
           },
-        },
-        precios: {
-          where: {
-            activo: true,
-          },
-          orderBy: {
-            fecha_inicio: 'desc',
-          },
-          take: 1,
         },
       },
     });
@@ -110,7 +91,6 @@ export class CatalogoService {
       nombre: examen.nombre,
       descripcion: examen.descripcion,
       categoria: examen.categoria.nombre,
-      precio_actual: examen.precios[0]?.precio || 0,
       requiere_ayuno: examen.requiere_ayuno,
       requiere_preparacion_especial: !!examen.instrucciones_preparacion,
       instrucciones_preparacion: examen.instrucciones_preparacion,

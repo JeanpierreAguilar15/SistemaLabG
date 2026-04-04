@@ -2,6 +2,7 @@ import {
   IsString,
   IsEmail,
   IsOptional,
+  IsNotEmpty,
   MinLength,
   MaxLength,
   Matches,
@@ -52,12 +53,12 @@ export class RegisterDto {
     description: 'Teléfono celular (09XXXXXXXX) o convencional (02XXXXXXX)',
     example: '0987654321',
   })
-  @IsOptional()
+  @IsNotEmpty({ message: 'El teléfono es obligatorio' })
   @IsString()
   @Matches(/^(09\d{8}|0[2-7]\d{7})$/, {
     message: 'Teléfono debe ser formato ecuatoriano (09XXXXXXXX o 02XXXXXXX)',
   })
-  telefono?: string;
+  telefono: string;
 
   @ApiPropertyOptional({
     description: 'Fecha de nacimiento (ISO 8601)',

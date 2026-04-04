@@ -111,7 +111,7 @@ export default function ExamenesPage() {
         setExamenes(examenes)
       }
     } catch (error) {
-      console.error('Error loading examenes:', error)
+      setMessage({ type: 'error', text: 'Error al cargar exámenes' })
     } finally {
       setLoading(false)
     }
@@ -127,7 +127,7 @@ export default function ExamenesPage() {
         setCategorias(data)
       }
     } catch (error) {
-      console.error('Error loading categorias:', error)
+      setMessage({ type: 'error', text: 'Error al cargar categorías' })
     }
   }
 
@@ -136,17 +136,6 @@ export default function ExamenesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (formData.precio) {
-      const precio = parseFloat(formData.precio)
-      if (!validatePositiveNumber(precio)) {
-        setMessage({ type: 'error', text: '❌ El precio debe ser un número positivo.' })
-        return
-      }
-      if (precio === 0) {
-        setMessage({ type: 'error', text: '❌ El precio debe ser mayor a 0.' })
-        return
-      }
-    }
 
     if (formData.requiere_ayuno && formData.horas_ayuno) {
       const horasAyuno = parseInt(formData.horas_ayuno)
@@ -212,38 +201,6 @@ export default function ExamenesPage() {
         )
 
         if (response.ok) {
-          // Actualizar o crear precio si se especificó
-          if (formData.precio) {
-            const precioActual = editingExamen.precios?.[0]
-            if (precioActual?.codigo_precio) {
-              // Actualizar precio existente
-              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/prices/${precioActual.codigo_precio}`, {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify({
-                  precio: parseFloat(formData.precio),
-                  activo: true,
-                }),
-              })
-            } else {
-              // Crear nuevo precio si no existe
-              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/prices`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify({
-                  codigo_examen: editingExamen.codigo_examen,
-                  precio: parseFloat(formData.precio),
-                  activo: true,
-                }),
-              })
-            }
-          }
           setMessage({ type: 'success', text: 'Examen actualizado correctamente' })
           loadExamenes()
           handleCloseModal()
@@ -262,24 +219,8 @@ export default function ExamenesPage() {
         })
 
         if (response.ok) {
-          const newExamen = await response.json()
 
-          if (formData.precio) {
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/prices`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                codigo_examen: newExamen.codigo_examen,
-                precio: parseFloat(formData.precio),
-                activo: true,
-              }),
-            })
-          }
-
-          setMessage({ type: 'success', text: 'Examen creado! Los pacientes ya pueden verlo en Cotizaciones' })
+          setMessage({ type: 'success', text: 'Examen creado exitosamente' })
           loadExamenes()
           handleCloseModal()
         } else {
@@ -593,7 +534,7 @@ export default function ExamenesPage() {
                       <th className="text-left p-4 font-semibold text-lab-neutral-900">Código</th>
                       <th className="text-left p-4 font-semibold text-lab-neutral-900">Nombre</th>
                       <th className="text-left p-4 font-semibold text-lab-neutral-900">Categoría</th>
-                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Precio</th>
+                      <th className="text-left p-4 font-semibold text-lab-neutral-900">Entrega</th>
                       <th className="text-left p-4 font-semibold text-lab-neutral-900">Ayuno</th>
                       <th className="text-left p-4 font-semibold text-lab-neutral-900">Estado</th>
                       <th className="text-right p-4 font-semibold text-lab-neutral-900">Acciones</th>
@@ -610,8 +551,8 @@ export default function ExamenesPage() {
                           )}
                         </td>
                         <td className="p-4 text-sm text-lab-neutral-700">{examen.categoria?.nombre || '-'}</td>
-                        <td className="p-4 text-sm font-semibold text-lab-neutral-900">
-                          ${examen.precios?.[0]?.precio ? Number(examen.precios[0].precio).toFixed(2) : '0.00'}
+                        <td className="p-4 text-sm text-lab-neutral-700">
+                          {examen.tiempo_entrega_horas ? `${examen.tiempo_entrega_horas}h` : '-'}
                         </td>
                         <td className="p-4">
                           {examen.requiere_ayuno ? (
@@ -731,7 +672,7 @@ export default function ExamenesPage() {
 
       {/* Modal Examen */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-xl max-w-2xl w-full my-8">
             <div className="p-6 border-b border-lab-neutral-200">
               <div className="flex justify-between items-center">
@@ -801,20 +742,7 @@ export default function ExamenesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="precio">Precio ($) *</Label>
-                  <Input
-                    id="precio"
-                    type="number"
-                    step="0.01"
-                    value={formData.precio}
-                    onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
-                    placeholder="15.00"
-                    required={!editingExamen}
-                  />
-                </div>
-
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="tipo_muestra">Tipo de Muestra</Label>
                   <select
@@ -969,7 +897,7 @@ export default function ExamenesPage() {
 
       {/* Modal Categoria */}
       {showCategoriaModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full">
             <div className="p-6 border-b border-lab-neutral-200">
               <div className="flex justify-between items-center">
@@ -1024,7 +952,7 @@ export default function ExamenesPage() {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div
-              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              className="fixed inset-0 transition-opacity bg-black/50"
               onClick={handleToggleCancel}
             ></div>
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
@@ -1092,7 +1020,7 @@ export default function ExamenesPage() {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div
-              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              className="fixed inset-0 transition-opacity bg-black/50"
               onClick={handleDeleteCategoriaCancel}
             ></div>
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">

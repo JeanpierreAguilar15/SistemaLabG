@@ -135,7 +135,6 @@ export default function ExamenesInsumosPage() {
 
   const fetchData = async () => {
     if (!token) {
-      console.log('Token no disponible aun');
       return;
     }
 
@@ -147,10 +146,8 @@ export default function ExamenesInsumosPage() {
       });
       if (resExamenes.ok) {
         const data = await resExamenes.json();
-        console.log('Examenes cargados:', data);
         setExamenes(data || []);
       } else {
-        console.error('Error al cargar examenes:', resExamenes.status, resExamenes.statusText);
         if (resExamenes.status !== 401) {
           showMessage('error', `Error al cargar examenes: ${resExamenes.status}`);
         }
@@ -165,7 +162,6 @@ export default function ExamenesInsumosPage() {
         setItemsDisponibles(data.data || []);
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
       showMessage('error', 'Error al cargar datos');
     } finally {
       setLoading(false);
@@ -346,7 +342,7 @@ export default function ExamenesInsumosPage() {
       {message && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm ${
           message.type === 'success' ? 'bg-green-100 border border-green-400 text-green-700' :
-          message.type === 'error' ? 'bg-red-100 border border-red-400 text-red-700' :
+          message.type === 'error' ? 'bg-lab-danger-100 border border-lab-danger-400 text-lab-danger-700' :
           'bg-yellow-100 border border-yellow-400 text-yellow-700'
         }`}>
           <div className="flex items-center gap-2">
@@ -677,7 +673,7 @@ export default function ExamenesInsumosPage() {
                           </div>
                           <p className="text-xs text-green-600">
                             Ingrese cuantos <strong>{item.unidad_medida}</strong> se consumen por cada examen.
-                            El stock se descontara automaticamente al completar la cita.
+                            El stock se descontara automaticamente al procesar la muestra.
                           </p>
                         </div>
                       )}
