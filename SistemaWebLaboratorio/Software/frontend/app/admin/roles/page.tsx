@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
+import { normalizeRole } from '@/lib/roles'
 
 interface Role {
   codigo_rol: number
@@ -55,20 +56,18 @@ export default function RolesManagement() {
   })
 
   useEffect(() => {
-    if (accessToken) {
-      loadRoles()
-      loadPermissions()
-    }
-  }, [accessToken])
-
-  useEffect(() => {
     if (message) {
       const timer = setTimeout(() => setMessage(null), 5000)
       return () => clearTimeout(timer)
     }
   }, [message])
 
-  const loadRoles = async () => {
+  const loadRoles = useCallback(async () => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/roles`, {
@@ -86,9 +85,13 @@ export default function RolesManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken])
 
-  const loadPermissions = async () => {
+  const loadPermissions = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/roles/permissions`, {
         headers: {
@@ -103,7 +106,14 @@ export default function RolesManagement() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar los permisos' })
     }
-  }
+  }, [accessToken])
+
+  useEffect(() => {
+    if (accessToken) {
+      loadRoles()
+      loadPermissions()
+    }
+  }, [accessToken, loadRoles, loadPermissions])
 
   const getPermissionsForLevel = (nivel: number): RolePermissions | undefined => {
     return permissions.find(p => p.nivel === nivel)
@@ -160,6 +170,11 @@ export default function RolesManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!editingRole) {
+      setMessage({ type: 'error', text: 'Los roles del sistema son fijos; no se crean roles nuevos.' })
+      return
+    }
+
     // Validaciones
     if (!formData.nombre.trim()) {
       setMessage({ type: 'error', text: 'El nombre del rol es requerido' })
@@ -172,8 +187,8 @@ export default function RolesManagement() {
     }
 
     const nivel = parseInt(formData.nivel_acceso)
-    if (isNaN(nivel) || nivel < 1 || nivel > 10) {
-      setMessage({ type: 'error', text: 'El nivel de acceso debe estar entre 1 y 10' })
+    if (isNaN(nivel) || nivel < 1 || nivel > 3) {
+      setMessage({ type: 'error', text: 'El nivel de acceso debe estar entre 1 y 3' })
       return
     }
 
@@ -364,7 +379,7 @@ export default function RolesManagement() {
         </div>
         <Button
           onClick={() => handleOpenModal()}
-          className="bg-lab-primary-600 hover:bg-lab-primary-700"
+          className="hidden"
         >
           <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -411,7 +426,7 @@ export default function RolesManagement() {
               </svg>
             </div>
             <div>
-              <p className="text-sm font-medium text-lab-neutral-600">Nivel Máximo</p>
+              <p className="text-sm font-medium text-lab-neutral-600">Rol operativo máximo</p>
               <p className="text-2xl font-bold text-lab-neutral-900">{Math.max(...roles.map(r => r.nivel_acceso), 0)}</p>
             </div>
           </div>
@@ -456,11 +471,11 @@ export default function RolesManagement() {
                       <div className="flex items-center">
                         <div className="w-10 h-10 rounded-full bg-lab-primary-100 flex items-center justify-center">
                           <span className="text-lab-primary-700 font-semibold text-sm">
-                            {role.nombre.substring(0, 2).toUpperCase()}
+                            {normalizeRole(role.nombre).substring(0, 2).toUpperCase()}
                           </span>
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-lab-neutral-900">{role.nombre}</div>
+                          <div className="text-sm font-medium text-lab-neutral-900">{normalizeRole(role.nombre)}</div>
                           {rolePerms && (
                             <div className="text-xs text-lab-neutral-500">
                               Sugerido: {rolePerms.nombre_sugerido}
@@ -477,7 +492,7 @@ export default function RolesManagement() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center space-x-2">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-lab-info-100 text-lab-info-800">
-                          Nivel {role.nivel_acceso}
+                          {rolePerms?.nombre_sugerido || normalizeRole(role.nombre)}
                         </span>
                         {rolePerms && (
                           <button
@@ -516,17 +531,6 @@ export default function RolesManagement() {
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteClick(role.codigo_rol, role.nombre)}
-                          className="text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50"
-                          title="Eliminar rol"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
                         </Button>
                       </div>
@@ -572,13 +576,14 @@ export default function RolesManagement() {
                     {/* Nivel de Acceso - Primero para que el usuario vea las sugerencias */}
                     <div>
                       <label htmlFor="nivel_acceso" className="block text-sm font-medium text-lab-neutral-700 mb-2">
-                        Nivel de Acceso <span className="text-lab-danger-600">*</span>
+                        Rol operativo <span className="text-lab-danger-600">*</span>
                       </label>
                       <select
                         id="nivel_acceso"
                         name="nivel_acceso"
                         value={formData.nivel_acceso}
                         onChange={handleInputChange}
+                        disabled
                         required
                         className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:outline-none focus:ring-1 focus:ring-lab-primary-500"
                       >
@@ -611,6 +616,7 @@ export default function RolesManagement() {
                         name="nombre"
                         value={formData.nombre}
                         onChange={handleInputChange}
+                        disabled
                         required
                         minLength={2}
                         maxLength={50}
@@ -644,6 +650,7 @@ export default function RolesManagement() {
                         name="activo"
                         checked={formData.activo}
                         onChange={handleInputChange}
+                        disabled
                         className="h-4 w-4 text-lab-primary-600 focus:ring-lab-primary-500 border-lab-neutral-300 rounded"
                       />
                       <label htmlFor="activo" className="ml-2 block text-sm text-lab-neutral-700">
@@ -658,7 +665,7 @@ export default function RolesManagement() {
                     type="submit"
                     className="w-full sm:w-auto sm:ml-3 bg-lab-primary-600 hover:bg-lab-primary-700"
                   >
-                    {editingRole ? 'Actualizar' : 'Crear'} Rol
+                    Actualizar descripcion
                   </Button>
                   <Button
                     type="button"
@@ -761,7 +768,7 @@ export default function RolesManagement() {
                   <h3 className="text-lg font-semibold text-lab-neutral-900">Eliminar Rol</h3>
                 </div>
                 <p className="text-lab-neutral-600">
-                  ¿Estás seguro de que deseas eliminar el rol <span className="font-semibold">"{confirmDelete.roleName}"</span>?
+                  ¿Estás seguro de que deseas eliminar el rol <span className="font-semibold">&quot;{confirmDelete.roleName}&quot;</span>?
                 </p>
                 <p className="text-sm text-lab-neutral-500 mt-2">
                   Nota: No se puede eliminar un rol que tenga usuarios asignados.

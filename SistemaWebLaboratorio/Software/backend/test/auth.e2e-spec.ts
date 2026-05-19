@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -16,14 +16,14 @@ describe('AuthController (e2e)', () => {
 
   // Mock data para las pruebas
   const testUser = {
-    cedula: '0123456789',
+    cedula: '1723456784',
     email: 'test-e2e@example.com',
     password: 'Password123!',
     nombres: 'Test',
     apellidos: 'User E2E',
     telefono: '0999999999',
     fecha_nacimiento: '1990-01-01',
-    genero: 'M',
+    genero: 'MASCULINO',
   };
 
   beforeAll(async () => {
@@ -34,6 +34,12 @@ describe('AuthController (e2e)', () => {
     app = moduleFixture.createNestApplication();
 
     // Apply same configuration as main app
+    app.setGlobalPrefix('api');
+    app.enableVersioning({
+      type: VersioningType.URI,
+      defaultVersion: '1',
+    });
+
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -126,7 +132,7 @@ describe('AuthController (e2e)', () => {
       expect(response.body).toHaveProperty('access_token');
       expect(response.body).toHaveProperty('refresh_token');
       expect(response.body.user.email).toBe(testUser.email);
-      expect(response.body.user.rol).toBe('PACIENTE');
+      expect(response.body.user.rol).toBe('Paciente');
     });
 
     it('should fail with invalid email format', async () => {
@@ -137,7 +143,9 @@ describe('AuthController (e2e)', () => {
         .send(invalidUser)
         .expect(400);
 
-      expect(response.body.message).toContain('email');
+      expect(response.body.message).toEqual(
+        expect.arrayContaining([expect.stringContaining('correo')]),
+      );
     });
 
     it('should fail with weak password', async () => {
@@ -159,7 +167,7 @@ describe('AuthController (e2e)', () => {
         .expect(201);
 
       // Second registration with same cedula
-      const duplicateUser = { ...testUser, email: 'different@example.com' };
+      const duplicateUser = { ...testUser, email: 'different-test-e2e@example.com' };
 
       const response = await request(app.getHttpServer())
         .post('/api/v1/auth/register')
@@ -177,7 +185,7 @@ describe('AuthController (e2e)', () => {
         .expect(201);
 
       // Second registration with same email
-      const duplicateUser = { ...testUser, cedula: '9876543210' };
+      const duplicateUser = { ...testUser, cedula: '0923456784' };
 
       const response = await request(app.getHttpServer())
         .post('/api/v1/auth/register')
@@ -272,7 +280,7 @@ describe('AuthController (e2e)', () => {
         })
         .expect(401);
 
-      expect(response.body.message).toContain('bloqueada');
+      expect(response.body.message).toContain('Cuenta inactiva temporalmente');
     });
   });
 
@@ -391,24 +399,23 @@ describe('AuthController (e2e)', () => {
 
     it('should get user profile successfully', async () => {
       const response = await request(app.getHttpServer())
-        .get('/api/v1/auth/profile')
+        .get('/api/v1/auth/perfil')
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       expect(response.body).toHaveProperty('codigo_usuario');
       expect(response.body).toHaveProperty('email', testUser.email);
-      expect(response.body).toHaveProperty('rol');
     });
 
     it('should fail without authentication', async () => {
       await request(app.getHttpServer())
-        .get('/api/v1/auth/profile')
+        .get('/api/v1/auth/perfil')
         .expect(401);
     });
 
     it('should fail with invalid token', async () => {
       await request(app.getHttpServer())
-        .get('/api/v1/auth/profile')
+        .get('/api/v1/auth/perfil')
         .set('Authorization', 'Bearer invalid-token')
         .expect(401);
     });

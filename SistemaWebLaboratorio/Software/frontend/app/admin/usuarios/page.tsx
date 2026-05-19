@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { validateCedulaEcuador, validateEmail, validatePhoneEcuador, validateDateNotFuture } from '@/lib/utils'
+import { APP_ROLES, isAdminRole, normalizeRole } from '@/lib/roles'
 
 interface Role {
   codigo_rol: number
@@ -31,7 +32,7 @@ interface User {
 }
 
 export default function UsersManagement() {
-  const { accessToken } = useAuthStore()
+  const { accessToken, user: currentUser } = useAuthStore()
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,13 +66,11 @@ export default function UsersManagement() {
     codigo_rol: '',
     password: '',
   })
-
-  useEffect(() => {
-    if (accessToken) {
-      loadUsers()
-      loadRoles()
-    }
-  }, [accessToken, pagination.page, searchTerm, filterRole, filterActive])
+  const canManageAllUsers = isAdminRole(currentUser?.rol)
+  const patientRole = roles.find((role) => normalizeRole(role.nombre) === APP_ROLES.PACIENTE)
+  const roleOptions = canManageAllUsers
+    ? roles
+    : roles.filter((role) => normalizeRole(role.nombre) === APP_ROLES.PACIENTE)
 
   // Auto-clear messages after 5 seconds
   useEffect(() => {
@@ -81,7 +80,12 @@ export default function UsersManagement() {
     }
   }, [message])
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       const params = new URLSearchParams({
@@ -102,15 +106,22 @@ export default function UsersManagement() {
         const result = await response.json()
         setUsers(result.data)
         setPagination(prev => ({ ...prev, ...result.pagination }))
+      } else {
+        const error = await response.json().catch(() => null)
+        setMessage({ type: 'error', text: error?.message || 'Error al cargar usuarios' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar usuarios' })
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken, filterActive, filterRole, pagination.limit, pagination.page, searchTerm])
 
-  const loadRoles = async () => {
+  const loadRoles = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/roles`, {
         headers: {
@@ -121,11 +132,21 @@ export default function UsersManagement() {
       if (response.ok) {
         const data = await response.json()
         setRoles(data)
+      } else {
+        const error = await response.json().catch(() => null)
+        setMessage({ type: 'error', text: error?.message || 'Error al cargar roles' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar roles' })
     }
-  }
+  }, [accessToken])
+
+  useEffect(() => {
+    if (accessToken) {
+      loadUsers()
+      loadRoles()
+    }
+  }, [accessToken, loadUsers, loadRoles])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -170,6 +191,15 @@ export default function UsersManagement() {
       return
     }
 
+    const selectedRoleId = canManageAllUsers
+      ? formData.codigo_rol
+      : patientRole?.codigo_rol?.toString() || formData.codigo_rol
+
+    if (!selectedRoleId) {
+      setMessage({ type: 'error', text: 'Seleccione un rol valido para el usuario.' })
+      return
+    }
+
     const userData = {
       cedula: formData.cedula.trim(),
       nombres: formData.nombres.trim(),
@@ -179,7 +209,7 @@ export default function UsersManagement() {
       fecha_nacimiento: formData.fecha_nacimiento || null,
       genero: formData.genero || null,
       direccion: formData.direccion ? formData.direccion.trim() : null,
-      codigo_rol: parseInt(formData.codigo_rol),
+      codigo_rol: parseInt(selectedRoleId),
       ...(!editingUser && { password: formData.password }), // Solo en crear
     }
 
@@ -248,6 +278,23 @@ export default function UsersManagement() {
     setShowModal(true)
   }
 
+  const handleNewUser = () => {
+    setEditingUser(null)
+    setFormData({
+      cedula: '',
+      nombres: '',
+      apellidos: '',
+      email: '',
+      telefono: '',
+      fecha_nacimiento: '',
+      genero: '',
+      direccion: '',
+      codigo_rol: patientRole?.codigo_rol?.toString() || '',
+      password: '',
+    })
+    setShowModal(true)
+  }
+
   const toggleUserStatus = async (codigo_usuario: number, force: boolean = false) => {
     try {
       const url = force
@@ -307,7 +354,7 @@ export default function UsersManagement() {
         </div>
         <Button
           className="bg-lab-primary-600 hover:bg-lab-primary-700"
-          onClick={() => setShowModal(true)}
+          onClick={handleNewUser}
         >
           <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -354,11 +401,12 @@ export default function UsersManagement() {
                 setPagination(prev => ({ ...prev, page: 1 }))
               }}
               className="w-full px-4 py-2 border border-lab-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lab-primary-500"
+              disabled={!canManageAllUsers}
             >
               <option value="">Todos</option>
-              {roles.map(role => (
+              {roleOptions.map(role => (
                 <option key={role.codigo_rol} value={role.codigo_rol}>
-                  {role.nombre}
+                  {normalizeRole(role.nombre)}
                 </option>
               ))}
             </select>
@@ -446,7 +494,7 @@ export default function UsersManagement() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-lab-primary-100 text-lab-primary-800">
-                            {user.rol.nombre}
+                            {normalizeRole(user.rol.nombre)}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -472,24 +520,26 @@ export default function UsersManagement() {
                             >
                               Editar
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                if (user.activo) {
-                                  setConfirmDeactivate({ show: true, userId: user.codigo_usuario })
-                                } else {
-                                  toggleUserStatus(user.codigo_usuario)
+                            {canManageAllUsers && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  if (user.activo) {
+                                    setConfirmDeactivate({ show: true, userId: user.codigo_usuario })
+                                  } else {
+                                    toggleUserStatus(user.codigo_usuario)
+                                  }
+                                }}
+                                className={
+                                  user.activo
+                                    ? 'text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50'
+                                    : 'text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50'
                                 }
-                              }}
-                              className={
-                                user.activo
-                                  ? 'text-lab-danger-600 hover:text-lab-danger-700 hover:bg-lab-danger-50'
-                                  : 'text-lab-success-600 hover:text-lab-success-700 hover:bg-lab-success-50'
-                              }
-                            >
-                              {user.activo ? 'Desactivar' : 'Activar'}
-                            </Button>
+                              >
+                                {user.activo ? 'Desactivar' : 'Activar'}
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -578,12 +628,13 @@ export default function UsersManagement() {
                     value={formData.codigo_rol}
                     onChange={(e) => setFormData({ ...formData, codigo_rol: e.target.value })}
                     className="w-full h-10 px-3 rounded-md border border-lab-neutral-300"
+                    disabled={!canManageAllUsers}
                     required
                   >
                     <option value="">Seleccionar...</option>
-                    {roles.map((role) => (
+                    {roleOptions.map((role) => (
                       <option key={role.codigo_rol} value={role.codigo_rol}>
-                        {role.nombre}
+                        {normalizeRole(role.nombre)}
                       </option>
                     ))}
                   </select>
@@ -703,7 +754,7 @@ export default function UsersManagement() {
         </div>
       )}
 
-      {/* Confirmation Dialog for Deactivating User with Appointments */}
+      {/* Confirmation Dialog for Deactivating User */}
       {confirmDeactivate.show && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6">

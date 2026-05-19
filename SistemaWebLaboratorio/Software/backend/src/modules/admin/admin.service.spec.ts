@@ -34,6 +34,7 @@ describe('AdminService', () => {
             emitSupplierCreated: jest.fn(),
             emitSupplierUpdated: jest.fn(),
             emitSupplierDeleted: jest.fn(),
+            emitEvent: jest.fn(),
           },
         },
         {
@@ -58,6 +59,7 @@ describe('AdminService', () => {
             examen: {
               findMany: jest.fn(),
               findUnique: jest.fn(),
+              findFirst: jest.fn(),
               create: jest.fn(),
               update: jest.fn(),
               count: jest.fn(),
@@ -96,6 +98,7 @@ describe('AdminService', () => {
             resultado: {
               count: jest.fn(),
             },
+            $queryRaw: jest.fn(),
           },
         },
       ],
@@ -144,6 +147,19 @@ describe('AdminService', () => {
   });
 
   describe('deleteRole', () => {
+    it('should not delete canonical system roles even without assigned users', async () => {
+      const mockRole = {
+        codigo_rol: 3,
+        nombre: 'Paciente',
+        _count: { usuarios: 0 },
+      };
+
+      jest.spyOn(prisma.rol, 'findUnique').mockResolvedValue(mockRole as any);
+
+      await expect(service.deleteRole(3, 2)).rejects.toThrow(BadRequestException);
+      expect(prisma.rol.delete).not.toHaveBeenCalled();
+    });
+
     it('should throw BadRequestException if role has users assigned', async () => {
       const mockRole = {
         codigo_rol: 1,
@@ -190,6 +206,42 @@ describe('AdminService', () => {
     });
   });
 
+  describe('updateRole', () => {
+    it('should not rename canonical system roles', async () => {
+      const mockRole = {
+        codigo_rol: 2,
+        nombre: 'Personal_Laboratorio',
+        nivel_acceso: 2,
+        activo: true,
+        _count: { usuarios: 0 },
+      };
+
+      jest.spyOn(prisma.rol, 'findUnique').mockResolvedValue(mockRole as any);
+
+      await expect(
+        service.updateRole(2, { nombre: 'Paciente' }, 1),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.rol.update).not.toHaveBeenCalled();
+    });
+
+    it('should not deactivate canonical system roles', async () => {
+      const mockRole = {
+        codigo_rol: 3,
+        nombre: 'Paciente',
+        nivel_acceso: 1,
+        activo: true,
+        _count: { usuarios: 0 },
+      };
+
+      jest.spyOn(prisma.rol, 'findUnique').mockResolvedValue(mockRole as any);
+
+      await expect(
+        service.updateRole(3, { activo: false }, 1),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.rol.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getAllExams', () => {
     it('should return paginated exams with active prices', async () => {
       const mockExams = [
@@ -231,8 +283,15 @@ describe('AdminService', () => {
       const adminId = 2;
 
       jest.spyOn(prisma.examen, 'findUnique').mockResolvedValue(null);
+      jest.spyOn(prisma.examen, 'findFirst').mockResolvedValue(null);
+      jest.spyOn(prisma.categoriaExamen, 'findUnique').mockResolvedValue({
+        codigo_categoria: 1,
+        nombre: 'Hematologia',
+        activo: true,
+      } as any);
       jest.spyOn(prisma.examen, 'create').mockResolvedValue({
         codigo_examen: 1,
+        activo: true,
         ...examData,
       } as any);
 
@@ -247,6 +306,42 @@ describe('AdminService', () => {
         }),
       );
     });
+
+    it('should reject inactive exam categories', async () => {
+      const examData = {
+        codigo_interno: 'BIO001',
+        nombre: 'Perfil Bioquimico',
+        codigo_categoria: 7,
+      };
+
+      jest.spyOn(prisma.examen, 'findUnique').mockResolvedValue(null);
+      jest.spyOn(prisma.examen, 'findFirst').mockResolvedValue(null);
+      jest.spyOn(prisma.categoriaExamen, 'findUnique').mockResolvedValue({
+        codigo_categoria: 7,
+        nombre: 'Bioquimica',
+        activo: false,
+      } as any);
+
+      await expect(service.createExam(examData, 2)).rejects.toThrow(/categoria activa/i);
+      expect(prisma.examen.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject invalid numeric reference ranges', async () => {
+      const examData = {
+        codigo_interno: 'GLU001',
+        nombre: 'Glucosa',
+        codigo_categoria: 1,
+        valor_referencia_min: 120,
+        valor_referencia_max: 80,
+        unidad_medida: 'mg/dL',
+      };
+
+      jest.spyOn(prisma.examen, 'findUnique').mockResolvedValue(null);
+      jest.spyOn(prisma.examen, 'findFirst').mockResolvedValue(null);
+
+      await expect(service.createExam(examData, 2)).rejects.toThrow(/rango/i);
+      expect(prisma.examen.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('getDashboardStats', () => {
@@ -255,7 +350,9 @@ describe('AdminService', () => {
       jest.spyOn(prisma.examen, 'count').mockResolvedValue(50);
       jest.spyOn(prisma.resultado, 'count').mockResolvedValue(10);
       jest.spyOn(prisma.item, 'count').mockResolvedValue(5);
+      jest.spyOn(prisma, '$queryRaw' as any).mockResolvedValue([{ count: 5 }]);
       jest.spyOn(prisma.logActividad, 'findMany').mockResolvedValue([]);
+      jest.spyOn(prisma.examen, 'findMany').mockResolvedValue([]);
 
       const result = await service.getDashboardStats();
 
@@ -263,7 +360,15 @@ describe('AdminService', () => {
       expect(result).toHaveProperty('exams');
       expect(result).toHaveProperty('results');
       expect(result).toHaveProperty('inventory');
-      expect(result).toHaveProperty('recentActivities');
+      expect(result).toHaveProperty('recentExams');
+    });
+  });
+
+  describe('getDashboardStats', () => {
+    it('does not return fake zero stats when dashboard queries fail', async () => {
+      jest.spyOn(prisma.usuario, 'count').mockRejectedValue(new Error('database unavailable'));
+
+      await expect(service.getDashboardStats()).rejects.toThrow('database unavailable');
     });
   });
 });

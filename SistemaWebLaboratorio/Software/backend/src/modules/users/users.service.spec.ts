@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -33,6 +35,8 @@ describe('UsersService', () => {
     usuario: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
     },
   };
 
@@ -43,6 +47,10 @@ describe('UsersService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
         },
       ],
     }).compile();
@@ -66,18 +74,62 @@ describe('UsersService', () => {
       const result = await service.findOne(1);
 
       expect(result).toEqual(mockUsuario);
-      expect(prismaService.usuario.findUnique).toHaveBeenCalledWith({
-        where: { codigo_usuario: 1 },
-        include: { rol: true, perfil_medico: true },
-      });
+      expect(prismaService.usuario.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { codigo_usuario: 1 },
+          include: expect.objectContaining({ rol: true, perfil_medico: true }),
+        }),
+      );
     });
 
     it('should return null if user not found', async () => {
       mockPrismaService.usuario.findUnique.mockResolvedValue(null);
 
-      const result = await service.findOne(999);
+      await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
+    });
 
-      expect(result).toBeNull();
+    it('should prevent Personal_Laboratorio from opening non-patient users', async () => {
+      mockPrismaService.usuario.findUnique.mockResolvedValue({
+        ...mockUsuario,
+        rol: {
+          codigo_rol: 2,
+          nombre: 'Administrador',
+          nivel_acceso: 3,
+        },
+      });
+
+      await expect(service.findOne(1, 'Personal_Laboratorio')).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('findAll', () => {
+    it('should limit Personal_Laboratorio listings to patient users', async () => {
+      mockPrismaService.usuario.findMany.mockResolvedValue([mockUsuario]);
+      mockPrismaService.usuario.count.mockResolvedValue(1);
+
+      const result = await service.findAll(1, 20, {}, 'Personal_Laboratorio');
+
+      expect(result.data).toHaveLength(1);
+      expect(prismaService.usuario.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            rol: expect.objectContaining({
+              OR: expect.arrayContaining([
+                expect.objectContaining({
+                  nombre: expect.objectContaining({ equals: 'Paciente' }),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      );
+      expect(prismaService.usuario.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            rol: expect.any(Object),
+          }),
+        }),
+      );
     });
   });
 

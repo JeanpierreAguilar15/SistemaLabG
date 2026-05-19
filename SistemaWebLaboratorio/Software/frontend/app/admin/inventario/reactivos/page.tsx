@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -93,12 +93,17 @@ export default function ReactivosPage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
-  const showMessage = (type: 'success' | 'error' | 'warning', text: string) => {
+  const showMessage = useCallback((type: 'success' | 'error' | 'warning', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 5000);
-  };
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       // Obtener lotes abiertos
@@ -117,7 +122,8 @@ export default function ReactivosPage() {
       if (resLotes.ok) {
         const data = await resLotes.json();
         // Filtrar solo lotes cerrados de items que son reactivos con frascos disponibles
-        const cerrados = data.items?.filter(
+        const lotes = data.data || data.items || [];
+        const cerrados = lotes.filter(
           (l: LoteCerrado) =>
             l.estado_lote === 'CERRADO' &&
             l.item?.es_reactivo &&
@@ -130,11 +136,11 @@ export default function ReactivosPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL, showMessage, token]);
 
   useEffect(() => {
     fetchData();
-  }, [token]);
+  }, [fetchData]);
 
   const handleAbrirLote = async () => {
     if (!loteSeleccionado) return;

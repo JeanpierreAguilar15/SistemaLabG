@@ -10,50 +10,42 @@ async function main() {
   console.log('Creating roles...');
   const roles = await Promise.all([
     prisma.rol.upsert({
-      where: { nombre: 'ADMIN' },
-      update: {},
-      create: {
-        nombre: 'ADMIN',
+      where: { nombre: 'Administrador' },
+      update: {
         descripcion: 'Administrador del sistema con acceso total',
-        nivel_acceso: 10,
+        nivel_acceso: 3,
         activo: true,
       },
-    }),
-    prisma.rol.upsert({
-      where: { nombre: 'PERSONAL_LAB' },
-      update: {},
       create: {
-        nombre: 'PERSONAL_LAB',
-        descripcion: 'Personal del laboratorio (técnicos, bioquímicos)',
-        nivel_acceso: 7,
-        activo: true,
-      },
-    }),
-    prisma.rol.upsert({
-      where: { nombre: 'MEDICO' },
-      update: {},
-      create: {
-        nombre: 'MEDICO',
-        descripcion: 'Médico con acceso a resultados de pacientes',
-        nivel_acceso: 5,
-        activo: true,
-      },
-    }),
-    prisma.rol.upsert({
-      where: { nombre: 'RECEPCION' },
-      update: {},
-      create: {
-        nombre: 'RECEPCION',
-        descripcion: 'Personal de recepción',
+        nombre: 'Administrador',
+        descripcion: 'Administrador del sistema con acceso total',
         nivel_acceso: 3,
         activo: true,
       },
     }),
     prisma.rol.upsert({
-      where: { nombre: 'PACIENTE' },
-      update: {},
+      where: { nombre: 'Personal_Laboratorio' },
+      update: {
+        descripcion: 'Personal de laboratorio sin acceso a inventario ni configuracion critica',
+        nivel_acceso: 2,
+        activo: true,
+      },
       create: {
-        nombre: 'PACIENTE',
+        nombre: 'Personal_Laboratorio',
+        descripcion: 'Personal de laboratorio sin acceso a inventario ni configuracion critica',
+        nivel_acceso: 2,
+        activo: true,
+      },
+    }),
+    prisma.rol.upsert({
+      where: { nombre: 'Paciente' },
+      update: {
+        descripcion: 'Paciente del laboratorio',
+        nivel_acceso: 1,
+        activo: true,
+      },
+      create: {
+        nombre: 'Paciente',
         descripcion: 'Paciente del laboratorio',
         nivel_acceso: 1,
         activo: true,
@@ -69,7 +61,7 @@ async function main() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@lab.com';
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-  const adminRole = roles.find((r) => r.nombre === 'ADMIN');
+  const adminRole = roles.find((r) => r.nombre === 'Administrador');
 
   const existingAdmin = await prisma.usuario.findFirst({
     where: {
@@ -102,9 +94,8 @@ async function main() {
 
   // 2.1. Create test users (different roles)
   console.log('Creating test users...');
-  const pacienteRole = roles.find((r) => r.nombre === 'PACIENTE');
-  const recepcionRole = roles.find((r) => r.nombre === 'RECEPCION');
-  const personalLabRole = roles.find((r) => r.nombre === 'PERSONAL_LAB');
+  const pacienteRole = roles.find((r) => r.nombre === 'Paciente');
+  const personalLabRole = roles.find((r) => r.nombre === 'Personal_Laboratorio');
 
   // Helper function to create users
   async function createUserIfNotExists(userData: any) {
@@ -208,7 +199,7 @@ async function main() {
 
   // Create recepcionista
   const recepcionista = await createUserIfNotExists({
-    codigo_rol: recepcionRole.codigo_rol,
+    codigo_rol: personalLabRole.codigo_rol,
     cedula: '1734567890',
     nombres: 'Laura',
     apellidos: 'Martínez Vega',
@@ -241,9 +232,8 @@ async function main() {
   console.log(`✅ Created personal de laboratorio: ${personalLab.email}`);
 
   // Create médico de prueba
-  const medicoRole = roles.find((r) => r.nombre === 'MEDICO');
   const medico = await createUserIfNotExists({
-    codigo_rol: medicoRole.codigo_rol,
+    codigo_rol: personalLabRole.codigo_rol,
     cedula: '1756789012',
     nombres: 'Dr. Juan Carlos',
     apellidos: 'Méndez Silva',
@@ -568,7 +558,7 @@ async function main() {
   });
   muestras.push(muestra2);
 
-  // Muestra 3: Muestra reciente sin cotización
+  // Muestra 3: Muestra reciente sin resultados completos
   const muestra3 = await prisma.muestra.create({
     data: {
       codigo_paciente: testPaciente.codigo_usuario,
@@ -819,11 +809,14 @@ async function main() {
     { clave: 'LAB_DIRECCION', valor: 'Calle Misahualli y Aguarico Esquina, Archidona - Napo', grupo: 'GENERAL', descripcion: 'Dirección del laboratorio' },
     { clave: 'LAB_TELEFONO', valor: '062873291', grupo: 'GENERAL', descripcion: 'Teléfono principal' },
     { clave: 'LAB_EMAIL', valor: 'manuelchandi66@gmail.com', grupo: 'GENERAL', descripcion: 'Email de contacto' },
-    { clave: 'RUC', valor: '1791234567001', grupo: 'FACTURACION', descripcion: 'RUC del laboratorio' },
-    { clave: 'IVA_PORCENTAJE', valor: '12', grupo: 'FACTURACION', descripcion: 'Porcentaje de IVA', tipo_dato: 'NUMBER' },
+    { clave: 'RUC', valor: '1791234567001', grupo: 'GENERAL', descripcion: 'RUC del laboratorio' },
     { clave: 'HORA_APERTURA', valor: '08:00', grupo: 'HORARIOS', descripcion: 'Hora de apertura' },
     { clave: 'HORA_CIERRE', valor: '18:00', grupo: 'HORARIOS', descripcion: 'Hora de cierre' },
     { clave: 'MONEDA', valor: 'USD', grupo: 'GENERAL', descripcion: 'Moneda del sistema' },
+    { clave: 'ALERTAS_WHATSAPP_ACTIVO', valor: 'true', grupo: 'ALERTAS', descripcion: 'Activa o desactiva el envio automatico de alertas por WhatsApp', tipo_dato: 'BOOLEAN' },
+    { clave: 'ALERTAS_DIAS_VENCIMIENTO', valor: '30', grupo: 'ALERTAS', descripcion: 'Dias de anticipacion para alertas de lotes proximos a vencer', tipo_dato: 'INTEGER' },
+    { clave: 'ALERTAS_DIAS_SIN_MOVIMIENTO', valor: '30', grupo: 'ALERTAS', descripcion: 'Dias sin movimientos para reportar items con baja rotacion', tipo_dato: 'INTEGER' },
+    { clave: 'ALERTAS_STOCK_CRITICO_PORCENTAJE', valor: '20', grupo: 'ALERTAS', descripcion: 'Porcentaje del stock minimo usado para clasificar stock critico', tipo_dato: 'INTEGER' },
   ];
 
   for (const config of configs) {
@@ -837,6 +830,14 @@ async function main() {
       },
     });
   }
+  await prisma.configuracionSistema.deleteMany({
+    where: {
+      OR: [
+        { grupo: { in: ['AGENDA', 'COTIZACIONES', 'FACTURACION'] } },
+        { clave: { in: ['DIAS_VIGENCIA_COTIZACION', 'IVA_PORCENTAJE'] } },
+      ],
+    },
+  });
   console.log(`✅ Created ${configs.length} configuraciones`);
 
   // 24. Create Configuración Chatbot

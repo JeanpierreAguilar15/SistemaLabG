@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { validateEmail, validatePhoneEcuador } from '@/lib/utils'
-import { systemConfigService, SystemConfig } from '@/lib/services/system-config.service'
+import { systemConfigService } from '@/lib/services/system-config.service'
 
 interface LabConfig {
   nombre: string
@@ -56,7 +56,7 @@ export default function ConfigurationPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [loadingStats, setLoadingStats] = useState(true)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
-  const [systemConfigs, setSystemConfigs] = useState<SystemConfig[]>([])
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
   // Security config state
   const [securityConfig, setSecurityConfig] = useState<SecurityConfig>({ maxIntentos: 5, minutosBloqueo: 5 })
@@ -65,15 +65,11 @@ export default function ConfigurationPage() {
   const [minutosBloqueoInput, setMinutosBloqueoInput] = useState('5')
   const [savingSecurity, setSavingSecurity] = useState(false)
 
-  useEffect(() => {
-    if (accessToken) {
-      loadConfigurations()
-      loadSystemStats()
-      loadSecurityConfig()
+  const loadSecurityConfig = useCallback(async () => {
+    if (!accessToken) {
+      return
     }
-  }, [accessToken])
 
-  const loadSecurityConfig = async () => {
     try {
       const [securityRes, blockedRes] = await Promise.all([
         fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/config/security`, {
@@ -98,7 +94,7 @@ export default function ConfigurationPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar configuración de seguridad' })
     }
-  }
+  }, [accessToken])
 
   const initSecurityConfigs = async () => {
     try {
@@ -157,27 +153,38 @@ export default function ConfigurationPage() {
     }
   }
 
-  const loadConfigurations = async () => {
+  const loadConfigurations = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
-      const configs = await systemConfigService.getAll()
-      setSystemConfigs(configs)
+      const configs = await systemConfigService.getAll(accessToken)
 
       // Map backend configs to local state if they exist
-      const newConfig = { ...config }
-      configs.forEach(c => {
-        if (c.clave === 'LAB_NOMBRE') newConfig.nombre = c.valor
-        if (c.clave === 'LAB_EMAIL') newConfig.email = c.valor
-        if (c.clave === 'LAB_TELEFONO') newConfig.telefono = c.valor
-        if (c.clave === 'LAB_DIRECCION') newConfig.direccion = c.valor
+      setConfig((prev) => {
+        const newConfig = { ...prev }
+        configs.forEach(c => {
+          if (c.clave === 'LAB_NOMBRE') newConfig.nombre = c.valor
+          if (c.clave === 'LAB_EMAIL') newConfig.email = c.valor
+          if (c.clave === 'LAB_TELEFONO') newConfig.telefono = c.valor
+          if (c.clave === 'LAB_DIRECCION') newConfig.direccion = c.valor
+          if (c.clave === 'ALERTAS_WHATSAPP_ACTIVO') setNotificationsEnabled(c.valor === 'true')
+        })
+        setTempConfig(newConfig)
+        return newConfig
       })
-      setConfig(newConfig)
-      setTempConfig(newConfig)
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar configuraciones' })
     }
-  }
+  }, [accessToken])
 
-  const loadSystemStats = async () => {
+  const loadSystemStats = useCallback(async () => {
+    if (!accessToken) {
+      setLoadingStats(false)
+      return
+    }
+
     try {
       setLoadingStats(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/dashboard/stats`, {
@@ -197,21 +204,18 @@ export default function ConfigurationPage() {
     } finally {
       setLoadingStats(false)
     }
-  }
+  }, [accessToken])
 
-  const updateConfigValue = async (key: string, value: string, group: string, type: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON' = 'STRING', isPublic: boolean = false) => {
-    const existing = systemConfigs.find(c => c.clave === key)
-    if (existing) {
-      await systemConfigService.update(existing.codigo_config, { valor: value }, accessToken!)
-    } else {
-      await systemConfigService.create({
-        clave: key,
-        valor: value,
-        grupo: group,
-        tipo_dato: type,
-        es_publico: isPublic
-      }, accessToken!)
+  useEffect(() => {
+    if (accessToken) {
+      loadConfigurations()
+      loadSystemStats()
+      loadSecurityConfig()
     }
+  }, [accessToken, loadConfigurations, loadSystemStats, loadSecurityConfig])
+
+  const updateConfigValue = async (key: string, value: string) => {
+    await systemConfigService.updateByKey(key, { valor: value }, accessToken!)
   }
 
   const handleSaveSection = async (section: string) => {
@@ -224,10 +228,10 @@ export default function ConfigurationPage() {
         if (tempConfig.direccion.trim().length < 10) throw new Error('Dirección muy corta')
 
         await Promise.all([
-          updateConfigValue('LAB_NOMBRE', tempConfig.nombre, 'GENERAL', 'STRING', true),
-          updateConfigValue('LAB_EMAIL', tempConfig.email, 'GENERAL', 'STRING', true),
-          updateConfigValue('LAB_TELEFONO', tempConfig.telefono, 'GENERAL', 'STRING', true),
-          updateConfigValue('LAB_DIRECCION', tempConfig.direccion, 'GENERAL', 'STRING', true),
+          updateConfigValue('LAB_NOMBRE', tempConfig.nombre),
+          updateConfigValue('LAB_EMAIL', tempConfig.email),
+          updateConfigValue('LAB_TELEFONO', tempConfig.telefono),
+          updateConfigValue('LAB_DIRECCION', tempConfig.direccion),
         ])
       }
 
@@ -241,6 +245,17 @@ export default function ConfigurationPage() {
       setMessage({ type: 'error', text: error.message || 'Error al guardar la configuración' })
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleToggleNotifications = async (enabled: boolean) => {
+    try {
+      setNotificationsEnabled(enabled)
+      await updateConfigValue('ALERTAS_WHATSAPP_ACTIVO', enabled ? 'true' : 'false')
+      setMessage({ type: 'success', text: 'Preferencia de notificaciones actualizada' })
+    } catch (error: any) {
+      setNotificationsEnabled((current) => !current)
+      setMessage({ type: 'error', text: error.message || 'Error al actualizar notificaciones' })
     }
   }
 
@@ -382,7 +397,12 @@ export default function ConfigurationPage() {
             <div className="flex items-center justify-between py-2 px-3 bg-lab-neutral-50 rounded-lg">
               <span className="text-sm text-lab-neutral-700">Notificaciones de Resultados</span>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked />
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={notificationsEnabled}
+                  onChange={(event) => handleToggleNotifications(event.target.checked)}
+                />
                 <div className="w-11 h-6 bg-lab-neutral-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-lab-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-lab-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-lab-primary-600"></div>
               </label>
             </div>
@@ -504,7 +524,7 @@ export default function ConfigurationPage() {
             </div>
             <div className="text-center p-4 bg-lab-secondary-50 rounded-lg">
               <p className="text-3xl font-bold text-lab-secondary-600">{stats.totalResultados}</p>
-              <p className="text-sm text-lab-neutral-600 mt-1">Resultados Procesados</p>
+              <p className="text-sm text-lab-neutral-600 mt-1">Resultados Pendientes</p>
             </div>
           </div>
         )}

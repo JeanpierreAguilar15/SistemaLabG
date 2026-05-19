@@ -1,164 +1,110 @@
-/**
- * Sistema de permisos basado en niveles de acceso
- * Nivel 1 = Mínimo acceso
- * Nivel 10 = Máximo acceso (Administrador total)
- */
+import { APP_ROLES, normalizeRoleName } from '../../auth/constants/roles.constants';
 
 export interface RolePermissions {
   nivel: number;
+  nombre: string;
   nombre_sugerido: string;
   descripcion: string;
   permisos: string[];
 }
 
-export const ROLE_PERMISSIONS: Record<number, RolePermissions> = {
-  1: {
+export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
+  [APP_ROLES.ADMINISTRADOR]: {
+    nivel: 3,
+    nombre: APP_ROLES.ADMINISTRADOR,
+    nombre_sugerido: APP_ROLES.ADMINISTRADOR,
+    descripcion: 'Acceso total al sistema administrativo.',
+    permisos: [
+      'Gestionar usuarios',
+      'Gestionar roles',
+      'Gestionar configuracion',
+      'Gestionar examenes',
+      'Gestionar resultados',
+      'Validar resultados',
+      'Subir PDFs de resultados',
+      'Gestionar inventario',
+      'Gestionar reactivos',
+      'Gestionar proveedores y ordenes de compra',
+      'Revisar alertas',
+      'Revisar auditoria',
+    ],
+  },
+  [APP_ROLES.PERSONAL_LABORATORIO]: {
+    nivel: 2,
+    nombre: APP_ROLES.PERSONAL_LABORATORIO,
+    nombre_sugerido: APP_ROLES.PERSONAL_LABORATORIO,
+    descripcion: 'Personal operativo de laboratorio sin acceso a inventario ni configuracion critica.',
+    permisos: [
+      'Ver dashboard operativo',
+      'Consultar pacientes',
+      'Crear pacientes',
+      'Gestionar catalogo de examenes',
+      'Crear muestras',
+      'Crear resultados',
+      'Editar resultados',
+      'Subir PDFs de resultados',
+      'Validar resultados',
+      'Descargar resultados',
+    ],
+  },
+  [APP_ROLES.PACIENTE]: {
     nivel: 1,
-    nombre_sugerido: 'Paciente',
-    descripcion: 'Usuario con acceso mínimo, solo puede ver sus propios resultados',
+    nombre: APP_ROLES.PACIENTE,
+    nombre_sugerido: APP_ROLES.PACIENTE,
+    descripcion: 'Paciente con acceso exclusivo a su portal y resultados propios.',
     permisos: [
       'Ver resultados propios',
+      'Descargar PDFs propios',
       'Actualizar perfil propio',
-    ],
-  },
-  2: {
-    nivel: 2,
-    nombre_sugerido: 'Paciente VIP',
-    descripcion: 'Paciente con acceso preferencial',
-    permisos: [
-      'Todos los permisos de nivel 1',
-      'Descargar resultados en PDF',
-      'Historial completo de exámenes',
-    ],
-  },
-  3: {
-    nivel: 3,
-    nombre_sugerido: 'Recepcionista',
-    descripcion: 'Personal de recepción y atención al cliente',
-    permisos: [
-      'Registrar llegada de pacientes',
-      'Ver información de pacientes',
-      'Imprimir comprobantes',
-    ],
-  },
-  4: {
-    nivel: 4,
-    nombre_sugerido: 'Recepcionista Senior',
-    descripcion: 'Recepcionista con permisos adicionales',
-    permisos: [
-      'Todos los permisos de nivel 3',
-      'Registrar nuevos pacientes',
-      'Actualizar datos de pacientes',
-    ],
-  },
-  5: {
-    nivel: 5,
-    nombre_sugerido: 'Técnico de Laboratorio',
-    descripcion: 'Personal técnico que procesa muestras',
-    permisos: [
-      'Registrar muestras',
-      'Procesar muestras',
-      'Ingresar resultados preliminares',
-      'Ver protocolos de exámenes',
-      'Gestionar inventario de reactivos',
-      'Ver órdenes de trabajo',
-    ],
-  },
-  6: {
-    nivel: 6,
-    nombre_sugerido: 'Bioanalista',
-    descripcion: 'Profesional que valida y verifica resultados',
-    permisos: [
-      'Todos los permisos de nivel 5',
-      'Validar resultados',
-      'Firmar resultados',
-      'Solicitar repetición de análisis',
-      'Generar informes técnicos',
-    ],
-  },
-  7: {
-    nivel: 7,
-    nombre_sugerido: 'Médico',
-    descripcion: 'Médico con acceso a resultados y evaluación',
-    permisos: [
-      'Ver resultados de pacientes',
-      'Solicitar exámenes',
-      'Ver historial médico completo',
-      'Generar órdenes médicas',
-      'Interpretar resultados',
-      'Contactar pacientes',
-    ],
-  },
-  8: {
-    nivel: 8,
-    nombre_sugerido: 'Coordinador / Supervisor',
-    descripcion: 'Supervisor de área con permisos de gestión',
-    permisos: [
-      'Todos los permisos de niveles inferiores',
-      'Ver reportes de productividad',
-      'Aprobar/rechazar solicitudes',
-      'Gestionar inventario completo',
-      'Configurar catálogo de exámenes',
-    ],
-  },
-  9: {
-    nivel: 9,
-    nombre_sugerido: 'Gerente',
-    descripcion: 'Gerencia con acceso a gestión administrativa',
-    permisos: [
-      'Todos los permisos de nivel 8',
-      'Gestionar usuarios (crear, editar)',
-      'Ver reportes financieros',
-      'Configurar precios y paquetes',
-      'Gestionar proveedores',
-      'Acceder a logs de auditoría',
-      'Exportar datos',
-    ],
-  },
-  10: {
-    nivel: 10,
-    nombre_sugerido: 'Administrador',
-    descripcion: 'Acceso total al sistema - Super administrador',
-    permisos: [
-      'Acceso total al sistema',
-      'Gestionar roles y permisos',
-      'Eliminar registros',
-      'Configuración del sistema',
-      'Gestión de seguridad',
-      'Backup y restauración',
-      'Ver y modificar cualquier dato',
-      'Acceso a configuración avanzada',
+      'Actualizar consentimientos',
     ],
   },
 };
 
-/**
- * Obtiene los permisos para un nivel específico
- */
+export const CANONICAL_ROLE_NAMES = [
+  APP_ROLES.ADMINISTRADOR,
+  APP_ROLES.PERSONAL_LABORATORIO,
+  APP_ROLES.PACIENTE,
+];
+
+export function getAccessLevelForRole(role: string): number {
+  const normalized = normalizeRoleName(role);
+  if (normalized === APP_ROLES.ADMINISTRADOR) return 3;
+  if (normalized === APP_ROLES.PERSONAL_LABORATORIO) return 2;
+  if (normalized === APP_ROLES.PACIENTE) return 1;
+  return 1;
+}
+
+export function getPermissionsForRole(role: string): RolePermissions | null {
+  return ROLE_PERMISSIONS[normalizeRoleName(role)] ?? null;
+}
+
 export function getPermissionsForLevel(nivel: number): RolePermissions | null {
-  return ROLE_PERMISSIONS[nivel] || null;
+  const byLevel: Record<number, string> = {
+    3: APP_ROLES.ADMINISTRADOR,
+    2: APP_ROLES.PERSONAL_LABORATORIO,
+    1: APP_ROLES.PACIENTE,
+  };
+
+  return byLevel[nivel] ? ROLE_PERMISSIONS[byLevel[nivel]] : null;
 }
 
-/**
- * Obtiene todos los niveles disponibles
- */
 export function getAllRoleLevels(): RolePermissions[] {
-  return Object.values(ROLE_PERMISSIONS);
+  return CANONICAL_ROLE_NAMES.map((role) => ROLE_PERMISSIONS[role]);
 }
 
-/**
- * Valida si un nivel de acceso es válido
- */
-export function isValidAccessLevel(nivel: number): boolean {
-  return nivel >= 1 && nivel <= 10;
+export function isValidRoleName(role: string): boolean {
+  return (CANONICAL_ROLE_NAMES as string[]).includes(role);
 }
 
-/**
- * Obtiene una descripción resumida de los permisos
- */
-export function getPermissionsSummary(nivel: number): string {
-  const permissions = getPermissionsForLevel(nivel);
-  if (!permissions) return 'Nivel inválido';
+export function getPermissionsSummary(roleOrLevel: string | number): string {
+  const permissions = typeof roleOrLevel === 'number'
+    ? getPermissionsForLevel(roleOrLevel)
+    : getPermissionsForRole(roleOrLevel);
 
-  return `${permissions.nombre_sugerido} (${permissions.permisos.length} permisos)`;
+  if (!permissions) {
+    return 'Rol invalido';
+  }
+
+  return `${permissions.nombre} (${permissions.permisos.length} permisos)`;
 }

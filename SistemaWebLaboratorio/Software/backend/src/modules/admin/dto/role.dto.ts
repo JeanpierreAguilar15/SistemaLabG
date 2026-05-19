@@ -7,6 +7,7 @@ import {
   MinLength,
   MaxLength,
   Min,
+  Max,
 } from 'class-validator';
 
 export class CreateRoleDto {
@@ -24,6 +25,7 @@ export class CreateRoleDto {
   @IsOptional()
   @IsInt()
   @Min(1, { message: 'El nivel de acceso debe ser al menos 1' })
+  @Max(3, { message: 'El nivel de acceso no puede exceder 3' })
   nivel_acceso?: number;
 
   @IsOptional()
@@ -46,6 +48,7 @@ export class UpdateRoleDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(3)
   nivel_acceso?: number;
 
   @IsOptional()

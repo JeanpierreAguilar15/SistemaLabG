@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -64,12 +64,7 @@ export default function ResultadosAdminPage() {
   const [showPdfPreview, setShowPdfPreview] = useState(false)
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null)
   const [isEditingPdf, setIsEditingPdf] = useState(false)
-
-  useEffect(() => {
-    if (accessToken) {
-      loadResultados()
-    }
-  }, [accessToken])
+  const [uploadingPdf, setUploadingPdf] = useState(false)
 
   useEffect(() => {
     if (message) {
@@ -78,7 +73,12 @@ export default function ResultadosAdminPage() {
     }
   }, [message])
 
-  const loadResultados = async () => {
+  const loadResultados = useCallback(async () => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/admin/agrupados`, {
@@ -94,7 +94,13 @@ export default function ResultadosAdminPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken])
+
+  useEffect(() => {
+    if (accessToken) {
+      loadResultados()
+    }
+  }, [accessToken, loadResultados])
 
   const toggleExpand = (codigoMuestra: number) => {
     const newExpanded = new Set(expandedMuestras)
@@ -144,6 +150,7 @@ export default function ResultadosAdminPage() {
     setUploadResultadoId(null)
     setSelectedFile(null)
     setIsEditingPdf(false)
+    setUploadingPdf(false)
   }
 
   const handlePreviewPDF = async (codigo_resultado: number) => {
@@ -202,6 +209,7 @@ export default function ResultadosAdminPage() {
     }
 
     try {
+      setUploadingPdf(true)
       const formData = new FormData()
       formData.append('file', selectedFile)
 
@@ -218,8 +226,8 @@ export default function ResultadosAdminPage() {
 
       if (response.ok) {
         const successMessage = isEditingPdf
-          ? 'PDF reemplazado correctamente'
-          : 'PDF subido y resultado validado correctamente'
+          ? 'PDF reemplazado correctamente. No se descontó inventario nuevamente.'
+          : 'PDF subido, resultado validado e inventario procesado correctamente'
         setMessage({ type: 'success', text: successMessage })
         handleCloseUploadModal()
         loadResultados()
@@ -229,6 +237,8 @@ export default function ResultadosAdminPage() {
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Error de conexion al servidor' })
+    } finally {
+      setUploadingPdf(false)
     }
   }
 
@@ -556,8 +566,8 @@ export default function ResultadosAdminPage() {
               </h2>
               <p className="text-sm text-lab-neutral-600 mt-2">
                 {isEditingPdf
-                  ? 'Selecciona un nuevo archivo PDF para reemplazar el actual. El PDF anterior sera eliminado.'
-                  : 'Sube un archivo PDF procesado externamente. Esto validara automaticamente el resultado.'}
+                  ? 'Selecciona un nuevo archivo PDF para reemplazar la referencia actual. No se descuenta inventario nuevamente.'
+                  : 'Sube un PDF procesado externamente. Esto validara el resultado y descontara los insumos configurados si aun no estaba listo.'}
               </p>
             </div>
 
@@ -583,6 +593,11 @@ export default function ResultadosAdminPage() {
                   <p className="text-xs text-lab-neutral-500 mt-1">
                     Tamano maximo: 10MB. Solo archivos PDF
                   </p>
+                  {!isEditingPdf && (
+                    <p className="text-xs text-lab-warning-700 mt-2 rounded-md bg-lab-warning-50 border border-lab-warning-200 p-2">
+                      Al confirmar, el sistema marca el resultado como listo, genera codigo de verificacion y ejecuta el descuento automatico de inventario.
+                    </p>
+                  )}
                 </div>
 
                 {selectedFile && (
@@ -608,13 +623,13 @@ export default function ResultadosAdminPage() {
                 </Button>
                 <Button
                   onClick={handleUploadPDF}
-                  disabled={!selectedFile}
+                  disabled={!selectedFile || uploadingPdf}
                   className="bg-lab-primary-600 hover:bg-lab-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
-                  {isEditingPdf ? 'Reemplazar PDF' : 'Subir y Validar'}
+                  {uploadingPdf ? 'Procesando...' : isEditingPdf ? 'Reemplazar PDF' : 'Subir y Validar'}
                 </Button>
               </div>
             </div>

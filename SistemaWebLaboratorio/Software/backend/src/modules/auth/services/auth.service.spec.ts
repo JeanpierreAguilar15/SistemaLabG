@@ -6,6 +6,8 @@ import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { mockPrismaService, resetMocks } from '../__mocks__/prisma.mock';
+import { SecurityLoggingService } from '../../auditoria/services/security-logging.service';
+import { ComunicacionesService } from '../../comunicaciones/comunicaciones.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -36,14 +38,14 @@ describe('AuthService', () => {
     fecha_actualizacion: new Date(),
     rol: {
       codigo_rol: 1,
-      nombre: 'PACIENTE',
+      nombre: 'Paciente',
       nivel_acceso: 1,
     },
   };
 
   const mockRol = {
     codigo_rol: 1,
-    nombre: 'PACIENTE',
+    nombre: 'Paciente',
     descripcion: 'Paciente del laboratorio',
     nivel_acceso: 1,
     activo: true,
@@ -80,6 +82,23 @@ describe('AuthService', () => {
             }),
           },
         },
+        {
+          provide: SecurityLoggingService,
+          useValue: {
+            logLoginAttempt: jest.fn(),
+            logLoginFailure: jest.fn(),
+            logLoginSuccess: jest.fn(),
+            logLogout: jest.fn(),
+            logAccountBlocked: jest.fn(),
+          },
+        },
+        {
+          provide: ComunicacionesService,
+          useValue: {
+            enviarCorreoBienvenida: jest.fn(),
+            enviarNotificacionRegistro: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -113,7 +132,7 @@ describe('AuthService', () => {
       // Mock: No existing user
       mockPrismaService.usuario.findFirst.mockResolvedValue(null);
 
-      // Mock: Find PACIENTE role
+      // Mock: Find Paciente role
       mockPrismaService.rol.findFirst.mockResolvedValue(mockRol);
 
       // Mock: Create user
@@ -137,7 +156,7 @@ describe('AuthService', () => {
       expect(result).toHaveProperty('access_token');
       expect(result).toHaveProperty('refresh_token');
       expect(result.user.email).toBe(registerDto.email);
-      expect(result.user.rol).toBe('PACIENTE');
+      expect(result.user.rol).toBe('Paciente');
 
       // Verify password was hashed
       expect(mockPrismaService.usuario.create).toHaveBeenCalledWith(
@@ -165,12 +184,12 @@ describe('AuthService', () => {
       await expect(service.register(registerDto)).rejects.toThrow('El correo electrónico ya está registrado');
     });
 
-    it('should throw BadRequestException if PACIENTE role not found', async () => {
+    it('should throw BadRequestException if Paciente role not found', async () => {
       mockPrismaService.usuario.findFirst.mockResolvedValue(null);
       mockPrismaService.rol.findFirst.mockResolvedValue(null);
 
       await expect(service.register(registerDto)).rejects.toThrow(BadRequestException);
-      await expect(service.register(registerDto)).rejects.toThrow('Rol PACIENTE no encontrado en el sistema');
+      await expect(service.register(registerDto)).rejects.toThrow('Rol Paciente no encontrado en el sistema');
     });
   });
 
@@ -215,11 +234,15 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException if account is blocked', async () => {
-      const blockedUser = { ...mockUsuario, cuenta_bloqueada: true };
+      const blockedUser = {
+        ...mockUsuario,
+        cuenta_bloqueada: true,
+        fecha_bloqueo: new Date(),
+      };
       mockPrismaService.usuario.findFirst.mockResolvedValue(blockedUser);
 
       await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
-      await expect(service.login(loginDto)).rejects.toThrow('Cuenta bloqueada');
+      await expect(service.login(loginDto)).rejects.toThrow('Cuenta inactiva temporalmente');
     });
 
     it('should throw UnauthorizedException if account is inactive', async () => {
@@ -232,7 +255,7 @@ describe('AuthService', () => {
 
     it('should increment failed attempts on invalid password', async () => {
       mockPrismaService.usuario.findFirst.mockResolvedValue(mockUsuario);
-      mockPrismaService.usuario.update.mockResolvedValue(mockUsuario);
+      mockPrismaService.usuario.update.mockResolvedValue({ intentos_fallidos: 1 });
 
       jest.spyOn(bcrypt, 'compare').mockImplementation(() => Promise.resolve(false));
 
@@ -241,8 +264,9 @@ describe('AuthService', () => {
       expect(mockPrismaService.usuario.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            intentos_fallidos: 1,
+            intentos_fallidos: { increment: 1 },
           }),
+          select: { intentos_fallidos: true },
         }),
       );
     });
@@ -250,7 +274,9 @@ describe('AuthService', () => {
     it('should block account after 5 failed attempts', async () => {
       const userWith4Fails = { ...mockUsuario, intentos_fallidos: 4 };
       mockPrismaService.usuario.findFirst.mockResolvedValue(userWith4Fails);
-      mockPrismaService.usuario.update.mockResolvedValue(userWith4Fails);
+      mockPrismaService.usuario.update
+        .mockResolvedValueOnce({ intentos_fallidos: 5 })
+        .mockResolvedValueOnce({ ...userWith4Fails, intentos_fallidos: 5, cuenta_bloqueada: true });
 
       jest.spyOn(bcrypt, 'compare').mockImplementation(() => Promise.resolve(false));
 
@@ -259,7 +285,6 @@ describe('AuthService', () => {
       expect(mockPrismaService.usuario.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            intentos_fallidos: 5,
             cuenta_bloqueada: true,
             fecha_bloqueo: expect.any(Date),
           }),
@@ -383,7 +408,7 @@ describe('AuthService', () => {
 
       expect(result).toHaveProperty('codigo_usuario', 1);
       expect(result).toHaveProperty('email', mockUsuario.email);
-      expect(result).toHaveProperty('rol', 'PACIENTE');
+      expect(result).toHaveProperty('rol', 'Paciente');
     });
 
     it('should throw UnauthorizedException if user not found', async () => {
@@ -399,6 +424,32 @@ describe('AuthService', () => {
 
       await expect(service.validateUser(1)).rejects.toThrow(UnauthorizedException);
       await expect(service.validateUser(1)).rejects.toThrow('Usuario no encontrado o inactivo');
+    });
+  });
+
+  describe('updateConsentimientos', () => {
+    it('should update existing consent records instead of creating duplicates', async () => {
+      mockPrismaService.consentimiento.findFirst.mockResolvedValueOnce({
+        codigo_consentimiento: 10,
+        codigo_usuario: 1,
+        tipo_consentimiento: 'NOTIFICACIONES_WHATSAPP',
+        aceptado: false,
+      });
+      mockPrismaService.consentimiento.update.mockResolvedValue({});
+
+      const result = await service.updateConsentimientos(1, [
+        { tipo: 'NOTIFICACIONES_WHATSAPP', aceptado: true },
+      ]);
+
+      expect(result.message).toBe('Consentimientos actualizados correctamente');
+      expect(mockPrismaService.consentimiento.update).toHaveBeenCalledWith({
+        where: { codigo_consentimiento: 10 },
+        data: expect.objectContaining({
+          aceptado: true,
+          version_politica: '1.0',
+        }),
+      });
+      expect(mockPrismaService.consentimiento.create).not.toHaveBeenCalled();
     });
   });
 });

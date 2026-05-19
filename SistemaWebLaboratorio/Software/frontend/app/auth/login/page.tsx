@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { authApi, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
+import { isAdminAreaRole } from '@/lib/roles'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -94,7 +95,7 @@ export default function LoginPage() {
 
       await new Promise(resolve => setTimeout(resolve, 600))
 
-      if (data.user.rol === 'ADMIN' || data.user.rol === 'Administrador') {
+      if (isAdminAreaRole(data.user.rol)) {
         router.push('/admin')
       } else {
         router.push('/portal')

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -111,14 +111,12 @@ export default function OrdenesCompraPage() {
   const [confirmReceive, setConfirmReceive] = useState<OrdenCompra | null>(null)
   const [confirmCancel, setConfirmCancel] = useState<OrdenCompra | null>(null)
 
-  useEffect(() => {
-    loadOrdenes()
-    loadProveedores()
-    loadItems()
-    loadStats()
-  }, [currentPage, filterEstado])
+  const loadOrdenes = useCallback(async () => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
 
-  const loadOrdenes = async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams({
@@ -144,9 +142,13 @@ export default function OrdenesCompraPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken, currentPage, filterEstado])
 
-  const loadProveedores = async () => {
+  const loadProveedores = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -158,9 +160,13 @@ export default function OrdenesCompraPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar proveedores' })
     }
-  }
+  }, [accessToken])
 
-  const loadItems = async () => {
+  const loadItems = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items?limit=500`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -172,9 +178,13 @@ export default function OrdenesCompraPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar items' })
     }
-  }
+  }, [accessToken])
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       // Cargar todas las órdenes para calcular estadísticas
       const response = await fetch(
@@ -212,7 +222,14 @@ export default function OrdenesCompraPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar estadísticas' })
     }
-  }
+  }, [accessToken])
+
+  useEffect(() => {
+    loadOrdenes()
+    loadProveedores()
+    loadItems()
+    loadStats()
+  }, [loadOrdenes, loadProveedores, loadItems, loadStats])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -239,7 +256,7 @@ export default function OrdenesCompraPage() {
       codigo_proveedor: parseInt(formData.codigo_proveedor),
       fecha_entrega_esperada: formData.fecha_entrega_esperada || null,
       observaciones: formData.observaciones || null,
-      detalles: formData.detalles.map((d) => ({
+      items: formData.detalles.map((d) => ({
         codigo_item: parseInt(d.codigo_item),
         cantidad: parseInt(d.cantidad),
         precio_unitario: parseFloat(d.precio_unitario),
@@ -693,7 +710,7 @@ export default function OrdenesCompraPage() {
                           </Button>
                         </>
                       )}
-                      {(orden.estado === 'EMITIDA' || orden.estado === 'RECIBIDA_PARCIAL') && (
+                      {orden.estado === 'EMITIDA' && (
                         <>
                           <Button
                             size="sm"
@@ -701,7 +718,7 @@ export default function OrdenesCompraPage() {
                             className="text-green-600"
                             onClick={() => setConfirmReceive(orden)}
                           >
-                            {orden.estado === 'RECIBIDA_PARCIAL' ? 'Completar Recepción' : 'Recibir'}
+                            Recibir
                           </Button>
                           {orden.estado === 'EMITIDA' && (
                             <Button
@@ -833,7 +850,7 @@ export default function OrdenesCompraPage() {
 
                 {formData.detalles.length === 0 && (
                   <p className="text-sm text-gray-500 text-center py-4">
-                    No hay items. Haga clic en "Agregar Item" para comenzar.
+                    No hay items. Haga clic en &quot;Agregar Item&quot; para comenzar.
                   </p>
                 )}
 

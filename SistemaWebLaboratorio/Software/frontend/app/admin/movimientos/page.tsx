@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -84,28 +84,35 @@ export default function MovimientosStockPage() {
   }, [])
 
   useEffect(() => {
-    if (mounted && accessToken) {
-      loadMovimientos()
-      loadItems()
-    }
-  }, [accessToken, mounted])
-
-  useEffect(() => {
     if (message) {
       const timer = setTimeout(() => setMessage(null), 5000)
       return () => clearTimeout(timer)
     }
   }, [message])
 
-  const loadMovimientos = async () => {
+  const fetchMovimientos = useCallback(async (filters: {
+    filterItem?: string
+    filterTipo?: string
+    filterFechaDesde?: string
+    filterFechaHasta?: string
+  }) => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
 
       const params = new URLSearchParams()
-      if (filterItem) params.append('codigo_item', filterItem)
-      if (filterTipo) params.append('tipo_movimiento', filterTipo)
-      if (filterFechaDesde) params.append('fecha_desde', filterFechaDesde)
-      if (filterFechaHasta) params.append('fecha_hasta', filterFechaHasta)
+      const effectiveFilterItem = filters.filterItem ?? ''
+      const effectiveFilterTipo = filters.filterTipo ?? ''
+      const effectiveFilterFechaDesde = filters.filterFechaDesde ?? ''
+      const effectiveFilterFechaHasta = filters.filterFechaHasta ?? ''
+      if (effectiveFilterItem) params.append('codigo_item', effectiveFilterItem)
+      if (effectiveFilterTipo) params.append('tipo_movimiento', effectiveFilterTipo)
+      if (effectiveFilterFechaDesde) params.append('fecha_desde', effectiveFilterFechaDesde)
+      if (effectiveFilterFechaHasta) params.append('fecha_hasta', effectiveFilterFechaHasta)
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/movements?${params.toString()}`,
@@ -128,9 +135,20 @@ export default function MovimientosStockPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken])
 
-  const loadItems = async () => {
+  const loadMovimientos = useCallback(() => fetchMovimientos({
+    filterItem,
+    filterTipo,
+    filterFechaDesde,
+    filterFechaHasta,
+  }), [fetchMovimientos, filterFechaDesde, filterFechaHasta, filterItem, filterTipo])
+
+  const loadItems = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items`, {
         headers: {
@@ -146,7 +164,14 @@ export default function MovimientosStockPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar items' })
     }
-  }
+  }, [accessToken])
+
+  useEffect(() => {
+    if (mounted && accessToken) {
+      fetchMovimientos({})
+      loadItems()
+    }
+  }, [accessToken, mounted, fetchMovimientos, loadItems])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -233,7 +258,12 @@ export default function MovimientosStockPage() {
     setFilterTipo('')
     setFilterFechaDesde('')
     setFilterFechaHasta('')
-    setTimeout(() => loadMovimientos(), 100)
+    fetchMovimientos({
+      filterItem: '',
+      filterTipo: '',
+      filterFechaDesde: '',
+      filterFechaHasta: '',
+    })
   }
 
   if (!mounted) {

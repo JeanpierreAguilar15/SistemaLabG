@@ -39,7 +39,6 @@ WebSocket notifica a paciente → Paciente descarga PDF
 {
   codigo_muestra: number;
   codigo_paciente: number;
-  codigo_cita?: number;           // Opcional, si viene de una cita
   id_muestra: string;              // ID único (ej: "MUE-2025-001")
   fecha_toma: Date;
   tipo_muestra: string;            // "Sangre venosa", "Orina", etc.
@@ -95,7 +94,6 @@ Registrar nueva muestra tomada de un paciente.
 ```json
 {
   "codigo_paciente": 10,
-  "codigo_cita": 5,
   "id_muestra": "MUE-2025-001",
   "tipo_muestra": "Sangre venosa",
   "fecha_toma": "2025-01-17T10:30:00Z",

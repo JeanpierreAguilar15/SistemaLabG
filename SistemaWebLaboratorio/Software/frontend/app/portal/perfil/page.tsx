@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -91,13 +91,12 @@ export default function PerfilPage() {
     confirmPassword: '',
   })
 
-  // Cargar datos del perfil
-  useEffect(() => {
-    loadProfile()
-    loadConsentimientos()
-  }, [])
+  const loadProfile = useCallback(async () => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
 
-  const loadProfile = async () => {
     try {
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/perfil`, {
@@ -109,8 +108,17 @@ export default function PerfilPage() {
       if (response.ok) {
         const data = await response.json()
         setProfileData({
-          ...data,
+          codigo_usuario: data.codigo_usuario ?? 0,
+          cedula: data.cedula ?? '',
+          nombres: data.nombres ?? '',
+          apellidos: data.apellidos ?? '',
+          email: data.email ?? '',
+          telefono: data.telefono ?? '',
+          direccion: data.direccion ?? '',
           fecha_nacimiento: data.fecha_nacimiento ? data.fecha_nacimiento.split('T')[0] : '',
+          genero: data.genero ?? 'O',
+          contacto_emergencia_nombre: data.contacto_emergencia_nombre ?? '',
+          contacto_emergencia_telefono: data.contacto_emergencia_telefono ?? '',
         })
       }
     } catch (error) {
@@ -118,9 +126,13 @@ export default function PerfilPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken])
 
-  const loadConsentimientos = async () => {
+  const loadConsentimientos = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/consentimientos`, {
         headers: {
@@ -140,7 +152,13 @@ export default function PerfilPage() {
     } catch (error) {
       // Silently fail
     }
-  }
+  }, [accessToken])
+
+  // Cargar datos del perfil
+  useEffect(() => {
+    loadProfile()
+    loadConsentimientos()
+  }, [loadProfile, loadConsentimientos])
 
   // Validar formato de teléfono ecuatoriano
   const validatePhone = (phone: string): boolean => {

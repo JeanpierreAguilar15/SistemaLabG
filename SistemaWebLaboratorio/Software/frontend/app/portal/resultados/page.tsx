@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -51,17 +51,18 @@ export default function ResultadosPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
-    loadResultados()
-  }, [])
-
-  useEffect(() => {
     if (message) {
       const timer = setTimeout(() => setMessage(null), 5000)
       return () => clearTimeout(timer)
     }
   }, [message])
 
-  const loadResultados = async () => {
+  const loadResultados = useCallback(async () => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/resultados/my/agrupados`, {
@@ -83,7 +84,11 @@ export default function ResultadosPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken])
+
+  useEffect(() => {
+    loadResultados()
+  }, [loadResultados])
 
   const toggleExpand = (codigoMuestra: number) => {
     const newExpanded = new Set(expandedMuestras)

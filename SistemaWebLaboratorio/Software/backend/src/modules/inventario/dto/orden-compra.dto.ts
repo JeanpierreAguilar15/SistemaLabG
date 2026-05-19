@@ -58,6 +58,10 @@ export class CreateOrdenCompraDto {
 
   @IsOptional()
   @IsString()
+  fecha_entrega_esperada?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(500, { message: 'Las observaciones no pueden exceder 500 caracteres' })
   observaciones?: string;
 
@@ -79,6 +83,10 @@ export class UpdateOrdenCompraDto {
   @IsOptional()
   @IsEnum(EstadoOrdenCompra)
   estado?: EstadoOrdenCompra;
+
+  @IsOptional()
+  @IsString()
+  fecha_entrega_esperada?: string;
 
   @IsOptional()
   @IsString()

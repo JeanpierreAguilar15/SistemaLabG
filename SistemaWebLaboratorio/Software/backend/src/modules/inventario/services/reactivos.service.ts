@@ -577,7 +577,7 @@ export class ReactivosService {
    *
    * @param codigoItem - El item reactivo a usar
    * @param cantidadPruebas - Cuantas pruebas se van a realizar (normalmente 1)
-   * @param referencia - Texto para trazabilidad (ej: "Examen Glucosa - Cita #123")
+   * @param referencia - Texto para trazabilidad (ej: "Examen Glucosa - Muestra #123")
    * @param usuarioId - Quien realiza la operacion
    * @returns Resultado del proceso con detalles
    */

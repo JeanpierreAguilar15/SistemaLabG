@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '@prisma/prisma.service';
 import { WhatsAppService } from '../../comunicaciones/whatsapp.service';
 
@@ -14,6 +14,7 @@ export class AlertasProgramadasService implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log('Servicio de alertas programadas iniciado');
+    await this.ensureAlertConfigs();
     // Verificar configuración de WhatsApp
     const config = this.whatsAppService.getConfig();
     if (config.configured) {
@@ -59,22 +60,6 @@ export class AlertasProgramadasService implements OnModuleInit {
    */
   async enviarAlertasStockBajo(): Promise<{ success: boolean; enviados: number }> {
     try {
-      // Obtener items con stock bajo
-      const itemsStockBajo = await this.prisma.item.findMany({
-        where: {
-          activo: true,
-          stock_actual: {
-            lte: this.prisma.item.fields?.stock_minimo as any,
-          },
-        },
-        select: {
-          nombre: true,
-          stock_actual: true,
-          stock_minimo: true,
-        },
-      });
-
-      // Filtrar en memoria ya que Prisma no permite comparar campos directamente
       const itemsConStockBajo = await this.prisma.$queryRaw<Array<{
         nombre: string;
         stock_actual: number;
@@ -88,6 +73,11 @@ export class AlertasProgramadasService implements OnModuleInit {
 
       if (itemsConStockBajo.length === 0) {
         this.logger.log('No hay items con stock bajo');
+        return { success: true, enviados: 0 };
+      }
+
+      if (!(await this.getBooleanConfig('ALERTAS_WHATSAPP_ACTIVO', true))) {
+        this.logger.log('Alertas WhatsApp desactivadas por configuracion');
         return { success: true, enviados: 0 };
       }
 
@@ -115,6 +105,8 @@ export class AlertasProgramadasService implements OnModuleInit {
   async enviarAlertasStockCritico(): Promise<{ success: boolean; enviados: number }> {
     try {
       // Solo items agotados o con menos del 20% del mínimo
+      const porcentajeCritico = await this.getIntegerConfig('ALERTAS_STOCK_CRITICO_PORCENTAJE', 20);
+      const factorCritico = porcentajeCritico / 100;
       const itemsCriticos = await this.prisma.$queryRaw<Array<{
         nombre: string;
         stock_actual: number;
@@ -123,7 +115,7 @@ export class AlertasProgramadasService implements OnModuleInit {
         SELECT nombre, stock_actual, stock_minimo
         FROM inventario.item
         WHERE activo = true
-          AND (stock_actual = 0 OR stock_actual < stock_minimo * 0.2)
+          AND (stock_actual = 0 OR stock_actual < stock_minimo * ${factorCritico})
         ORDER BY stock_actual ASC
       `;
 
@@ -132,6 +124,11 @@ export class AlertasProgramadasService implements OnModuleInit {
       }
 
       this.logger.warn(`¡ALERTA CRÍTICA! ${itemsCriticos.length} items en estado crítico`);
+
+      if (!(await this.getBooleanConfig('ALERTAS_WHATSAPP_ACTIVO', true))) {
+        this.logger.log('Alertas WhatsApp desactivadas por configuracion');
+        return { success: true, enviados: 0 };
+      }
 
       const resultado = await this.whatsAppService.enviarAlertaStockBajo(itemsCriticos);
       return { success: resultado.success, enviados: resultado.success ? 1 : 0 };
@@ -148,7 +145,8 @@ export class AlertasProgramadasService implements OnModuleInit {
     try {
       const hoy = new Date();
       const en30Dias = new Date();
-      en30Dias.setDate(en30Dias.getDate() + 30);
+      const diasVencimiento = await this.getIntegerConfig('ALERTAS_DIAS_VENCIMIENTO', 30);
+      en30Dias.setDate(en30Dias.getDate() + diasVencimiento);
 
       // Obtener lotes próximos a vencer en los próximos 30 días
       const lotesProximosVencer = await this.prisma.lote.findMany({
@@ -211,6 +209,11 @@ export class AlertasProgramadasService implements OnModuleInit {
 
       this.logger.log(`Encontrados ${lotesFormateados.length} lotes próximos a vencer o vencidos`);
 
+      if (!(await this.getBooleanConfig('ALERTAS_WHATSAPP_ACTIVO', true))) {
+        this.logger.log('Alertas WhatsApp desactivadas por configuracion');
+        return { success: true, enviados: 0 };
+      }
+
       const resultado = await this.whatsAppService.enviarAlertaVencimiento(lotesFormateados);
       return { success: resultado.success, enviados: resultado.success ? 1 : 0 };
     } catch (error) {
@@ -222,10 +225,11 @@ export class AlertasProgramadasService implements OnModuleInit {
   /**
    * Envía alertas de ítems sin movimientos en los últimos n días
    */
-  async enviarAlertasSinMovimientos(dias: number = 30): Promise<{ success: boolean; enviados: number }> {
+  async enviarAlertasSinMovimientos(dias?: number): Promise<{ success: boolean; enviados: number }> {
     try {
+      const diasAnalisis = dias ?? (await this.getIntegerConfig('ALERTAS_DIAS_SIN_MOVIMIENTO', 30));
       const fechaLimite = new Date();
-      fechaLimite.setDate(fechaLimite.getDate() - dias);
+      fechaLimite.setDate(fechaLimite.getDate() - diasAnalisis);
 
       // Obtener ítems sin movimientos recientes usando raw query
       const itemsSinMovimiento = await this.prisma.$queryRaw<Array<{
@@ -261,7 +265,12 @@ export class AlertasProgramadasService implements OnModuleInit {
       this.logger.log(`Encontrados ${itemsSinMovimiento.length} ítems sin movimientos en ${dias} días`);
 
       // Formatear mensaje
-      const mensaje = this.formatearMensajeSinMovimientos(itemsSinMovimiento, dias);
+      const mensaje = this.formatearMensajeSinMovimientos(itemsSinMovimiento, diasAnalisis);
+
+      if (!(await this.getBooleanConfig('ALERTAS_WHATSAPP_ACTIVO', true))) {
+        this.logger.log('Alertas WhatsApp desactivadas por configuracion');
+        return { success: true, enviados: 0 };
+      }
 
       // Enviar por WhatsApp
       const resultado = await this.whatsAppService.sendMessage({
@@ -338,5 +347,58 @@ export class AlertasProgramadasService implements OnModuleInit {
       vencimientos,
       sin_movimientos: sinMovimientos,
     };
+  }
+
+  private async ensureAlertConfigs() {
+    const defaultConfigs = [
+      {
+        clave: 'ALERTAS_WHATSAPP_ACTIVO',
+        valor: 'true',
+        descripcion: 'Activa o desactiva el envio automatico de alertas por WhatsApp',
+        grupo: 'ALERTAS',
+        tipo_dato: 'BOOLEAN',
+      },
+      {
+        clave: 'ALERTAS_DIAS_VENCIMIENTO',
+        valor: '30',
+        descripcion: 'Dias de anticipacion para alertas de lotes proximos a vencer',
+        grupo: 'ALERTAS',
+        tipo_dato: 'INTEGER',
+      },
+      {
+        clave: 'ALERTAS_DIAS_SIN_MOVIMIENTO',
+        valor: '30',
+        descripcion: 'Dias sin movimientos para reportar items con baja rotacion',
+        grupo: 'ALERTAS',
+        tipo_dato: 'INTEGER',
+      },
+      {
+        clave: 'ALERTAS_STOCK_CRITICO_PORCENTAJE',
+        valor: '20',
+        descripcion: 'Porcentaje del stock minimo usado para clasificar stock critico',
+        grupo: 'ALERTAS',
+        tipo_dato: 'INTEGER',
+      },
+    ];
+
+    for (const config of defaultConfigs) {
+      await this.prisma.configuracionSistema.upsert({
+        where: { clave: config.clave },
+        update: {},
+        create: config,
+      });
+    }
+  }
+
+  private async getIntegerConfig(clave: string, defaultValue: number) {
+    const config = await this.prisma.configuracionSistema.findUnique({ where: { clave } });
+    const value = config ? parseInt(config.valor, 10) : NaN;
+    return Number.isFinite(value) && value > 0 ? value : defaultValue;
+  }
+
+  private async getBooleanConfig(clave: string, defaultValue: boolean) {
+    const config = await this.prisma.configuracionSistema.findUnique({ where: { clave } });
+    if (!config) return defaultValue;
+    return ['true', '1', 'si', 'yes'].includes(config.valor.toLowerCase());
   }
 }

@@ -27,10 +27,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Clock } from 'lucide-react';
 
-// Configuracion por defecto (en minutos)
-// NOTA: Para pruebas usar 0.5 (30 seg), en produccion usar 15 minutos
-const DEFAULT_SESSION_TIMEOUT = 10000; // 30 segundos para pruebas (cambiar a 15 en produccion)
-const WARNING_BEFORE_TIMEOUT = 0.99; // Mostrar advertencia 15 segundos antes
+// Configuracion por defecto en minutos. Para pruebas locales se puede guardar 0.5 en localStorage.
+const DEFAULT_SESSION_TIMEOUT = 15;
+const WARNING_BEFORE_TIMEOUT_MINUTES = 1;
 
 interface SessionContextType {
   sessionTimeout: number;
@@ -107,7 +106,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
     if (isWarningOpenRef.current) return; // No reiniciar si el modal esta abierto (usar ref)
 
     const timeout = getTimeoutDuration();
-    const warningTime = WARNING_BEFORE_TIMEOUT * 60 * 1000;
+    const warningTime = Math.min(WARNING_BEFORE_TIMEOUT_MINUTES * 60 * 1000, timeout / 2);
 
     // Limpiar timers existentes
     if (mainTimerRef.current) clearTimeout(mainTimerRef.current);

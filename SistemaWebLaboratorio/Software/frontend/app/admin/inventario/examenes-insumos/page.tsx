@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -85,6 +85,9 @@ interface ExamenConInsumos {
     nombre: string;
     unidad_medida: string;
     cantidad_requerida: number;
+    stock_actual?: number;
+    es_reactivo?: boolean;
+    capacidad_pruebas?: number | null;
   }>;
 }
 
@@ -128,13 +131,19 @@ export default function ExamenesInsumosPage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
-  const showMessage = (type: 'success' | 'error' | 'warning', text: string) => {
+  const showMessage = useCallback((type: 'success' | 'error' | 'warning', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 5000);
-  };
+  }, []);
 
-  const fetchData = async () => {
+  const parseCantidadRequerida = useCallback(() => {
+    const value = Number(cantidadRequerida);
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }, [cantidadRequerida]);
+
+  const fetchData = useCallback(async () => {
     if (!token) {
+      setLoading(false);
       return;
     }
 
@@ -166,11 +175,11 @@ export default function ExamenesInsumosPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL, showMessage, token]);
 
   useEffect(() => {
     fetchData();
-  }, [token]);
+  }, [fetchData]);
 
   // Filtrar examenes
   const examenesFiltrados = useMemo(() => {
@@ -222,6 +231,12 @@ export default function ExamenesInsumosPage() {
       return;
     }
 
+    const cantidad = parseCantidadRequerida();
+    if (cantidad === null) {
+      showMessage('error', 'La cantidad requerida debe ser un entero positivo');
+      return;
+    }
+
     try {
       const res = await fetch(
         `${API_URL}/admin/inventory/examenes/${examenSeleccionado.codigo_examen}/insumos`,
@@ -233,7 +248,7 @@ export default function ExamenesInsumosPage() {
           },
           body: JSON.stringify({
             codigo_item: parseInt(insumoSeleccionado),
-            cantidad_requerida: parseFloat(cantidadRequerida),
+            cantidad_requerida: cantidad,
           }),
         }
       );
@@ -285,6 +300,12 @@ export default function ExamenesInsumosPage() {
       return;
     }
 
+    const cantidad = parseCantidadRequerida();
+    if (cantidad === null) {
+      showMessage('error', 'La cantidad requerida debe ser un entero positivo');
+      return;
+    }
+
     try {
       const res = await fetch(
         `${API_URL}/admin/inventory/examenes/${insumoEditando.codigo_examen}/insumos/${insumoEditando.codigo_item}`,
@@ -295,7 +316,7 @@ export default function ExamenesInsumosPage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            cantidad_requerida: parseFloat(cantidadRequerida),
+            cantidad_requerida: cantidad,
           }),
         }
       );
@@ -623,7 +644,7 @@ export default function ExamenesInsumosPage() {
                   );
                   if (!item) return null;
 
-                  const cantidadNum = parseFloat(cantidadRequerida) || 0;
+                  const cantidadNum = parseCantidadRequerida() || 0;
                   const examenesDisponibles = cantidadNum > 0
                     ? Math.floor(item.stock_actual / cantidadNum)
                     : 0;
@@ -713,8 +734,8 @@ export default function ExamenesInsumosPage() {
                     <Input
                       id="cantidad"
                       type="number"
-                      min="0.01"
-                      step="0.01"
+                      min="1"
+                      step="1"
                       value={cantidadRequerida}
                       onChange={(e) => setCantidadRequerida(e.target.value)}
                       placeholder="1"
@@ -722,7 +743,7 @@ export default function ExamenesInsumosPage() {
                     <p className="text-xs text-muted-foreground">
                       {itemSelec ? (
                         <>
-                          Cuantos <strong>{unidad}</strong> de {itemSelec.nombre} se consumen por cada examen realizado
+                          Ingrese unidades enteras de <strong>{unidad}</strong> que se consumen por cada examen realizado.
                         </>
                       ) : (
                         'Seleccione un insumo para ver la unidad de medida'
@@ -748,7 +769,7 @@ export default function ExamenesInsumosPage() {
             </Button>
             <Button
               onClick={handleAgregarInsumo}
-              disabled={!insumoSeleccionado || !cantidadRequerida || parseFloat(cantidadRequerida) <= 0}
+              disabled={!insumoSeleccionado || parseCantidadRequerida() === null}
             >
               <Plus className="h-4 w-4 mr-1" />
               Agregar Insumo
@@ -797,14 +818,14 @@ export default function ExamenesInsumosPage() {
                   <Input
                     id="cantidad-editar"
                     type="number"
-                    min="0.01"
-                    step="0.01"
+                    min="1"
+                    step="1"
                     value={cantidadRequerida}
                     onChange={(e) => setCantidadRequerida(e.target.value)}
                     placeholder="1"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Cuantos {insumoEditando.unidad_medida} de {insumoEditando.nombre} se consumen por cada examen
+                    Cuantas unidades enteras de {insumoEditando.unidad_medida} se consumen por cada examen
                   </p>
                 </div>
               </>
@@ -824,7 +845,7 @@ export default function ExamenesInsumosPage() {
             </Button>
             <Button
               onClick={handleEditarInsumo}
-              disabled={!cantidadRequerida || parseFloat(cantidadRequerida) <= 0}
+              disabled={parseCantidadRequerida() === null}
             >
               <CheckCircle className="h-4 w-4 mr-1" />
               Guardar Cambios

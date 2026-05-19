@@ -248,14 +248,14 @@ export const resultsApi = {
 
 // Catalog (exámenes)
 export const catalogApi = {
-  getExams: (categoria_id?: number) => {
+  getExams: (token: string, categoria_id?: number) => {
     const params = new URLSearchParams()
     if (categoria_id) params.append('categoria_id', categoria_id.toString())
     const query = params.toString() ? `?${params}` : ''
-    return request(`/catalog/exams${query}`)
+    return request(`/examenes/catalogo${query}`, { token })
   },
 
-  getCategories: () => request('/catalog/categories'),
+  getCategories: (token: string) => request('/examenes/categorias', { token }),
 }
 
 export const api = {

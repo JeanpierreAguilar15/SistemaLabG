@@ -24,6 +24,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { APP_ROLES } from '../auth/constants/roles.constants';
 import { ResultadosService } from './resultados.service';
 import { CreateResultadoDto, UpdateResultadoDto, CreateMuestraDto } from './dto';
 import { createReadStream, existsSync } from 'fs';
@@ -38,7 +39,7 @@ export class ResultadosController {
 
   @Post('muestras')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'PERSONAL_LAB')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear nueva muestra (Admin/Técnico)' })
   @ApiResponse({ status: 201, description: 'Muestra creada' })
@@ -52,7 +53,7 @@ export class ResultadosController {
 
   @Get('muestras')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'PERSONAL_LAB')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener muestras con filtros (Admin/Técnico)' })
   @ApiResponse({ status: 200, description: 'Lista de muestras' })
@@ -76,7 +77,7 @@ export class ResultadosController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'PERSONAL_LAB')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear resultado para muestra (Admin/Técnico)' })
   @ApiResponse({ status: 201, description: 'Resultado creado' })
@@ -90,7 +91,7 @@ export class ResultadosController {
 
   @Put(':id/validar')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'PERSONAL_LAB')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Validar resultado y generar PDF (Admin/Técnico)' })
   @ApiResponse({ status: 200, description: 'Resultado validado y PDF generado' })
@@ -104,7 +105,7 @@ export class ResultadosController {
 
   @Post(':id/upload-pdf')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'PERSONAL_LAB')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @UseInterceptors(
     FileInterceptor('file', {
@@ -149,7 +150,7 @@ export class ResultadosController {
 
   @Get('admin/all')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'PERSONAL_LAB')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener todos los resultados (Admin)' })
   @ApiResponse({ status: 200, description: 'Lista de resultados' })
@@ -173,10 +174,10 @@ export class ResultadosController {
 
   @Get('admin/agrupados')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'PERSONAL_LAB')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Obtener resultados AGRUPADOS por paciente/cotización (Admin)',
+    summary: 'Obtener resultados agrupados por paciente y muestra (Admin)',
     description: 'Vista organizada donde cada muestra agrupa todos sus exámenes',
   })
   @ApiResponse({ status: 200, description: 'Lista de muestras con resultados agrupados' })
@@ -193,7 +194,7 @@ export class ResultadosController {
 
   @Put('admin/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'PERSONAL_LAB')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar resultado (Admin)' })
   @ApiResponse({ status: 200, description: 'Resultado actualizado' })
@@ -207,7 +208,7 @@ export class ResultadosController {
 
   @Get('admin/estadisticas')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener estadísticas de resultados (Admin)' })
   @ApiResponse({ status: 200, description: 'Estadísticas' })
@@ -224,7 +225,7 @@ export class ResultadosController {
 
   @Get('admin/:id/descargar')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'PERSONAL_LAB')
+  @Roles(APP_ROLES.ADMINISTRADOR, APP_ROLES.PERSONAL_LABORATORIO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Descargar PDF del resultado (Admin)' })
   @ApiResponse({ status: 200, description: 'PDF del resultado' })
@@ -286,8 +287,8 @@ export class ResultadosController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Obtener mis resultados AGRUPADOS por cotización/muestra (Paciente)',
-    description: 'Si el paciente solicitó 3 exámenes en una cotización, todos se muestran juntos en una sola muestra',
+    summary: 'Obtener mis resultados agrupados por muestra (Paciente)',
+    description: 'Todos los exámenes asociados a una muestra se muestran juntos en una sola vista',
   })
   @ApiResponse({ status: 200, description: 'Lista de muestras con sus resultados agrupados' })
   async getMyResultadosAgrupados(@CurrentUser('codigo_usuario') codigo_paciente: number) {

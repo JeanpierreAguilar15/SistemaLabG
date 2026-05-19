@@ -6,7 +6,7 @@ export interface SystemConfig {
   valor: string;
   descripcion?: string;
   grupo: string;
-  tipo_dato: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON';
+  tipo_dato: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'JSON';
   es_publico: boolean;
 }
 
@@ -23,8 +23,8 @@ export interface UpdateSystemConfigDto extends Partial<CreateSystemConfigDto> { 
 
 export const systemConfigService = {
   getAll: async (token?: string): Promise<SystemConfig[]> => {
-    const response = await api.get<{ data: SystemConfig[] }>('/system-config', { token });
-    return response.data || (response as any); // Handle potential response structure differences
+    const response = await api.get<SystemConfig[] | { data: SystemConfig[] }>('/admin/config', { token });
+    return Array.isArray(response) ? response : response.data || [];
   },
 
   getPublic: async (): Promise<Record<string, any>> => {
@@ -45,6 +45,10 @@ export const systemConfigService = {
   update: async (id: number, data: UpdateSystemConfigDto, token: string): Promise<SystemConfig> => {
     const response = await api.put<{ data: SystemConfig }>(`/system-config/${id}`, data, { token });
     return response.data || (response as any);
+  },
+
+  updateByKey: async (clave: string, data: Pick<UpdateSystemConfigDto, 'valor'>, token: string): Promise<SystemConfig> => {
+    return api.put<SystemConfig>(`/admin/config/${clave}`, data, { token });
   },
 
   delete: async (id: number, token: string): Promise<void> => {

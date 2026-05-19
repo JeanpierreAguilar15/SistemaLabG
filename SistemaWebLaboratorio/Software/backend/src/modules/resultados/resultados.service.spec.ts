@@ -4,11 +4,14 @@ import { PrismaService } from '@prisma/prisma.service';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { WhatsAppService } from '../comunicaciones/whatsapp.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { InventarioService } from '../inventario/inventario.service';
+import { AdminEventsService } from '../admin/admin-events.service';
 
 describe('ResultadosService', () => {
   let service: ResultadosService;
   let prisma: PrismaService;
   let pdfGenerator: PdfGeneratorService;
+  let inventarioService: InventarioService;
 
   const mockPrismaService = {
     muestra: {
@@ -25,6 +28,7 @@ describe('ResultadosService', () => {
     },
     resultado: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -33,6 +37,9 @@ describe('ResultadosService', () => {
     },
     descargaResultado: {
       create: jest.fn(),
+    },
+    consentimiento: {
+      findFirst: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -59,12 +66,39 @@ describe('ResultadosService', () => {
           provide: PdfGeneratorService,
           useValue: mockPdfGeneratorService,
         },
+        {
+          provide: WhatsAppService,
+          useValue: mockWhatsAppService,
+        },
+        {
+          provide: InventarioService,
+          useValue: {
+            consumirReactivosPorExamen: jest.fn(),
+            descontarInsumosExamen: jest.fn().mockResolvedValue({
+              success: true,
+              movimientos: [],
+              mensaje: 'Sin insumos configurados',
+              alertas_reactivos: [],
+            }),
+          },
+        },
+        {
+          provide: AdminEventsService,
+          useValue: {
+            emitResultCreated: jest.fn(),
+            emitResultUpdated: jest.fn(),
+            emitResultadoValidated: jest.fn(),
+            emitResultadoInsumosDeducted: jest.fn(),
+            emitResultadoInsumosFailed: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<ResultadosService>(ResultadosService);
     prisma = module.get<PrismaService>(PrismaService);
     pdfGenerator = module.get<PdfGeneratorService>(PdfGeneratorService);
+    inventarioService = module.get<InventarioService>(InventarioService);
 
     jest.clearAllMocks();
   });
@@ -157,6 +191,7 @@ describe('ResultadosService', () => {
     const mockExamen = {
       codigo_examen: 1,
       nombre: 'Glucosa',
+      activo: true,
     };
 
     it('should create resultado with NORMAL level', async () => {
@@ -173,6 +208,7 @@ describe('ResultadosService', () => {
 
       mockPrismaService.muestra.findUnique.mockResolvedValue(mockMuestra);
       mockPrismaService.examen.findUnique.mockResolvedValue(mockExamen);
+      mockPrismaService.resultado.findFirst.mockResolvedValue(null);
       mockPrismaService.resultado.create.mockResolvedValue(expectedResultado);
 
       const result = await service.createResultado(createResultadoDto, 2);
@@ -201,6 +237,7 @@ describe('ResultadosService', () => {
 
       mockPrismaService.muestra.findUnique.mockResolvedValue(mockMuestra);
       mockPrismaService.examen.findUnique.mockResolvedValue(mockExamen);
+      mockPrismaService.resultado.findFirst.mockResolvedValue(null);
       mockPrismaService.resultado.create.mockResolvedValue(expectedResultado);
 
       const result = await service.createResultado(lowValueDto, 2);
@@ -228,6 +265,7 @@ describe('ResultadosService', () => {
 
       mockPrismaService.muestra.findUnique.mockResolvedValue(mockMuestra);
       mockPrismaService.examen.findUnique.mockResolvedValue(mockExamen);
+      mockPrismaService.resultado.findFirst.mockResolvedValue(null);
       mockPrismaService.resultado.create.mockResolvedValue(expectedResultado);
 
       const result = await service.createResultado(highValueDto, 2);
@@ -255,6 +293,7 @@ describe('ResultadosService', () => {
 
       mockPrismaService.muestra.findUnique.mockResolvedValue(mockMuestra);
       mockPrismaService.examen.findUnique.mockResolvedValue(mockExamen);
+      mockPrismaService.resultado.findFirst.mockResolvedValue(null);
       mockPrismaService.resultado.create.mockResolvedValue(expectedResultado);
 
       const result = await service.createResultado(criticalValueDto, 2);
@@ -278,18 +317,48 @@ describe('ResultadosService', () => {
         service.createResultado(createResultadoDto, 2),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('should reject inactive exams', async () => {
+      mockPrismaService.muestra.findUnique.mockResolvedValue(mockMuestra);
+      mockPrismaService.examen.findUnique.mockResolvedValue({
+        ...mockExamen,
+        activo: false,
+      });
+
+      await expect(
+        service.createResultado(createResultadoDto, 2),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.resultado.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject duplicate results for the same sample and exam', async () => {
+      mockPrismaService.muestra.findUnique.mockResolvedValue(mockMuestra);
+      mockPrismaService.examen.findUnique.mockResolvedValue(mockExamen);
+      mockPrismaService.resultado.findFirst.mockResolvedValue({
+        codigo_resultado: 99,
+        codigo_muestra: 1,
+        codigo_examen: 1,
+      });
+
+      await expect(
+        service.createResultado(createResultadoDto, 2),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.resultado.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('validarResultado', () => {
     const mockResultado = {
       codigo_resultado: 1,
       estado: 'EN_PROCESO',
+      codigo_examen: 1,
       muestra: {
         codigo_paciente: 1,
         paciente: {
           nombres: 'Juan',
           apellidos: 'Pérez',
           email: 'juan@example.com',
+          telefono: '+593999999999',
         },
       },
       examen: {
@@ -318,6 +387,31 @@ describe('ResultadosService', () => {
       expect(result.codigo_verificacion).toMatch(/^VER-/);
       expect(result.url_pdf).toContain('/uploads/resultados/');
       expect(mockPdfGeneratorService.generateResultadoPdf).toHaveBeenCalled();
+    });
+
+    it('should not deduct inventory again when result was already ready', async () => {
+      const pdfPath = '/uploads/resultados/resultado-123.pdf';
+      const alreadyReady = {
+        ...mockResultado,
+        estado: 'LISTO',
+        url_pdf: '/uploads/resultados/resultado-old.pdf',
+        codigo_verificacion: 'VER-OLD',
+      };
+      const validatedResultado = {
+        ...alreadyReady,
+        validado_por: 2,
+        fecha_validacion: new Date(),
+        codigo_verificacion: 'VER-12345678',
+        url_pdf: '/uploads/resultados/resultado-123.pdf',
+      };
+
+      mockPrismaService.resultado.findUnique.mockResolvedValue(alreadyReady);
+      mockPdfGeneratorService.generateResultadoPdf.mockResolvedValue(pdfPath);
+      mockPrismaService.resultado.update.mockResolvedValue(validatedResultado);
+
+      await service.validarResultado(1, 2);
+
+      expect(inventarioService.descontarInsumosExamen).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if resultado does not exist', async () => {

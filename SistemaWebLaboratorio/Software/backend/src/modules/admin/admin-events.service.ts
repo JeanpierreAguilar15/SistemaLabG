@@ -49,6 +49,9 @@ export enum AdminEventType {
   RESULTADO_PDF_UPLOADED = 'admin.resultado.pdf_uploaded',
   RESULTADO_INSUMOS_DEDUCTED = 'admin.resultado.insumos_deducted',
   RESULTADO_INSUMOS_FAILED = 'admin.resultado.insumos_failed',
+
+  // Configuracion
+  CONFIG_UPDATED = 'admin.config.updated',
 }
 
 export interface RequestContext {

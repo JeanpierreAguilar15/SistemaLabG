@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -9,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ValidateCedulaEcuatoriana } from '../../common/utils/validation.utils';
+import { APP_ROLES, isAdminRoleName, isRole } from '../auth/constants/roles.constants';
 
 @Injectable()
 export class UsersService {
@@ -19,7 +21,7 @@ export class UsersService {
     private readonly eventEmitter: EventEmitter2,
   ) { }
 
-  async findAll(page: number = 1, limit: number = 20, filters?: any) {
+  async findAll(page: number = 1, limit: number = 20, filters?: any, actorRole?: string) {
     const skip = (page - 1) * limit;
 
     const where: Prisma.UsuarioWhereInput = {};
@@ -39,6 +41,15 @@ export class UsersService {
 
     if (filters?.activo !== undefined) {
       where.activo = filters.activo === 'true';
+    }
+
+    if (actorRole && !isAdminRoleName(actorRole)) {
+      where.rol = {
+        OR: [
+          { nombre: { equals: APP_ROLES.PACIENTE, mode: 'insensitive' } },
+          { nombre: { equals: 'PACIENTE', mode: 'insensitive' } },
+        ],
+      };
     }
 
     const [users, total] = await Promise.all([
@@ -68,7 +79,7 @@ export class UsersService {
     };
   }
 
-  async findOne(codigo_usuario: number) {
+  async findOne(codigo_usuario: number, actorRole?: string) {
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
       include: {
@@ -84,6 +95,10 @@ export class UsersService {
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (actorRole && !isAdminRoleName(actorRole) && !isRole(user.rol.nombre, APP_ROLES.PACIENTE)) {
+      throw new ForbiddenException('Personal_Laboratorio solo puede consultar usuarios Paciente');
     }
 
     const { password_hash, salt, ...sanitizedUser } = user;
@@ -104,7 +119,7 @@ export class UsersService {
     });
   }
 
-  async create(data: any, adminId?: number) {
+  async create(data: any, adminId?: number, actorRole?: string) {
     // Validar formato de cédula ecuatoriana
     if (!ValidateCedulaEcuatoriana(data.cedula)) {
       throw new BadRequestException('La cédula ecuatoriana no es válida');
@@ -122,6 +137,10 @@ export class UsersService {
 
     if (existingUser) {
       throw new BadRequestException('El email o cédula ya están registrados');
+    }
+
+    if (actorRole && !isAdminRoleName(actorRole)) {
+      await this.ensureNonAdminManagesOnlyPatients(data.codigo_rol);
     }
 
     // Generar salt y hash de password
@@ -152,13 +171,23 @@ export class UsersService {
     return sanitizedUser;
   }
 
-  async update(codigo_usuario: number, data: any, adminId?: number) {
+  async update(codigo_usuario: number, data: any, adminId?: number, actorRole?: string) {
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
+      include: { rol: true },
     });
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (actorRole && !isAdminRoleName(actorRole)) {
+      if (!isRole(user.rol.nombre, APP_ROLES.PACIENTE)) {
+        throw new BadRequestException('Personal_Laboratorio solo puede editar usuarios Paciente');
+      }
+      if (data.codigo_rol) {
+        await this.ensureNonAdminManagesOnlyPatients(data.codigo_rol);
+      }
     }
 
     // Validar formato de cédula si se está actualizando
@@ -199,8 +228,8 @@ export class UsersService {
       });
 
       if (currentUser && newRole) {
-        const isCurrentAdmin = currentUser.rol.nivel_acceso === 10 || currentUser.rol.nombre.toUpperCase() === 'ADMIN';
-        const isNewRoleAdmin = newRole.nivel_acceso === 10 || newRole.nombre.toUpperCase() === 'ADMIN';
+        const isCurrentAdmin = this.isAdminRole(currentUser.rol);
+        const isNewRoleAdmin = this.isAdminRole(newRole);
 
         // Si el usuario actual es admin y se está degradando
         if (isCurrentAdmin && !isNewRoleAdmin) {
@@ -210,7 +239,7 @@ export class UsersService {
               activo: true,
               rol: {
                 OR: [
-                  { nivel_acceso: 10 },
+                  { nombre: { equals: APP_ROLES.ADMINISTRADOR, mode: 'insensitive' } },
                   { nombre: { equals: 'ADMIN', mode: 'insensitive' } },
                 ],
               },
@@ -257,6 +286,7 @@ export class UsersService {
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
       include: {
+        rol: true,
         _count: {
           select: {
             resultados_procesados: true,
@@ -267,6 +297,10 @@ export class UsersService {
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (user.activo) {
+      await this.assertCanDeactivateUser(user, adminId);
     }
 
     // Generar advertencias
@@ -298,10 +332,15 @@ export class UsersService {
   async toggleStatus(codigo_usuario: number, adminId?: number, force: boolean = false) {
     const user = await this.prisma.usuario.findUnique({
       where: { codigo_usuario },
+      include: { rol: true },
     });
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (user.activo) {
+      await this.assertCanDeactivateUser(user, adminId);
     }
 
     const updatedUser = await this.prisma.usuario.update({
@@ -340,6 +379,57 @@ export class UsersService {
     });
 
     return { message: 'Contraseña restablecida exitosamente' };
+  }
+
+  private isAdminRole(role?: { nombre?: string | null; nivel_acceso?: number | null }) {
+    return isAdminRoleName(role?.nombre) || role?.nivel_acceso === 10;
+  }
+
+  private async ensureNonAdminManagesOnlyPatients(codigoRol?: number) {
+    if (!codigoRol) {
+      return;
+    }
+
+    const role = await this.prisma.rol.findUnique({
+      where: { codigo_rol: codigoRol },
+    });
+
+    if (!role || !isRole(role.nombre, APP_ROLES.PACIENTE)) {
+      throw new BadRequestException('Personal_Laboratorio solo puede asignar el rol Paciente');
+    }
+  }
+
+  private async assertCanDeactivateUser(
+    user: { codigo_usuario: number; rol?: { nombre?: string | null; nivel_acceso?: number | null } | null },
+    adminId?: number,
+  ) {
+    if (!this.isAdminRole(user.rol)) {
+      return;
+    }
+
+    if (adminId && adminId === user.codigo_usuario) {
+      throw new BadRequestException(
+        'No puede desactivar su propia cuenta de administrador. Solicite a otro administrador que realice este cambio.',
+      );
+    }
+
+    const activeAdminCount = await this.prisma.usuario.count({
+      where: {
+        activo: true,
+        rol: {
+          OR: [
+            { nombre: { equals: APP_ROLES.ADMINISTRADOR, mode: 'insensitive' } },
+            { nombre: { equals: 'ADMIN', mode: 'insensitive' } },
+          ],
+        },
+      },
+    });
+
+    if (activeAdminCount <= 1) {
+      throw new BadRequestException(
+        'No se puede desactivar el unico administrador activo del sistema. Debe existir al menos un usuario administrador.',
+      );
+    }
   }
 
   private emitUserEvent(action: string, userId: number, adminId: number = 0, data?: any) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 
@@ -97,12 +97,6 @@ export default function SuppliersManagement() {
   }, [])
 
   useEffect(() => {
-    if (mounted && accessToken) {
-      loadSuppliers()
-    }
-  }, [accessToken, mounted])
-
-  useEffect(() => {
     if (message) {
       const timer = setTimeout(() => setMessage(null), 5000)
       return () => clearTimeout(timer)
@@ -137,7 +131,12 @@ export default function SuppliersManagement() {
     return { activos, inactivos, conOrdenes, total: suppliers.length }
   }, [suppliers])
 
-  const loadSuppliers = async () => {
+  const loadSuppliers = useCallback(async () => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers?includeInactive=true`, {
@@ -157,7 +156,13 @@ export default function SuppliersManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken])
+
+  useEffect(() => {
+    if (mounted && accessToken) {
+      loadSuppliers()
+    }
+  }, [accessToken, mounted, loadSuppliers])
 
   const handleOpenForm = (supplier?: Supplier) => {
     if (supplier) {

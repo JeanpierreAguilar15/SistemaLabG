@@ -31,18 +31,22 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { APP_ROLES } from '../auth/constants/roles.constants';
 import {
   CreateInventoryItemDto,
   UpdateInventoryItemDto,
   CreateSupplierDto,
   UpdateSupplierDto,
   CreateMovimientoDto,
+  CreateOrdenCompraDto,
+  UpdateOrdenCompraDto,
+  RecibirOrdenCompraDto,
 } from './dto';
 
 @ApiTags('Inventario')
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'PERSONAL_LAB')
+@Roles(APP_ROLES.ADMINISTRADOR)
 export class InventarioController {
   constructor(
     private readonly inventarioService: InventarioService,
@@ -85,11 +89,6 @@ export class InventarioController {
     );
   }
 
-  @Get('inventory/items/:id')
-  async getInventoryItemById(@Param('id', ParseIntPipe) id: number) {
-    return this.inventarioService.getInventoryItemById(id);
-  }
-
   @Post('inventory/items')
   @HttpCode(HttpStatus.CREATED)
   async createInventoryItem(
@@ -109,6 +108,11 @@ export class InventarioController {
       nombre,
       categoria ? parseInt(categoria) : undefined,
     );
+  }
+
+  @Get('inventory/items/:id')
+  async getInventoryItemById(@Param('id', ParseIntPipe) id: number) {
+    return this.inventarioService.getInventoryItemById(id);
   }
 
   @Put('inventory/items/:id')
@@ -469,7 +473,10 @@ export class InventarioController {
 
   @Post('purchase-orders')
   @ApiOperation({ summary: 'Crear orden de compra' })
-  async createPurchaseOrder(@Body() data: any, @CurrentUser('codigo_usuario') adminId: number) {
+  async createPurchaseOrder(
+    @Body() data: CreateOrdenCompraDto,
+    @CurrentUser('codigo_usuario') adminId: number,
+  ) {
     return this.inventarioService.createOrdenCompra(data, adminId);
   }
 
@@ -497,7 +504,7 @@ export class InventarioController {
   @ApiOperation({ summary: 'Actualizar orden de compra' })
   async updatePurchaseOrder(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: UpdateOrdenCompraDto,
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
     return this.inventarioService.updateOrdenCompra(id, data, adminId);
@@ -525,7 +532,7 @@ export class InventarioController {
   @ApiOperation({ summary: 'Recibir orden de compra' })
   async receivePurchaseOrder(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: any,
+    @Body() data: RecibirOrdenCompraDto,
     @CurrentUser('codigo_usuario') adminId: number,
   ) {
     return this.inventarioService.recibirOrdenCompra(id, data, adminId);

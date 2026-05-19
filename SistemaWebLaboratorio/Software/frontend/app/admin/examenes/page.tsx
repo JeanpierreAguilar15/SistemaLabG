@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,7 @@ interface Examen {
   codigo_interno: string
   nombre: string
   descripcion: string | null
-  codigo_categoria: number
+  codigo_categoria: number | null
   requiere_ayuno: boolean
   horas_ayuno: number | null
   instrucciones_preparacion: string | null
@@ -31,7 +31,6 @@ interface Examen {
   unidad_medida: string | null
   activo: boolean
   categoria?: { nombre: string }
-  precios?: Array<{ codigo_precio: number; precio: number; activo: boolean }>
 }
 
 type Tab = 'examenes' | 'categorias'
@@ -83,15 +82,7 @@ export default function ExamenesPage() {
     valor_referencia_min: '',
     valor_referencia_max: '',
     unidad_medida: '',
-    precio: '',
   })
-
-  useEffect(() => {
-    if (accessToken) {
-      loadExamenes()
-      loadCategorias()
-    }
-  }, [accessToken])
 
   useEffect(() => {
     if (message) {
@@ -100,7 +91,12 @@ export default function ExamenesPage() {
     }
   }, [message])
 
-  const loadExamenes = async () => {
+  const loadExamenes = useCallback(async () => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exams`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -115,9 +111,13 @@ export default function ExamenesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken])
 
-  const loadCategorias = async () => {
+  const loadCategorias = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/exam-categories`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -129,7 +129,14 @@ export default function ExamenesPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar categorías' })
     }
-  }
+  }, [accessToken])
+
+  useEffect(() => {
+    if (accessToken) {
+      loadExamenes()
+      loadCategorias()
+    }
+  }, [accessToken, loadExamenes, loadCategorias])
 
   // ==================== EXAMENES HANDLERS ====================
 
@@ -139,7 +146,7 @@ export default function ExamenesPage() {
 
     if (formData.requiere_ayuno && formData.horas_ayuno) {
       const horasAyuno = parseInt(formData.horas_ayuno)
-      if (!validateRange(horasAyuno, 0, 24)) {
+      if (!validateRange(horasAyuno, 1, 24)) {
         setMessage({ type: 'error', text: '❌ Las horas de ayuno deben estar entre 0 y 24 horas.' })
         return
       }
@@ -174,7 +181,7 @@ export default function ExamenesPage() {
       codigo_interno: formData.codigo_interno.trim(),
       nombre: formData.nombre.trim(),
       descripcion: formData.descripcion ? formData.descripcion.trim() : null,
-      codigo_categoria: parseInt(formData.codigo_categoria),
+      codigo_categoria: formData.codigo_categoria ? parseInt(formData.codigo_categoria) : null,
       requiere_ayuno: formData.requiere_ayuno,
       horas_ayuno: formData.requiere_ayuno && formData.horas_ayuno ? parseInt(formData.horas_ayuno) : null,
       instrucciones_preparacion: formData.instrucciones_preparacion ? formData.instrucciones_preparacion.trim() : null,
@@ -239,7 +246,7 @@ export default function ExamenesPage() {
       codigo_interno: examen.codigo_interno,
       nombre: examen.nombre,
       descripcion: examen.descripcion || '',
-      codigo_categoria: examen.codigo_categoria.toString(),
+      codigo_categoria: examen.codigo_categoria?.toString() || '',
       requiere_ayuno: examen.requiere_ayuno,
       horas_ayuno: examen.horas_ayuno?.toString() || '',
       instrucciones_preparacion: examen.instrucciones_preparacion || '',
@@ -248,7 +255,6 @@ export default function ExamenesPage() {
       valor_referencia_min: examen.valor_referencia_min?.toString() || '',
       valor_referencia_max: examen.valor_referencia_max?.toString() || '',
       unidad_medida: examen.unidad_medida || '',
-      precio: examen.precios?.[0]?.precio.toString() || '',
     })
     setShowModal(true)
   }
@@ -266,13 +272,19 @@ export default function ExamenesPage() {
     if (!confirmToggle.examId) return
 
     const action = confirmToggle.isActive ? 'desactivar' : 'activar'
+    const method = confirmToggle.isActive ? 'DELETE' : 'PUT'
+    const body = confirmToggle.isActive ? undefined : JSON.stringify({ activo: true })
 
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/admin/exams/${confirmToggle.examId}`,
         {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${accessToken}` },
+          method,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(body ? { 'Content-Type': 'application/json' } : {}),
+          },
+          body,
         }
       )
 
@@ -319,7 +331,6 @@ export default function ExamenesPage() {
       valor_referencia_min: '',
       valor_referencia_max: '',
       unidad_medida: '',
-      precio: '',
     })
   }
 
@@ -984,7 +995,7 @@ export default function ExamenesPage() {
                     <div className="mt-2">
                       <p className="text-sm text-lab-neutral-500">
                         ¿Esta seguro de que desea {confirmToggle.isActive ? 'desactivar' : 'activar'} el examen{' '}
-                        <span className="font-semibold text-lab-neutral-700">"{confirmToggle.examName}"</span>?
+                        <span className="font-semibold text-lab-neutral-700">&quot;{confirmToggle.examName}&quot;</span>?
                       </p>
                     </div>
                   </div>
@@ -1047,7 +1058,7 @@ export default function ExamenesPage() {
                       <p className="text-sm text-lab-neutral-500">
                         ¿Esta seguro de que desea eliminar la categoria{' '}
                         <span className="font-semibold text-lab-neutral-700">
-                          "{confirmDeleteCategoria.categoriaName}"
+                          &quot;{confirmDeleteCategoria.categoriaName}&quot;
                         </span>
                         ? Esta accion no se puede deshacer.
                       </p>

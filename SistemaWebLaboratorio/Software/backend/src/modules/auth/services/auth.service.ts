@@ -15,6 +15,7 @@ import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 import { SecurityLoggingService, LoginFailReason } from '../../auditoria/services/security-logging.service';
 import { ComunicacionesService } from '../../comunicaciones/comunicaciones.service';
+import { APP_ROLES, normalizeRoleName } from '../constants/roles.constants';
 
 @Injectable()
 export class AuthService {
@@ -51,13 +52,18 @@ export class AuthService {
       }
     }
 
-    // Get PACIENTE role
+    // Get patient role, accepting the previous uppercase seed during migration.
     const pacienteRole = await this.prisma.rol.findFirst({
-      where: { nombre: 'PACIENTE' },
+      where: {
+        OR: [
+          { nombre: APP_ROLES.PACIENTE },
+          { nombre: 'PACIENTE' },
+        ],
+      },
     });
 
     if (!pacienteRole) {
-      throw new BadRequestException('Rol PACIENTE no encontrado en el sistema');
+      throw new BadRequestException('Rol Paciente no encontrado en el sistema');
     }
 
     // Hash password
@@ -148,7 +154,7 @@ export class AuthService {
         nombres: usuario.nombres,
         apellidos: usuario.apellidos,
         email: usuario.email,
-        rol: usuario.rol.nombre,
+        rol: normalizeRoleName(usuario.rol.nombre),
       },
       ...tokens,
     };
@@ -380,7 +386,7 @@ export class AuthService {
         nombres: usuario.nombres,
         apellidos: usuario.apellidos,
         email: usuario.email,
-        rol: usuario.rol.nombre,
+        rol: normalizeRoleName(usuario.rol.nombre),
         nivel_acceso: usuario.rol.nivel_acceso,
       },
       ...tokens,
@@ -499,7 +505,7 @@ export class AuthService {
       nombres: usuario.nombres,
       apellidos: usuario.apellidos,
       email: usuario.email,
-      rol: usuario.rol.nombre,
+      rol: normalizeRoleName(usuario.rol.nombre),
       nivel_acceso: usuario.rol.nivel_acceso,
     };
   }
@@ -518,6 +524,7 @@ export class AuthService {
 
     const refreshTokenPayload = {
       sub: codigo_usuario,
+      jti: uuidv4(),
       type: 'refresh',
     };
 
@@ -788,23 +795,42 @@ export class AuthService {
   }
 
   /**
-   * Actualizar consentimientos del usuario
-   * Crea nuevos registros con la fecha actual (mantiene historial)
+   * Actualizar consentimientos del usuario.
+   * Mantiene un solo registro vigente por tipo para evitar duplicados visibles.
    */
   async updateConsentimientos(codigo_usuario: number, consentimientos: Array<{
     tipo: string;
     aceptado: boolean;
   }>) {
-    // Crear nuevos registros para cada consentimiento (mantiene historial)
     for (const consent of consentimientos) {
-      await this.prisma.consentimiento.create({
-        data: {
+      const existente = await this.prisma.consentimiento.findFirst({
+        where: {
           codigo_usuario,
           tipo_consentimiento: consent.tipo,
-          aceptado: consent.aceptado,
-          version_politica: '1.0',
         },
+        orderBy: { fecha_consentimiento: 'desc' },
       });
+
+      const data = {
+        aceptado: consent.aceptado,
+        version_politica: '1.0',
+        fecha_consentimiento: new Date(),
+      };
+
+      if (existente) {
+        await this.prisma.consentimiento.update({
+          where: { codigo_consentimiento: existente.codigo_consentimiento },
+          data,
+        });
+      } else {
+        await this.prisma.consentimiento.create({
+          data: {
+            codigo_usuario,
+            tipo_consentimiento: consent.tipo,
+            ...data,
+          },
+        });
+      }
     }
 
     return { message: 'Consentimientos actualizados correctamente' };

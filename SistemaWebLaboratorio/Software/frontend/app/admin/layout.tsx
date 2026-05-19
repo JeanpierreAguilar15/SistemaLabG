@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { AdminMobileHeader } from '@/components/admin/AdminMobileHeader'
+import { isAdminAreaRole } from '@/lib/roles'
 
 export default function AdminLayout({
   children,
@@ -14,21 +15,35 @@ export default function AdminLayout({
   const router = useRouter()
   const { user, isAuthenticated } = useAuthStore()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [authHydrated, setAuthHydrated] = useState(false)
 
   useEffect(() => {
+    setAuthHydrated(useAuthStore.persist.hasHydrated())
+    const unsubscribe = useAuthStore.persist.onFinishHydration(() => {
+      setAuthHydrated(true)
+    })
+
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    if (!authHydrated) {
+      return
+    }
+
     if (!isAuthenticated) {
       router.push('/auth/login')
       return
     }
 
-    // Verificar que el usuario sea administrador
-    if (user?.rol !== 'ADMIN') {
+    // Verificar que el usuario pueda entrar al panel operativo
+    if (user && !isAdminAreaRole(user.rol)) {
       router.push('/portal')
       return
     }
-  }, [isAuthenticated, user, router])
+  }, [authHydrated, isAuthenticated, user, router])
 
-  if (!isAuthenticated || !user || user?.rol !== 'ADMIN') {
+  if (!authHydrated || !isAuthenticated || !user || !isAdminAreaRole(user.rol)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-lab-primary-600"></div>

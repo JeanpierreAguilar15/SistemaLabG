@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
+import { isAdminRole } from '@/lib/roles'
 
 interface DashboardStats {
   users: {
@@ -44,20 +45,13 @@ interface LoteAbierto {
 }
 
 export default function AdminDashboard() {
-  const { accessToken } = useAuthStore()
+  const { accessToken, user } = useAuthStore()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [lotesAbiertos, setLotesAbiertos] = useState<LoteAbierto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (accessToken) {
-      loadStats()
-      loadLotesAbiertos()
-    }
-  }, [accessToken])
-
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       setError(null)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/dashboard/stats`, {
@@ -77,9 +71,14 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken])
 
-  const loadLotesAbiertos = async () => {
+  const loadLotesAbiertos = useCallback(async () => {
+    if (!isAdminRole(user?.rol)) {
+      setLotesAbiertos([])
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/reactivos/lotes-abiertos`, {
         headers: {
@@ -94,7 +93,13 @@ export default function AdminDashboard() {
     } catch (error) {
       setError('Error al cargar reactivos abiertos')
     }
-  }
+  }, [accessToken, user?.rol])
+
+  useEffect(() => {
+    if (accessToken) {
+      Promise.allSettled([loadStats(), loadLotesAbiertos()])
+    }
+  }, [accessToken, loadStats, loadLotesAbiertos])
 
   // Filtrar alertas de reactivos
   const lotesVencidos = lotesAbiertos.filter(l => l.estado === 'VENCIDO')
@@ -328,7 +333,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Widget de Alertas de Reactivos */}
-      {lotesAbiertos.length > 0 && (
+      {isAdminRole(user?.rol) && (
         <div className="bg-white rounded-xl shadow-sm border border-lab-neutral-200">
           <div className="px-6 py-4 border-b border-lab-neutral-200 flex items-center justify-between">
             <div>
@@ -443,6 +448,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Quick Actions */}
+      {isAdminRole(user?.rol) && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Link
           href="/admin/usuarios"
@@ -510,6 +516,35 @@ export default function AdminDashboard() {
           </div>
         </Link>
       </div>
+      )}
+
+      {!isAdminRole(user?.rol) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <Link
+            href="/admin/resultados"
+            className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6 hover:border-lab-primary-300 hover:shadow-md transition-all"
+          >
+            <h3 className="text-sm font-semibold text-lab-neutral-900">Gestionar Resultados</h3>
+            <p className="text-xs text-lab-neutral-600 mt-1">Subir PDFs, editar y validar resultados</p>
+          </Link>
+
+          <Link
+            href="/admin/examenes"
+            className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6 hover:border-lab-secondary-300 hover:shadow-md transition-all"
+          >
+            <h3 className="text-sm font-semibold text-lab-neutral-900">Catalogo de Examenes</h3>
+            <p className="text-xs text-lab-neutral-600 mt-1">Consultar y mantener examenes disponibles</p>
+          </Link>
+
+          <Link
+            href="/admin/usuarios"
+            className="bg-white rounded-xl shadow-sm border border-lab-neutral-200 p-6 hover:border-lab-info-300 hover:shadow-md transition-all"
+          >
+            <h3 className="text-sm font-semibold text-lab-neutral-900">Pacientes</h3>
+            <p className="text-xs text-lab-neutral-600 mt-1">Consultar o registrar pacientes para resultados</p>
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

@@ -198,14 +198,34 @@ export class InventarioService {
     }
 
     // 3. Crear el ítem
-    const item = await this.prisma.item.create({
-      data: {
-        ...data,
-        codigo_interno: codigoInterno,
-        stock_actual: data.stock_actual || 0,
-        activo: true,
-      },
-      include: { categoria: true },
+    const stockInicial = data.stock_actual || 0;
+
+    const item = await this.prisma.$transaction(async (prisma) => {
+      const createdItem = await prisma.item.create({
+        data: {
+          ...data,
+          codigo_interno: codigoInterno,
+          stock_actual: stockInicial,
+          activo: true,
+        },
+        include: { categoria: true },
+      });
+
+      if (stockInicial > 0) {
+        await prisma.movimiento.create({
+          data: {
+            codigo_item: createdItem.codigo_item,
+            tipo_movimiento: 'ENTRADA',
+            cantidad: stockInicial,
+            motivo: 'Stock inicial registrado al crear item',
+            stock_anterior: 0,
+            stock_nuevo: stockInicial,
+            realizado_por: adminId,
+          },
+        });
+      }
+
+      return createdItem;
     });
 
     // 4. Registrar en auditoría
@@ -358,6 +378,19 @@ export class InventarioService {
     }
 
     // Validar código interno único si se cambia
+    if (
+      data.stock_actual !== undefined &&
+      Number(data.stock_actual) !== Number(itemAnterior.stock_actual)
+    ) {
+      throw new BadRequestException(
+        'El stock actual no se edita directamente. Use movimientos, lotes o recepcion de ordenes para mantener kardex.',
+      );
+    }
+
+    if (data.stock_actual !== undefined) {
+      delete data.stock_actual;
+    }
+
     if (data.codigo_interno && data.codigo_interno !== itemAnterior.codigo_interno) {
       const existing = await this.prisma.item.findUnique({
         where: { codigo_interno: data.codigo_interno },
@@ -736,6 +769,10 @@ export class InventarioService {
       throw new NotFoundException('Ítem no encontrado');
     }
 
+    if (!item.activo) {
+      throw new BadRequestException('No se pueden registrar movimientos sobre un item inactivo');
+    }
+
     // Calcular nuevo stock
     let nuevoStock = item.stock_actual;
     if (data.tipo_movimiento === 'ENTRADA' || data.tipo_movimiento === 'AJUSTE_POSITIVO') {
@@ -856,6 +893,7 @@ export class InventarioService {
    */
   async getAlertasStock(filters: any) {
     const alertas: any[] = [];
+    const inicioDelDia = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
     // Obtener items con stock bajo o crítico
     const items = await this.prisma.item.findMany({
@@ -903,6 +941,7 @@ export class InventarioService {
 
     // Obtener lotes próximos a vencer o vencidos
     const hoy = new Date();
+    const hoyInicio = inicioDelDia(hoy);
     const en30Dias = new Date();
     en30Dias.setDate(en30Dias.getDate() + 30);
 
@@ -910,6 +949,7 @@ export class InventarioService {
       where: {
         fecha_vencimiento: { not: null },
         cantidad_actual: { gt: 0 },
+        item: { activo: true },
       },
       include: {
         item: true,
@@ -918,9 +958,10 @@ export class InventarioService {
 
     for (const lote of lotesConVencimiento) {
       if (!lote.fecha_vencimiento) continue;
+      if (!lote.item?.activo) continue;
 
       const fechaVenc = new Date(lote.fecha_vencimiento);
-      const diasHastaVenc = Math.floor((fechaVenc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+      const diasHastaVenc = Math.floor((inicioDelDia(fechaVenc).getTime() - hoyInicio.getTime()) / (1000 * 60 * 60 * 24));
 
       // Vencido
       if (fechaVenc < hoy) {
@@ -1046,7 +1087,7 @@ export class InventarioService {
     return proveedores.map((proveedor) => {
       const ordenes = proveedor.ordenes_compra || [];
       const ordenesCompletadas = ordenes.filter(
-        (o) => o.estado === 'RECIBIDA_COMPLETA' || o.estado === 'RECIBIDA_PARCIAL',
+        (o) => ['RECIBIDA', 'RECIBIDA_COMPLETA', 'RECIBIDA_PARCIAL'].includes(o.estado),
       );
       const ordenesPendientes = ordenes.filter(
         (o) => o.estado === 'BORRADOR' || o.estado === 'EMITIDA',
@@ -1485,6 +1526,14 @@ export class InventarioService {
       throw new NotFoundException('Item no encontrado');
     }
 
+    if (!item.activo) {
+      throw new BadRequestException('No se pueden crear lotes para un item inactivo');
+    }
+
+    if (!data.cantidad_inicial || data.cantidad_inicial <= 0) {
+      throw new BadRequestException('La cantidad inicial del lote debe ser mayor a cero');
+    }
+
     // Resolver nombre del proveedor si se pasa codigo_proveedor
     let proveedorNombre = data.proveedor || null;
     if (data.codigo_proveedor) {
@@ -1584,13 +1633,28 @@ export class InventarioService {
 
   // ==================== EXAMEN-INSUMO (KARDEX) ====================
 
+  private normalizeCantidadRequerida(cantidad: number | string) {
+    const value = Number(cantidad);
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new BadRequestException(
+        'La cantidad requerida debe ser un entero positivo porque el stock y el kardex se registran por unidades.'
+      );
+    }
+    return value;
+  }
+
   async createExamenInsumo(data: any, adminId: number) {
+    const cantidadRequerida = this.normalizeCantidadRequerida(data.cantidad_requerida);
+
     const examen = await this.prisma.examen.findUnique({
       where: { codigo_examen: data.codigo_examen },
     });
 
     if (!examen) {
       throw new NotFoundException('Examen no encontrado');
+    }
+    if (!examen.activo) {
+      throw new BadRequestException('Solo se pueden configurar insumos para un examen activo.');
     }
 
     const item = await this.prisma.item.findUnique({
@@ -1601,6 +1665,10 @@ export class InventarioService {
       throw new NotFoundException('Ítem de inventario no encontrado');
     }
 
+    if (!item.activo) {
+      throw new BadRequestException('Solo se pueden asignar insumos desde un item activo.');
+    }
+
     const existingRelation = await this.prisma.examenInsumo.findFirst({
       where: {
         codigo_examen: data.codigo_examen,
@@ -1608,15 +1676,29 @@ export class InventarioService {
       },
     });
 
+    if (existingRelation && !existingRelation.activo) {
+      return this.prisma.examenInsumo.update({
+        where: { codigo_examen_insumo: existingRelation.codigo_examen_insumo },
+        data: {
+          cantidad_requerida: cantidadRequerida,
+          activo: true,
+        },
+        include: {
+          examen: { select: { codigo_examen: true, nombre: true } },
+          item: { select: { codigo_item: true, nombre: true, unidad_medida: true } },
+        },
+      });
+    }
+
     if (existingRelation) {
-      throw new BadRequestException('Este insumo ya está asignado al examen');
+      throw new BadRequestException('Este insumo ya esta asignado al examen');
     }
 
     return this.prisma.examenInsumo.create({
       data: {
         codigo_examen: data.codigo_examen,
         codigo_item: data.codigo_item,
-        cantidad_requerida: data.cantidad_requerida,
+        cantidad_requerida: cantidadRequerida,
         activo: data.activo !== undefined ? data.activo : true,
       },
       include: {
@@ -1628,7 +1710,7 @@ export class InventarioService {
 
   async getExamenInsumos(codigo_examen: number) {
     return this.prisma.examenInsumo.findMany({
-      where: { codigo_examen },
+      where: { codigo_examen, activo: true },
       include: {
         item: true,
       },
@@ -1636,9 +1718,14 @@ export class InventarioService {
   }
 
   async updateExamenInsumo(id: number, data: any, adminId: number) {
+    const payload = { ...data };
+    if (payload.cantidad_requerida !== undefined) {
+      payload.cantidad_requerida = this.normalizeCantidadRequerida(payload.cantidad_requerida);
+    }
+
     return this.prisma.examenInsumo.update({
       where: { codigo_examen_insumo: id },
-      data,
+      data: payload,
     });
   }
 
@@ -1698,7 +1785,7 @@ export class InventarioService {
   }
 
   /**
-   * Verifica stock para múltiples exámenes (ej: cotización con varios exámenes)
+   * Verifica stock para múltiples exámenes de una misma muestra
    */
   async verificarStockExamenes(codigos_examenes: number[]): Promise<{
     disponible: boolean;
@@ -1763,7 +1850,7 @@ export class InventarioService {
     // Verificar stock de insumos normales antes de descontar
     if (insumosNormales.length > 0) {
       for (const insumo of insumosNormales) {
-        const cantidadRequerida = Number(insumo.cantidad_requerida);
+        const cantidadRequerida = this.normalizeCantidadRequerida(Number(insumo.cantidad_requerida));
         if (insumo.item.stock_actual < cantidadRequerida) {
           throw new BadRequestException(
             `Stock insuficiente de "${insumo.item.nombre}". ` +
@@ -1778,7 +1865,7 @@ export class InventarioService {
 
     // 1. PROCESAR REACTIVOS (fuera de transaccion para manejar apertura automatica)
     for (const insumo of insumosReactivos) {
-      const cantidadPruebas = Number(insumo.cantidad_requerida);
+      const cantidadPruebas = this.normalizeCantidadRequerida(Number(insumo.cantidad_requerida));
       const referencia = `Examen: ${insumo.examen.nombre} - Orden #${referencia_id}`;
 
       try {
@@ -1820,7 +1907,7 @@ export class InventarioService {
     if (insumosNormales.length > 0) {
       await this.prisma.$transaction(async (prisma) => {
         for (const insumo of insumosNormales) {
-          const cantidadRequerida = Number(insumo.cantidad_requerida);
+          const cantidadRequerida = this.normalizeCantidadRequerida(Number(insumo.cantidad_requerida));
           const item = insumo.item;
 
           // Crear movimiento de salida
@@ -1890,7 +1977,7 @@ export class InventarioService {
   }
 
   /**
-   * Descuenta insumos para múltiples exámenes (cotización completa)
+   * Descuenta insumos para múltiples exámenes de una misma muestra
    */
   async descontarInsumosMultiplesExamenes(
     codigos_examenes: number[],
@@ -2001,6 +2088,44 @@ export class InventarioService {
 
   // ==================== ÓRDENES DE COMPRA ====================
 
+  private normalizarDetallesOrden(data: any) {
+    return Array.isArray(data.items)
+      ? data.items
+      : Array.isArray(data.detalles)
+        ? data.detalles
+        : [];
+  }
+
+  private async validarDetallesOrden(detalles: any[]) {
+    if (detalles.length === 0) {
+      throw new BadRequestException('La orden debe tener al menos un item');
+    }
+
+    const codigosItems = detalles.map((d) => d.codigo_item);
+    const itemsExistentes = await this.prisma.item.findMany({
+      where: { codigo_item: { in: codigosItems } },
+      select: { codigo_item: true, nombre: true, activo: true },
+    });
+
+    const itemsMap = new Map(itemsExistentes.map((i) => [i.codigo_item, i]));
+
+    for (const detalle of detalles) {
+      const item = itemsMap.get(detalle.codigo_item);
+      if (!item) {
+        throw new BadRequestException(`El item con código ${detalle.codigo_item} no existe`);
+      }
+      if (!item.activo) {
+        throw new BadRequestException(`El item "${item.nombre}" está desactivado y no puede incluirse en la orden`);
+      }
+      if (detalle.cantidad <= 0) {
+        throw new BadRequestException(`La cantidad para el item "${item.nombre}" debe ser mayor a 0`);
+      }
+      if (detalle.precio_unitario < 0) {
+        throw new BadRequestException(`El precio para el item "${item.nombre}" no puede ser negativo`);
+      }
+    }
+  }
+
   async createOrdenCompra(data: any, adminId: number) {
     // Validar que el proveedor existe y está activo
     const proveedor = await this.prisma.proveedor.findUnique({
@@ -2016,7 +2141,7 @@ export class InventarioService {
     }
 
     // Validar detalles
-    const detalles = data.detalles || [];
+    const detalles = this.normalizarDetallesOrden(data);
     if (detalles.length === 0) {
       throw new BadRequestException('La orden debe tener al menos un item');
     }
@@ -2179,10 +2304,14 @@ export class InventarioService {
     }
 
     // Si se envían nuevos detalles, recalcular totales
-    const detalles = data.detalles || [];
+    const detalles = this.normalizarDetallesOrden(data);
+    const detallesEnviados = Array.isArray(data.items) || Array.isArray(data.detalles);
+    if (detallesEnviados) {
+      await this.validarDetallesOrden(detalles);
+    }
     let updateData: any = {
       codigo_proveedor: data.codigo_proveedor,
-      fecha_entrega_estimada: data.fecha_entrega_estimada ? new Date(data.fecha_entrega_estimada) : null,
+      fecha_entrega_estimada: (data.fecha_entrega_esperada ?? data.fecha_entrega_estimada) ? new Date(data.fecha_entrega_esperada ?? data.fecha_entrega_estimada) : null,
       observaciones: data.observaciones || null,
     };
 
@@ -2245,7 +2374,7 @@ export class InventarioService {
     }
 
     // No permitir eliminar órdenes ya recibidas (tienen lotes creados)
-    if (orden.estado === 'RECIBIDA') {
+    if (orden.estado === 'RECIBIDA' || orden.estado === 'RECIBIDA_PARCIAL') {
       throw new BadRequestException(
         'No se puede eliminar una orden ya recibida. Los lotes y movimientos ya fueron registrados.'
       );
@@ -2333,15 +2462,23 @@ export class InventarioService {
       throw new NotFoundException('Orden de compra no encontrada');
     }
 
+    const itemsRecibidos = data.items_recibidos || [];
+
     if (orden.estado !== 'EMITIDA' && orden.estado !== 'RECIBIDA_PARCIAL') {
       throw new BadRequestException(
         `No se puede recibir: la orden está en estado "${orden.estado}". Solo órdenes EMITIDA o RECIBIDA_PARCIAL pueden ser recibidas.`
       );
     }
 
+    if (orden.estado === 'RECIBIDA_PARCIAL' && itemsRecibidos.length === 0) {
+      throw new BadRequestException(
+        'Para completar una recepción parcial debe indicar los items_recibidos pendientes. La recepción automática solo aplica a órdenes EMITIDA.',
+      );
+    }
+
     // Validar cantidades recibidas antes de procesar
-    if (data.items_recibidos?.length) {
-      for (const itemRecibido of data.items_recibidos) {
+    if (itemsRecibidos.length) {
+      for (const itemRecibido of itemsRecibidos) {
         if (itemRecibido.cantidad_recibida <= 0) {
           throw new BadRequestException(
             `Cantidad recibida debe ser mayor a 0 para item ${itemRecibido.codigo_item}`,
@@ -2370,7 +2507,7 @@ export class InventarioService {
       let todosCompletos = true;
 
       for (const detalle of orden.detalles) {
-        const datosRecepcion = data.items_recibidos?.find(
+        const datosRecepcion = itemsRecibidos.find(
           (i) => i.codigo_item === detalle.codigo_item,
         );
 
@@ -2913,6 +3050,10 @@ export class InventarioService {
    * Obtiene ítems sin movimientos en los últimos n días
    */
   async getItemsSinMovimientos(dias: number = 30) {
+    if (!Number.isInteger(dias) || dias < 1 || dias > 365) {
+      throw new BadRequestException('El umbral de dias sin movimiento debe estar entre 1 y 365');
+    }
+
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() - dias);
 
@@ -2942,12 +3083,14 @@ export class InventarioService {
           orderBy: { fecha_movimiento: 'desc' },
         });
 
-        const diasSinMovimiento = ultimoMovimiento
-          ? Math.floor(
-              (new Date().getTime() - new Date(ultimoMovimiento.fecha_movimiento).getTime()) /
-                (1000 * 60 * 60 * 24)
-            )
-          : null;
+        const fechaReferencia = ultimoMovimiento?.fecha_movimiento || item.fecha_creacion;
+        const diasSinMovimiento = Math.max(
+          0,
+          Math.floor(
+            (new Date().getTime() - new Date(fechaReferencia).getTime()) /
+              (1000 * 60 * 60 * 24)
+          ),
+        );
 
         return {
           codigo_item: item.codigo_item,
@@ -2960,9 +3103,9 @@ export class InventarioService {
           dias_sin_movimiento: diasSinMovimiento,
           tipo_alerta: 'SIN_MOVIMIENTO',
           mensaje: ultimoMovimiento
-            ? `Sin movimientos desde hace ${diasSinMovimiento} días`
-            : 'Nunca ha tenido movimientos',
-          prioridad: diasSinMovimiento === null || diasSinMovimiento > 60 ? 'ALTA' : 'MEDIA',
+            ? `Sin movimientos desde hace ${diasSinMovimiento} dias`
+            : `Sin movimientos desde su creacion hace ${diasSinMovimiento} dias`,
+          prioridad: diasSinMovimiento > 60 ? 'ALTA' : 'MEDIA',
         };
       })
     );
@@ -3624,7 +3767,7 @@ export class InventarioService {
    */
   async getInsumosExamen(codigoExamen: number) {
     const insumos = await this.prisma.examenInsumo.findMany({
-      where: { codigo_examen: codigoExamen },
+      where: { codigo_examen: codigoExamen, activo: true },
       include: {
         item: {
           include: { categoria: true },
@@ -3659,12 +3802,17 @@ export class InventarioService {
     cantidadRequerida: number,
     adminId: number,
   ) {
+    const cantidadNormalizada = this.normalizeCantidadRequerida(cantidadRequerida);
+
     // Verificar que el examen existe
     const examen = await this.prisma.examen.findUnique({
       where: { codigo_examen: codigoExamen },
     });
     if (!examen) {
       throw new NotFoundException('Examen no encontrado');
+    }
+    if (!examen.activo) {
+      throw new BadRequestException('Solo se pueden configurar insumos para un examen activo.');
     }
 
     // Verificar que el item existe
@@ -3673,6 +3821,9 @@ export class InventarioService {
     });
     if (!item) {
       throw new NotFoundException('Item no encontrado');
+    }
+    if (!item.activo) {
+      throw new BadRequestException('Solo se pueden asignar insumos desde un item activo.');
     }
 
     // Verificar si ya existe la relación
@@ -3684,7 +3835,7 @@ export class InventarioService {
       // Actualizar cantidad si ya existe
       return this.prisma.examenInsumo.update({
         where: { codigo_examen_insumo: existente.codigo_examen_insumo },
-        data: { cantidad_requerida: cantidadRequerida, activo: true },
+        data: { cantidad_requerida: cantidadNormalizada, activo: true },
         include: { item: true },
       });
     }
@@ -3694,7 +3845,7 @@ export class InventarioService {
       data: {
         codigo_examen: codigoExamen,
         codigo_item: codigoItem,
-        cantidad_requerida: cantidadRequerida,
+        cantidad_requerida: cantidadNormalizada,
         activo: true,
       },
       include: { item: true },
@@ -3729,6 +3880,8 @@ export class InventarioService {
    * Actualiza la cantidad requerida de un insumo para un examen
    */
   async actualizarInsumoExamen(codigoExamen: number, codigoItem: number, cantidadRequerida: number) {
+    const cantidadNormalizada = this.normalizeCantidadRequerida(cantidadRequerida);
+
     const insumo = await this.prisma.examenInsumo.findFirst({
       where: { codigo_examen: codigoExamen, codigo_item: codigoItem, activo: true },
     });
@@ -3739,7 +3892,7 @@ export class InventarioService {
 
     return this.prisma.examenInsumo.update({
       where: { codigo_examen_insumo: insumo.codigo_examen_insumo },
-      data: { cantidad_requerida: cantidadRequerida },
+      data: { cantidad_requerida: cantidadNormalizada },
     });
   }
 
@@ -3759,6 +3912,9 @@ export class InventarioService {
                 codigo_interno: true,
                 nombre: true,
                 unidad_medida: true,
+                stock_actual: true,
+                es_reactivo: true,
+                capacidad_pruebas: true,
               },
             },
           },
@@ -3780,6 +3936,9 @@ export class InventarioService {
         nombre: i.item.nombre,
         cantidad_requerida: Number(i.cantidad_requerida),
         unidad_medida: i.item.unidad_medida,
+        stock_actual: Number(i.item.stock_actual),
+        es_reactivo: i.item.es_reactivo,
+        capacidad_pruebas: i.item.capacidad_pruebas,
       })),
     }));
   }

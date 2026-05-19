@@ -24,7 +24,7 @@ export class WhatsAppService {
     this.twilioAccountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID') || '';
     this.twilioAuthToken = this.configService.get<string>('TWILIO_AUTH_TOKEN') || '';
     this.twilioWhatsAppNumber = this.configService.get<string>('TWILIO_WHATSAPP_NUMBER') || 'whatsapp:+14155238886';
-    this.defaultRecipient = this.configService.get<string>('WHATSAPP_DEFAULT_RECIPIENT') || 'whatsapp:+593998673322';
+    this.defaultRecipient = this.configService.get<string>('WHATSAPP_DEFAULT_RECIPIENT') || '';
     this.apiUrl = `https://api.twilio.com/2010-04-01/Accounts/${this.twilioAccountSid}/Messages.json`;
 
     if (!this.twilioAccountSid || !this.twilioAuthToken) {
@@ -52,6 +52,10 @@ export class WhatsAppService {
     try {
       // Formatear número de destino
       let toNumber = data.to || this.defaultRecipient;
+      if (!toNumber) {
+        return { success: false, error: 'No se configuro un destinatario de WhatsApp' };
+      }
+
       if (!toNumber.startsWith('whatsapp:')) {
         // Agregar código de país Ecuador si no tiene
         if (!toNumber.startsWith('+')) {
@@ -206,10 +210,15 @@ export class WhatsAppService {
    * Obtiene configuración actual
    */
   getConfig() {
+    const formatDisplayNumber = (number: string) => number.replace(/^whatsapp:/, '');
+
     return {
-      configured: this.isConfigured(),
-      defaultRecipient: this.defaultRecipient,
-      whatsappNumber: this.twilioWhatsAppNumber,
+      configured: this.isConfigured() && !!this.defaultRecipient,
+      providerConfigured: this.isConfigured(),
+      recipientConfigured: !!this.defaultRecipient,
+      defaultRecipient: formatDisplayNumber(this.defaultRecipient),
+      whatsappNumber: formatDisplayNumber(this.twilioWhatsAppNumber),
+      fromNumber: formatDisplayNumber(this.twilioWhatsAppNumber),
     };
   }
 }

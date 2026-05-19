@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable,
   Inject,
   forwardRef,
@@ -17,6 +17,7 @@ import { randomUUID } from 'crypto';
 @Injectable()
 export class ResultadosService {
   private readonly logger = new Logger(ResultadosService.name);
+  private readonly estadosResultadoDisponibles = ['LISTO', 'VALIDADO', 'ENTREGADO'];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -172,6 +173,21 @@ export class ResultadosService {
     }
 
     // Calcular si está dentro del rango normal
+    if (!examen.activo) {
+      throw new BadRequestException('No se puede crear resultado para un examen inactivo');
+    }
+
+    const resultadoExistente = await this.prisma.resultado.findFirst({
+      where: {
+        codigo_muestra: data.codigo_muestra,
+        codigo_examen: data.codigo_examen,
+      },
+    });
+
+    if (resultadoExistente) {
+      throw new BadRequestException('Ya existe un resultado para este examen en la muestra seleccionada');
+    }
+
     let dentro_rango_normal: boolean | null = null;
     let nivel: string | null = null;
 
@@ -260,6 +276,7 @@ export class ResultadosService {
     }
 
     // Generar código de verificación único
+    const yaEstabaDisponible = this.estadosResultadoDisponibles.includes(resultado.estado);
     const codigo_verificacion = this.generarCodigoVerificacion();
 
     // Generar PDF
@@ -322,25 +339,31 @@ export class ResultadosService {
       codigo_examen: resultado.codigo_examen,
     });
 
-    // Descontar insumos del inventario usando el servicio completo
-    // (FIFO de lotes, manejo de reactivos con frascos, alertas de stock)
-    await this.descontarInsumosAutomatico(
-      resultado.codigo_examen,
-      codigo_resultado,
-      validado_por,
-    );
-
-    try {
-      await this.enviarNotificacionWhatsApp(
-        resultado.muestra.codigo_paciente,
-        resultado.muestra.paciente.telefono,
-        resultado.muestra.paciente.nombres,
-        resultado.examen.nombre,
-        codigo_verificacion,
+    if (!yaEstabaDisponible) {
+      // Descontar insumos del inventario usando el servicio completo
+      // (FIFO de lotes, manejo de reactivos con frascos, alertas de stock)
+      await this.descontarInsumosAutomatico(
+        resultado.codigo_examen,
+        codigo_resultado,
+        validado_por,
       );
-    } catch (error) {
-      this.logger.warn(
-        `Error enviando WhatsApp para resultado ${codigo_resultado}: ${error.message}`,
+
+      try {
+        await this.enviarNotificacionWhatsApp(
+          resultado.muestra.codigo_paciente,
+          resultado.muestra.paciente.telefono,
+          resultado.muestra.paciente.nombres,
+          resultado.examen.nombre,
+          codigo_verificacion,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Error enviando WhatsApp para resultado ${codigo_resultado}: ${error.message}`,
+        );
+      }
+    } else {
+      this.logger.log(
+        `Resultado ${codigo_resultado} ya estaba disponible; no se descuentan insumos ni se reenvia WhatsApp.`,
       );
     }
 
@@ -420,7 +443,7 @@ export class ResultadosService {
     });
 
     // Solo descontar y notificar si el resultado NO estaba ya validado
-    const yaEstabValidado = ['LISTO', 'VALIDADO', 'ENTREGADO'].includes(estadoAnterior);
+    const yaEstabValidado = this.estadosResultadoDisponibles.includes(estadoAnterior);
     if (!yaEstabValidado) {
       await this.descontarInsumosAutomatico(
         resultado.codigo_examen,
@@ -454,7 +477,7 @@ export class ResultadosService {
       this.prisma.resultado.count({
         where: {
           muestra: { codigo_paciente },
-          estado: { in: ['LISTO', 'VALIDADO', 'ENTREGADO'] },
+          estado: { in: this.estadosResultadoDisponibles },
         },
       }),
       this.prisma.resultado.count({
@@ -480,7 +503,7 @@ export class ResultadosService {
           codigo_paciente,
         },
         estado: {
-          in: ['LISTO', 'VALIDADO', 'ENTREGADO'],
+          in: this.estadosResultadoDisponibles,
         },
       },
       include: {
@@ -509,8 +532,8 @@ export class ResultadosService {
   }
 
   /**
-   * Obtener resultados del paciente AGRUPADOS por muestra/cotización
-   * Si el paciente solicitó 3 exámenes en una cotización, todos se muestran juntos
+   * Obtener resultados del paciente agrupados por muestra.
+   * Todos los exámenes asociados a una muestra se muestran juntos.
    */
   async getMyResultadosAgrupados(codigo_paciente: number) {
     // Obtener muestras con sus resultados
@@ -520,7 +543,7 @@ export class ResultadosService {
         resultados: {
           some: {
             estado: {
-              in: ['LISTO', 'VALIDADO', 'ENTREGADO'],
+              in: this.estadosResultadoDisponibles,
             },
           },
         },
@@ -529,7 +552,7 @@ export class ResultadosService {
         resultados: {
           where: {
             estado: {
-              in: ['LISTO', 'VALIDADO', 'ENTREGADO'],
+              in: this.estadosResultadoDisponibles,
             },
           },
           include: {
@@ -560,10 +583,16 @@ export class ResultadosService {
       id_muestra: muestra.id_muestra,
       fecha_toma: muestra.fecha_toma,
       tipo_muestra: muestra.tipo_muestra,
+      estado_muestra: muestra.estado,
       estado: muestra.estado,
       resultados: muestra.resultados.map((r) => ({
         codigo_resultado: r.codigo_resultado,
-        examen: r.examen.nombre,
+        examen: {
+          codigo_examen: r.examen.codigo_examen,
+          nombre: r.examen.nombre,
+          codigo_interno: r.examen.codigo_interno,
+        },
+        nombre_examen: r.examen.nombre,
         codigo_examen: r.examen.codigo_examen,
         valor_numerico: r.valor_numerico,
         valor_texto: r.valor_texto,
@@ -579,8 +608,14 @@ export class ResultadosService {
         codigo_verificacion: r.codigo_verificacion,
       })),
       total_examenes: muestra.resultados.length,
+      examenes_listos: muestra.resultados.filter((r) =>
+        this.estadosResultadoDisponibles.includes(r.estado),
+      ).length,
+      examenes_pendientes: muestra.resultados.filter(
+        (r) => !this.estadosResultadoDisponibles.includes(r.estado),
+      ).length,
       todos_listos: muestra.resultados.every((r) =>
-        ['LISTO', 'VALIDADO', 'ENTREGADO'].includes(r.estado),
+        this.estadosResultadoDisponibles.includes(r.estado),
       ),
     }));
   }
@@ -606,7 +641,7 @@ export class ResultadosService {
     }
 
     // Verificar que el resultado está listo
-    if (!['LISTO', 'VALIDADO', 'ENTREGADO'].includes(resultado.estado)) {
+    if (!this.estadosResultadoDisponibles.includes(resultado.estado)) {
       throw new BadRequestException('El resultado aún no está disponible');
     }
 
@@ -786,7 +821,7 @@ export class ResultadosService {
   }
 
   /**
-   * Obtener todos los resultados AGRUPADOS por paciente/cotización (Admin)
+   * Obtener todos los resultados agrupados por paciente y muestra (Admin)
    * Para una vista más organizada en el panel de administración
    */
   async getAllResultadosAgrupados(filters?: {
@@ -868,7 +903,7 @@ export class ResultadosService {
       })),
       total_examenes: muestra.resultados.length,
       examenes_listos: muestra.resultados.filter((r) =>
-        ['LISTO', 'VALIDADO', 'ENTREGADO'].includes(r.estado),
+        this.estadosResultadoDisponibles.includes(r.estado),
       ).length,
       examenes_pendientes: muestra.resultados.filter(
         (r) => r.estado === 'EN_PROCESO',

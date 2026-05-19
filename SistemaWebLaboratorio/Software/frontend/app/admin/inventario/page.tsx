@@ -382,72 +382,23 @@ export default function InventarioPage() {
   }, [])
 
   useEffect(() => {
-    if (mounted && accessToken) {
-      loadItems()
-    }
-  }, [accessToken, mounted])
-
-  useEffect(() => {
     if (message) {
       const timer = setTimeout(() => setMessage(null), 5000)
       return () => clearTimeout(timer)
     }
   }, [message])
 
-  // Load items when switching to items tab or movements tab (needed for dropdown)
-  useEffect(() => {
-    if (activeTab === 'items' || activeTab === 'movimientos') {
-      loadItems()
-      loadCategorias() // Load categories for the item form dropdown
-    }
-  }, [activeTab])
-
-  // Load categories when switching to categories tab
-  useEffect(() => {
-    if (activeTab === 'categorias') {
-      loadCategorias()
-    }
-  }, [activeTab])
-
-  // Load movements when switching to movements tab
-  useEffect(() => {
-    if (activeTab === 'movimientos') {
-      loadMovimientos()
-    }
-  }, [activeTab])
-
-  // Load alerts when switching to alerts tab
-  useEffect(() => {
-    if (activeTab === 'alertas') {
-      loadAlertas()
-      loadEstadisticas()
-    }
-  }, [activeTab])
-
-  // Load lotes when switching to lotes tab
-  useEffect(() => {
-    if (activeTab === 'lotes') {
-      loadLotes()
-      loadItems()
-      loadProveedores()
-    }
-  }, [activeTab])
-
-  // Load items and kardex global when switching to kardex tab
-  useEffect(() => {
-    if (activeTab === 'kardex') {
-      loadItems()
-      loadKardexGlobal()
-      loadProveedores() // Necesario para el modal "Generar Pedido"
-    }
-  }, [activeTab])
-
   useEffect(() => {
     setKardexGlobalPage(1)
   }, [kardexGlobal])
 
   // ==================== ITEMS FUNCTIONS ====================
-  const loadItems = async () => {
+  const loadItems = useCallback(async () => {
+    if (!accessToken) {
+      setItemsLoading(false)
+      return
+    }
+
     try {
       setItemsLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/items`, {
@@ -468,7 +419,7 @@ export default function InventarioPage() {
     } finally {
       setItemsLoading(false)
     }
-  }
+  }, [accessToken])
 
   const handleOpenItemForm = (item?: ItemInventario) => {
     if (item) {
@@ -642,9 +593,12 @@ export default function InventarioPage() {
         nombre: itemFormData.nombre.trim(),
         descripcion: itemFormData.descripcion?.trim() || null,
         unidad_medida: itemFormData.unidad_medida,
-        stock_actual: stockActual,
         stock_minimo: stockMinimo,
         activo: itemFormData.activo,
+      }
+
+      if (!editingItem) {
+        payload.stock_actual = stockActual
       }
 
       if (itemFormData.codigo_categoria) {
@@ -752,7 +706,12 @@ export default function InventarioPage() {
   }
 
   // ==================== MOVEMENTS FUNCTIONS ====================
-  const loadMovimientos = async () => {
+  const loadMovimientos = useCallback(async () => {
+    if (!accessToken) {
+      setMovimientosLoading(false)
+      return
+    }
+
     try {
       setMovimientosLoading(true)
 
@@ -783,7 +742,7 @@ export default function InventarioPage() {
     } finally {
       setMovimientosLoading(false)
     }
-  }
+  }, [accessToken, filterMovFechaDesde, filterMovFechaHasta, filterMovItem, filterMovTipo])
 
   const handleMovSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -863,7 +822,12 @@ export default function InventarioPage() {
   }
 
   // ==================== ALERTS FUNCTIONS ====================
-  const loadAlertas = async () => {
+  const loadAlertas = useCallback(async () => {
+    if (!accessToken) {
+      setAlertasLoading(false)
+      return
+    }
+
     try {
       setAlertasLoading(true)
 
@@ -890,9 +854,13 @@ export default function InventarioPage() {
     } finally {
       setAlertasLoading(false)
     }
-  }
+  }, [accessToken, filterAlertTipo])
 
-  const loadEstadisticas = async () => {
+  const loadEstadisticas = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/alertas/estadisticas`,
@@ -910,7 +878,7 @@ export default function InventarioPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar estadísticas' })
     }
-  }
+  }, [accessToken])
 
   const handleApplyAlertFilters = () => {
     loadAlertas()
@@ -928,7 +896,12 @@ export default function InventarioPage() {
   })
 
   // ==================== CATEGORIAS FUNCTIONS ====================
-  const loadCategorias = async () => {
+  const loadCategorias = useCallback(async () => {
+    if (!accessToken) {
+      setCategoriasLoading(false)
+      return
+    }
+
     try {
       setCategoriasLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/categories`, {
@@ -948,7 +921,7 @@ export default function InventarioPage() {
     } finally {
       setCategoriasLoading(false)
     }
-  }
+  }, [accessToken])
 
   const handleOpenCategoriaForm = (categoria?: Categoria) => {
     if (categoria) {
@@ -1117,7 +1090,12 @@ export default function InventarioPage() {
   }
 
   // ==================== LOTES FUNCTIONS ====================
-  const loadLotes = async () => {
+  const loadLotes = useCallback(async () => {
+    if (!accessToken) {
+      setLotesLoading(false)
+      return
+    }
+
     try {
       setLotesLoading(true)
       const params = new URLSearchParams()
@@ -1144,9 +1122,13 @@ export default function InventarioPage() {
     } finally {
       setLotesLoading(false)
     }
-  }
+  }, [accessToken, filterLoteItem])
 
-  const loadProveedores = async () => {
+  const loadProveedores = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suppliers`, {
         headers: {
@@ -1161,7 +1143,7 @@ export default function InventarioPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar proveedores' })
     }
-  }
+  }, [accessToken])
 
   const handleOpenLoteForm = (lote?: Lote) => {
     if (lote) {
@@ -1296,7 +1278,7 @@ export default function InventarioPage() {
   })
 
   // ==================== KARDEX FUNCTIONS ====================
-  const loadKardex = async () => {
+  const loadKardex = useCallback(async () => {
     if (!selectedItemKardex) {
       setMessage({ type: 'error', text: 'Seleccione un item para ver su kardex' })
       return
@@ -1328,7 +1310,7 @@ export default function InventarioPage() {
     } finally {
       setKardexLoading(false)
     }
-  }
+  }, [accessToken, kardexFechaDesde, kardexFechaHasta, selectedItemKardex])
 
   const handleClearKardex = () => {
     setSelectedItemKardex('')
@@ -1338,7 +1320,12 @@ export default function InventarioPage() {
   }
 
   // Cargar Kardex Global
-  const loadKardexGlobal = async () => {
+  const loadKardexGlobal = useCallback(async () => {
+    if (!accessToken) {
+      setKardexGlobalLoading(false)
+      return
+    }
+
     try {
       setKardexGlobalLoading(true)
       const params = new URLSearchParams()
@@ -1365,7 +1352,62 @@ export default function InventarioPage() {
     } finally {
       setKardexGlobalLoading(false)
     }
-  }
+  }, [accessToken, kardexFechaDesde, kardexFechaHasta])
+
+  useEffect(() => {
+    if (mounted && accessToken) {
+      loadItems()
+    }
+  }, [accessToken, mounted, loadItems])
+
+  // Load data when switching tabs.
+  useEffect(() => {
+    if (!mounted || !accessToken) {
+      return
+    }
+
+    if (activeTab === 'items' || activeTab === 'movimientos') {
+      loadItems()
+      loadCategorias()
+    }
+
+    if (activeTab === 'categorias') {
+      loadCategorias()
+    }
+
+    if (activeTab === 'movimientos') {
+      loadMovimientos()
+    }
+
+    if (activeTab === 'alertas') {
+      loadAlertas()
+      loadEstadisticas()
+    }
+
+    if (activeTab === 'lotes') {
+      loadLotes()
+      loadItems()
+      loadProveedores()
+    }
+
+    if (activeTab === 'kardex') {
+      loadItems()
+      loadKardexGlobal()
+      loadProveedores()
+    }
+  }, [
+    accessToken,
+    activeTab,
+    mounted,
+    loadAlertas,
+    loadCategorias,
+    loadEstadisticas,
+    loadItems,
+    loadKardexGlobal,
+    loadLotes,
+    loadMovimientos,
+    loadProveedores,
+  ])
 
   // Exportar Kardex Global a PDF
   const exportKardexGlobalPdf = async () => {
@@ -2247,8 +2289,16 @@ export default function InventarioPage() {
                         onChange={handleItemInputChange}
                         min="0"
                         required
-                        className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500"
+                        disabled={!!editingItem}
+                        className={`block w-full rounded-md border border-lab-neutral-300 px-3 py-2 focus:border-lab-primary-500 focus:ring-lab-primary-500 ${
+                          editingItem ? 'bg-lab-neutral-100 cursor-not-allowed' : ''
+                        }`}
                       />
+                      {editingItem && (
+                        <p className="mt-1 text-xs text-lab-neutral-500">
+                          Para cambiar stock use Movimientos, Lotes o recepcion de ordenes.
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -3656,7 +3706,7 @@ export default function InventarioPage() {
                   <svg className="mx-auto h-12 w-12 text-lab-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
-                  <p className="mt-2">Seleccione un item y haga clic en "Consultar" para ver el historial</p>
+                  <p className="mt-2">Seleccione un item y haga clic en &quot;Consultar&quot; para ver el historial</p>
                 </div>
               </CardContent>
             </Card>
@@ -3990,6 +4040,8 @@ export default function InventarioPage() {
                         className="border rounded-lg overflow-hidden bg-lab-neutral-50 relative group cursor-pointer"
                         onClick={() => setOcrImageZoom(true)}
                       >
+                        {/* Object URLs from local uploads are better handled by a plain img preview. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={ocrPreviewUrl} alt="Factura" className="w-full h-auto max-h-80 object-contain" />
                         {/* Overlay con icono de zoom */}
                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
@@ -4170,7 +4222,7 @@ export default function InventarioPage() {
                                     </select>
                                     {item.selected && !item.codigo_item && (
                                       <p className="text-xs text-amber-600 mt-1">
-                                        ⚠️ Seleccione el item del inventario que corresponde a "{item.descripcion}"
+                                        ⚠️ Seleccione el item del inventario que corresponde a &quot;{item.descripcion}&quot;
                                       </p>
                                     )}
                                   </div>
@@ -4272,6 +4324,8 @@ export default function InventarioPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+            {/* Object URLs from local uploads are better handled by a plain img preview. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={ocrPreviewUrl}
               alt="Factura ampliada"

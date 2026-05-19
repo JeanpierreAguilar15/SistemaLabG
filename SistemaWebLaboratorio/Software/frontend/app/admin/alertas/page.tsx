@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,7 @@ interface ItemSinMovimiento {
   stock_actual: number
   unidad_medida: string
   ultimo_movimiento: string | null
-  dias_sin_movimiento: number | null
+  dias_sin_movimiento: number
   tipo_alerta: string
   mensaje: string
   prioridad: string
@@ -64,18 +64,18 @@ interface WhatsAppConfig {
   defaultRecipient?: string
 }
 
-const TIPO_ALERTA_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
-  STOCK_CRITICO: { label: 'Sin Stock', color: 'bg-lab-danger-100 text-lab-danger-800', icon: '⛔' },
-  STOCK_BAJO: { label: 'Stock Bajo', color: 'bg-lab-warning-100 text-lab-warning-800', icon: '⚠️' },
-  VENCIDO: { label: 'Vencido', color: 'bg-lab-danger-100 text-lab-danger-800', icon: '🚫' },
-  PROXIMO_VENCER: { label: 'Por Vencer', color: 'bg-lab-warning-100 text-lab-warning-800', icon: '⏰' },
+const TIPO_ALERTA_CONFIG: Record<string, { label: string; color: string }> = {
+  STOCK_CRITICO: { label: 'Sin Stock', color: 'bg-lab-danger-100 text-lab-danger-800' },
+  STOCK_BAJO: { label: 'Stock Bajo', color: 'bg-lab-warning-100 text-lab-warning-800' },
+  VENCIDO: { label: 'Vencido', color: 'bg-lab-danger-100 text-lab-danger-800' },
+  PROXIMO_VENCER: { label: 'Por Vencer', color: 'bg-lab-warning-100 text-lab-warning-800' },
 }
 
 const PRIORIDAD_CONFIG = {
-  CRITICA: { label: 'Crítica', color: 'bg-lab-danger-600 text-white', badge: '🔴' },
-  ALTA: { label: 'Alta', color: 'bg-lab-warning-600 text-white', badge: '🟠' },
-  MEDIA: { label: 'Media', color: 'bg-lab-primary-500 text-white', badge: '🟡' },
-  BAJA: { label: 'Baja', color: 'bg-lab-neutral-400 text-white', badge: '⚪' },
+  CRITICA: { label: 'Crítica', color: 'bg-lab-danger-600 text-white' },
+  ALTA: { label: 'Alta', color: 'bg-lab-warning-600 text-white' },
+  MEDIA: { label: 'Media', color: 'bg-lab-primary-500 text-white' },
+  BAJA: { label: 'Baja', color: 'bg-lab-neutral-400 text-white' },
 }
 
 export default function AlertasStockPage() {
@@ -98,20 +98,17 @@ export default function AlertasStockPage() {
   const [whatsappLoading, setWhatsappLoading] = useState(false)
   const [testMessage, setTestMessage] = useState('Prueba del sistema de alertas - Laboratorio Franz')
 
+  const displayWhatsAppNumber = (value?: string) => value?.replace(/^whatsapp:/, '') || 'No configurado'
+
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    if (mounted && accessToken) {
-      loadAlertas()
-      loadEstadisticas()
-      loadItemsSinMovimiento()
-      loadWhatsAppConfig()
+  const loadWhatsAppConfig = useCallback(async () => {
+    if (!accessToken) {
+      return
     }
-  }, [accessToken, mounted])
 
-  const loadWhatsAppConfig = async () => {
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/whatsapp/config`,
@@ -126,7 +123,7 @@ export default function AlertasStockPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar configuración de WhatsApp' })
     }
-  }
+  }, [accessToken])
 
   const sendTestMessage = async () => {
     setWhatsappLoading(true)
@@ -139,7 +136,7 @@ export default function AlertasStockPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${accessToken}`,
           },
-          body: JSON.stringify({ message: testMessage }),
+          body: JSON.stringify({ mensaje: testMessage }),
         }
       )
       const data = await response.json()
@@ -231,12 +228,17 @@ export default function AlertasStockPage() {
     }
   }, [message])
 
-  const loadAlertas = async () => {
+  const fetchAlertas = useCallback(async (tipo = '') => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
 
       const params = new URLSearchParams()
-      if (filterTipo) params.append('tipo', filterTipo)
+      if (tipo) params.append('tipo', tipo)
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/alertas?${params.toString()}`,
@@ -258,9 +260,15 @@ export default function AlertasStockPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken])
 
-  const loadEstadisticas = async () => {
+  const loadAlertas = useCallback(() => fetchAlertas(filterTipo), [fetchAlertas, filterTipo])
+
+  const loadEstadisticas = useCallback(async () => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/alertas/estadisticas`,
@@ -278,12 +286,16 @@ export default function AlertasStockPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar estadísticas de alertas' })
     }
-  }
+  }, [accessToken])
 
-  const loadItemsSinMovimiento = async () => {
+  const fetchItemsSinMovimiento = useCallback(async (dias: number) => {
+    if (!accessToken) {
+      return
+    }
+
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/alertas/sin-movimientos?dias=${diasSinMovimiento}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/admin/inventory/alertas/sin-movimientos?dias=${dias}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -298,7 +310,21 @@ export default function AlertasStockPage() {
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al cargar items sin movimiento' })
     }
-  }
+  }, [accessToken])
+
+  const loadItemsSinMovimiento = useCallback(
+    () => fetchItemsSinMovimiento(diasSinMovimiento),
+    [diasSinMovimiento, fetchItemsSinMovimiento],
+  )
+
+  useEffect(() => {
+    if (mounted && accessToken) {
+      fetchAlertas('')
+      loadEstadisticas()
+      fetchItemsSinMovimiento(diasSinMovimiento)
+      loadWhatsAppConfig()
+    }
+  }, [accessToken, mounted, fetchAlertas, loadEstadisticas, fetchItemsSinMovimiento, diasSinMovimiento, loadWhatsAppConfig])
 
   const handleApplyFilters = () => {
     loadAlertas()
@@ -307,7 +333,7 @@ export default function AlertasStockPage() {
   const handleClearFilters = () => {
     setFilterTipo('')
     setFilterPrioridad('')
-    setTimeout(() => loadAlertas(), 100)
+    fetchAlertas('')
   }
 
   const filteredAlertas = alertas.filter((alerta) => {
@@ -414,25 +440,25 @@ export default function AlertasStockPage() {
           </Card>
           <Card className="border-lab-danger-200 bg-lab-danger-50">
             <CardContent className="pt-6">
-              <div className="text-sm text-lab-danger-700 font-medium">🔴 Críticas</div>
+              <div className="text-sm text-lab-danger-700 font-medium">Críticas</div>
               <div className="text-3xl font-bold text-lab-danger-800 mt-2">{estadisticas.criticas}</div>
             </CardContent>
           </Card>
           <Card className="border-lab-warning-200 bg-lab-warning-50">
             <CardContent className="pt-6">
-              <div className="text-sm text-lab-warning-700 font-medium">🟠 Altas</div>
+              <div className="text-sm text-lab-warning-700 font-medium">Altas</div>
               <div className="text-3xl font-bold text-lab-warning-800 mt-2">{estadisticas.altas}</div>
             </CardContent>
           </Card>
           <Card className="border-lab-primary-200 bg-lab-primary-50">
             <CardContent className="pt-6">
-              <div className="text-sm text-lab-primary-700 font-medium">🟡 Medias</div>
+              <div className="text-sm text-lab-primary-700 font-medium">Medias</div>
               <div className="text-3xl font-bold text-lab-primary-800 mt-2">{estadisticas.medias}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-sm text-lab-neutral-600">⚪ Bajas</div>
+              <div className="text-sm text-lab-neutral-600">Bajas</div>
               <div className="text-3xl font-bold text-lab-neutral-700 mt-2">{estadisticas.bajas}</div>
             </CardContent>
           </Card>
@@ -444,7 +470,7 @@ export default function AlertasStockPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">
-              <div className="text-sm text-lab-neutral-600">⛔ Sin Stock</div>
+              <div className="text-sm text-lab-neutral-600">Sin Stock</div>
               <div className="text-2xl font-bold text-lab-danger-600 mt-2">
                 {estadisticas.por_tipo.stock_critico}
               </div>
@@ -452,7 +478,7 @@ export default function AlertasStockPage() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-sm text-lab-neutral-600">⚠️ Stock Bajo</div>
+              <div className="text-sm text-lab-neutral-600">Stock Bajo</div>
               <div className="text-2xl font-bold text-lab-warning-600 mt-2">
                 {estadisticas.por_tipo.stock_bajo}
               </div>
@@ -460,7 +486,7 @@ export default function AlertasStockPage() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-sm text-lab-neutral-600">🚫 Vencidos</div>
+              <div className="text-sm text-lab-neutral-600">Vencidos</div>
               <div className="text-2xl font-bold text-lab-danger-600 mt-2">
                 {estadisticas.por_tipo.vencidos}
               </div>
@@ -468,7 +494,7 @@ export default function AlertasStockPage() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-sm text-lab-neutral-600">⏰ Por Vencer</div>
+              <div className="text-sm text-lab-neutral-600">Por Vencer</div>
               <div className="text-2xl font-bold text-lab-warning-600 mt-2">
                 {estadisticas.por_tipo.proximos_vencer}
               </div>
@@ -494,10 +520,10 @@ export default function AlertasStockPage() {
                 className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
               >
                 <option value="">Todos los tipos</option>
-                <option value="STOCK_CRITICO">⛔ Sin Stock</option>
-                <option value="STOCK_BAJO">⚠️ Stock Bajo</option>
-                <option value="VENCIDO">🚫 Vencido</option>
-                <option value="PROXIMO_VENCER">⏰ Por Vencer</option>
+                <option value="STOCK_CRITICO">Sin Stock</option>
+                <option value="STOCK_BAJO">Stock Bajo</option>
+                <option value="VENCIDO">Vencido</option>
+                <option value="PROXIMO_VENCER">Por Vencer</option>
               </select>
             </div>
 
@@ -511,10 +537,10 @@ export default function AlertasStockPage() {
                 className="block w-full rounded-md border border-lab-neutral-300 px-3 py-2"
               >
                 <option value="">Todas las prioridades</option>
-                <option value="CRITICA">🔴 Crítica</option>
-                <option value="ALTA">🟠 Alta</option>
-                <option value="MEDIA">🟡 Media</option>
-                <option value="BAJA">⚪ Baja</option>
+                <option value="CRITICA">Crítica</option>
+                <option value="ALTA">Alta</option>
+                <option value="MEDIA">Media</option>
+                <option value="BAJA">Baja</option>
               </select>
             </div>
 
@@ -566,12 +592,12 @@ export default function AlertasStockPage() {
                       <tr key={index} className="border-b border-lab-neutral-100 hover:bg-lab-neutral-50">
                         <td className="p-4">
                           <span className={`text-xs px-3 py-1 rounded-full font-semibold ${prioridadStyle.color}`}>
-                            {prioridadStyle.badge} {prioridadStyle.label}
+                            {prioridadStyle.label}
                           </span>
                         </td>
                         <td className="p-4">
                           <span className={`text-xs px-2 py-1 rounded ${tipoStyle.color}`}>
-                            {tipoStyle.icon} {tipoStyle.label}
+                            {tipoStyle.label}
                           </span>
                         </td>
                         <td className="p-4">
@@ -625,7 +651,7 @@ export default function AlertasStockPage() {
 
               {filteredAlertas.length === 0 && (
                 <div className="text-center py-12">
-                  <div className="text-6xl mb-4">🎉</div>
+                  <div className="mx-auto mb-4 h-12 w-12 rounded-full border border-lab-success-200 bg-lab-success-50" />
                   <div className="text-xl font-semibold text-lab-success-600 mb-2">
                     ¡No hay alertas activas!
                   </div>
@@ -713,7 +739,7 @@ export default function AlertasStockPage() {
                               ? 'bg-lab-warning-600 text-white'
                               : 'bg-lab-primary-500 text-white'
                           }`}>
-                            {item.prioridad === 'ALTA' ? '🟠' : '🟡'} {item.prioridad}
+                            {item.prioridad}
                           </span>
                         </td>
                         <td className="p-4">
@@ -733,13 +759,11 @@ export default function AlertasStockPage() {
                         </td>
                         <td className="p-4 text-center">
                           <span className={`font-semibold ${
-                            item.dias_sin_movimiento === null
-                              ? 'text-lab-danger-600'
-                              : item.dias_sin_movimiento > 60
+                            item.dias_sin_movimiento > 60
                               ? 'text-lab-warning-600'
                               : 'text-lab-neutral-900'
                           }`}>
-                            {item.dias_sin_movimiento !== null ? `${item.dias_sin_movimiento} días` : '∞'}
+                            {item.dias_sin_movimiento} días
                           </span>
                         </td>
                         <td className="p-4 text-sm text-lab-neutral-700">
@@ -752,7 +776,7 @@ export default function AlertasStockPage() {
 
                 {itemsSinMovimiento.length === 0 && (
                   <div className="text-center py-12">
-                    <div className="text-6xl mb-4">✅</div>
+                    <div className="mx-auto mb-4 h-12 w-12 rounded-full border border-lab-success-200 bg-lab-success-50" />
                     <div className="text-xl font-semibold text-lab-success-600 mb-2">
                       ¡Buena rotación de inventario!
                     </div>
@@ -771,10 +795,10 @@ export default function AlertasStockPage() {
       {activeTab === 'whatsapp' && (
         <>
           {/* Estado de Configuración */}
-          <Card className={whatsappConfig?.configured ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+          <Card className={whatsappConfig?.configured ? 'border-green-200 bg-gradient-to-br from-green-50 to-white' : 'border-red-200 bg-gradient-to-br from-red-50 to-white'}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                Estado de WhatsApp
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                Configuración de WhatsApp
                 {whatsappConfig?.configured ? (
                   <span className="text-sm font-normal bg-green-100 text-green-800 px-2 py-1 rounded-full">
                     Configurado
@@ -795,13 +819,17 @@ export default function AlertasStockPage() {
             {whatsappConfig?.configured && (
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-lab-neutral-600">Número de envío:</span>
-                    <span className="ml-2 font-mono">{whatsappConfig.fromNumber}</span>
+                  <div className="rounded-lg border border-green-100 bg-white p-4">
+                    <div className="text-lab-neutral-500 mb-1">Número de envío</div>
+                    <div className="font-mono text-base font-semibold text-lab-neutral-900">
+                      {displayWhatsAppNumber(whatsappConfig.fromNumber)}
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-lab-neutral-600">Destinatario:</span>
-                    <span className="ml-2 font-mono">{whatsappConfig.defaultRecipient}</span>
+                  <div className="rounded-lg border border-green-100 bg-white p-4">
+                    <div className="text-lab-neutral-500 mb-1">Destinatario</div>
+                    <div className="font-mono text-base font-semibold text-lab-neutral-900">
+                      {displayWhatsAppNumber(whatsappConfig.defaultRecipient)}
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -817,7 +845,7 @@ export default function AlertasStockPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-4">
+              <div className="flex flex-col gap-3 md:flex-row">
                 <input
                   type="text"
                   value={testMessage}

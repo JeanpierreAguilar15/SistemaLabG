@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { getInitials } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
+import { isAdminRole, normalizeRole } from '@/lib/roles'
 
 const navigation = [
     {
@@ -38,6 +39,11 @@ const navigation = [
         icon: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4',
     },
     {
+        name: 'Movimientos',
+        href: '/admin/movimientos',
+        icon: 'M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4',
+    },
+    {
         name: 'Reactivos',
         href: '/admin/inventario/reactivos',
         icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z',
@@ -46,6 +52,11 @@ const navigation = [
         name: 'Examen-Insumos',
         href: '/admin/inventario/examenes-insumos',
         icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1',
+    },
+    {
+        name: 'Alertas',
+        href: '/admin/alertas',
+        icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9',
     },
     {
         name: 'Proveedores',
@@ -69,6 +80,19 @@ const navigation = [
     },
 ]
 
+const adminOnlyRoutes = new Set([
+    '/admin/roles',
+    '/admin/inventario',
+    '/admin/movimientos',
+    '/admin/inventario/reactivos',
+    '/admin/inventario/examenes-insumos',
+    '/admin/alertas',
+    '/admin/proveedores',
+    '/admin/ordenes-compra',
+    '/admin/auditoria',
+    '/admin/configuracion',
+])
+
 interface AdminSidebarProps {
     sidebarOpen: boolean
     setSidebarOpen: (open: boolean) => void
@@ -78,6 +102,9 @@ export function AdminSidebar({ sidebarOpen, setSidebarOpen }: AdminSidebarProps)
     const router = useRouter()
     const pathname = usePathname()
     const { user, clearAuth } = useAuthStore()
+    const visibleNavigation = navigation.filter((item) => (
+        isAdminRole(user?.rol) || !adminOnlyRoutes.has(item.href)
+    ))
 
     const handleLogout = () => {
         clearAuth()
@@ -104,8 +131,7 @@ export function AdminSidebar({ sidebarOpen, setSidebarOpen }: AdminSidebarProps)
                             </svg>
                         </div>
                         <div className="ml-3">
-                            <span className="text-xl font-bold text-white">Lab Franz</span>
-                            <p className="text-xs text-lab-primary-200">Admin Panel</p>
+                            <span className="text-xl font-bold text-white">Laboratorio Franz</span>
                         </div>
                     </div>
 
@@ -121,14 +147,14 @@ export function AdminSidebar({ sidebarOpen, setSidebarOpen }: AdminSidebarProps)
                                 <p className="text-sm font-medium text-white truncate">
                                     {user.nombres} {user.apellidos}
                                 </p>
-                                <p className="text-xs text-lab-primary-200 truncate">{user.rol}</p>
+                                <p className="text-xs text-lab-primary-200 truncate">{normalizeRole(user.rol)}</p>
                             </div>
                         </div>
                     </div>
 
                     {/* Navigation */}
                     <nav className="flex-1 px-3 space-y-1">
-                        {navigation.map((item) => {
+                        {visibleNavigation.map((item) => {
                             const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href))
                             return (
                                 <Link
@@ -176,22 +202,6 @@ export function AdminSidebar({ sidebarOpen, setSidebarOpen }: AdminSidebarProps)
                         </Button>
                     </div>
 
-                    {/* Portal Link */}
-                    <div className="px-3 mt-2">
-                        <Link href="/portal">
-                            <Button variant="ghost" className="w-full justify-start text-lab-primary-200 hover:text-white hover:bg-lab-primary-800">
-                                <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                                    />
-                                </svg>
-                                Ir al Portal
-                            </Button>
-                        </Link>
-                    </div>
                 </div>
             </div>
 
@@ -215,8 +225,7 @@ export function AdminSidebar({ sidebarOpen, setSidebarOpen }: AdminSidebarProps)
                                             </svg>
                                         </div>
                                         <div className="ml-3">
-                                            <span className="text-xl font-bold text-white">Lab Franz</span>
-                                            <p className="text-xs text-lab-primary-200">Admin Panel</p>
+                                            <span className="text-xl font-bold text-white">Laboratorio Franz</span>
                                         </div>
                                     </div>
                                     <button onClick={() => setSidebarOpen(false)} className="text-lab-primary-300 hover:text-white">
@@ -235,13 +244,13 @@ export function AdminSidebar({ sidebarOpen, setSidebarOpen }: AdminSidebarProps)
                                             <p className="text-sm font-medium text-white">
                                                 {user.nombres} {user.apellidos}
                                             </p>
-                                            <p className="text-xs text-lab-primary-200">{user.rol}</p>
+                                            <p className="text-xs text-lab-primary-200">{normalizeRole(user.rol)}</p>
                                         </div>
                                     </div>
                                 </div>
 
                                 <nav className="flex-1 px-3 space-y-1">
-                                    {navigation.map((item) => {
+                                    {visibleNavigation.map((item) => {
                                         const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href))
                                         return (
                                             <Link
@@ -285,16 +294,6 @@ export function AdminSidebar({ sidebarOpen, setSidebarOpen }: AdminSidebarProps)
                                     </Button>
                                 </div>
 
-                                <div className="px-3 mt-2">
-                                    <Link href="/portal">
-                                        <Button variant="ghost" className="w-full justify-start text-lab-primary-200 hover:text-white hover:bg-lab-primary-800">
-                                            <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                                            </svg>
-                                            Ir al Portal
-                                        </Button>
-                                    </Link>
-                                </div>
                             </div>
                         </div>
                     </div>

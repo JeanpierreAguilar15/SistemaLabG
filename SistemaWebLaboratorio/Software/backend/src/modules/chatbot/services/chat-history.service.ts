@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@prisma/prisma.service';
 
 @Injectable()
@@ -13,11 +13,18 @@ export class ChatHistoryService {
     });
 
     if (existing) {
-      await this.prisma.conversacionChatbot.update({
+      if (existing.codigo_paciente && codigoPaciente && existing.codigo_paciente !== codigoPaciente) {
+        throw new ForbiddenException('La conversación no pertenece al usuario autenticado');
+      }
+
+      const updated = await this.prisma.conversacionChatbot.update({
         where: { codigo_conversacion: existing.codigo_conversacion },
-        data: { fecha_ultimo_msg: new Date() },
+        data: {
+          fecha_ultimo_msg: new Date(),
+          codigo_paciente: existing.codigo_paciente || codigoPaciente || null,
+        },
       });
-      return existing;
+      return updated;
     }
 
     return this.prisma.conversacionChatbot.create({
@@ -26,6 +33,35 @@ export class ChatHistoryService {
         codigo_paciente: codigoPaciente || null,
       },
     });
+  }
+
+  async getHistory(sessionId: string, codigoPaciente: number) {
+    const conversacion = await this.prisma.conversacionChatbot.findUnique({
+      where: { session_id: sessionId },
+      include: {
+        mensajes: {
+          orderBy: { timestamp: 'asc' },
+          select: {
+            codigo_mensaje: true,
+            remitente: true,
+            contenido: true,
+            intent: true,
+            confianza: true,
+            timestamp: true,
+          },
+        },
+      },
+    });
+
+    if (!conversacion) {
+      return [];
+    }
+
+    if (conversacion.codigo_paciente !== codigoPaciente) {
+      throw new ForbiddenException('La conversación no pertenece al usuario autenticado');
+    }
+
+    return conversacion.mensajes;
   }
 
   async logMessage(

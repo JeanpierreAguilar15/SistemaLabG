@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { normalizeRoleName } from '../constants/roles.constants';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
@@ -33,7 +34,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       nombres: usuario.nombres,
       apellidos: usuario.apellidos,
       email: usuario.email,
-      rol: usuario.rol.nombre,
+      rol: normalizeRoleName(usuario.rol.nombre),
       nivel_acceso: usuario.rol.nivel_acceso,
     };
   }

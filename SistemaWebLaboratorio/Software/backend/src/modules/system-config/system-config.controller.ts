@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { APP_ROLES } from '../auth/constants/roles.constants';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
 
@@ -27,7 +28,7 @@ export class SystemConfigController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(APP_ROLES.ADMINISTRADOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear una nueva configuración (Solo Admin)' })
   create(
@@ -39,7 +40,7 @@ export class SystemConfigController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(APP_ROLES.ADMINISTRADOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener todas las configuraciones (Solo Admin)' })
   findAll(@Query('grupo') grupo?: string) {
@@ -48,7 +49,7 @@ export class SystemConfigController {
 
   @Get('grupos')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(APP_ROLES.ADMINISTRADOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener lista de grupos de configuracion' })
   getGrupos() {
@@ -57,7 +58,7 @@ export class SystemConfigController {
 
   @Get('grupo/:grupo')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(APP_ROLES.ADMINISTRADOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener configuraciones por grupo' })
   findByGrupo(@Param('grupo') grupo: string) {
@@ -66,7 +67,7 @@ export class SystemConfigController {
 
   @Post('initialize-login')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(APP_ROLES.ADMINISTRADOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Inicializar configuraciones de login por defecto' })
   initializeLoginDefaults() {
@@ -82,7 +83,7 @@ export class SystemConfigController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(APP_ROLES.ADMINISTRADOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener una configuración por ID (Solo Admin)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -91,7 +92,7 @@ export class SystemConfigController {
 
   @Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(APP_ROLES.ADMINISTRADOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar una configuración (Solo Admin)' })
   update(
@@ -104,7 +105,7 @@ export class SystemConfigController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(APP_ROLES.ADMINISTRADOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Eliminar una configuración (Solo Admin)' })
   remove(

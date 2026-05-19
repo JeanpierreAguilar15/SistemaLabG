@@ -8,7 +8,13 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 
-import { AdminEventsService } from './admin-events.service';
+import { AdminEventsService, AdminEventType } from './admin-events.service';
+import { APP_ROLES, isAdminRoleName, normalizeRoleName } from '../auth/constants/roles.constants';
+import { CANONICAL_ROLE_NAMES, getAccessLevelForRole, isValidRoleName } from './constants/role-permissions';
+import {
+  formatAuditActivityLog,
+  formatAuditErrorLog,
+} from '../auditoria/utils/audit-formatting';
 
 @Injectable()
 export class AdminService {
@@ -27,6 +33,14 @@ export class AdminService {
 
   async getAllRoles() {
     return this.prisma.rol.findMany({
+      where: {
+        OR: [
+          ...CANONICAL_ROLE_NAMES.map((nombre) => ({ nombre })),
+          { nombre: 'ADMIN' },
+          { nombre: 'PERSONAL_LAB' },
+          { nombre: 'PACIENTE' },
+        ],
+      },
       include: {
         _count: {
           select: { usuarios: true },
@@ -54,8 +68,25 @@ export class AdminService {
   }
 
   async createRole(data: Prisma.RolCreateInput, adminId: number) {
+    if (!isValidRoleName(data.nombre)) {
+      throw new BadRequestException('Solo se permiten los roles Administrador, Personal_Laboratorio y Paciente');
+    }
+    const normalizedName = normalizeRoleName(data.nombre);
+
+    const existingRole = await this.prisma.rol.findUnique({
+      where: { nombre: normalizedName },
+    });
+
+    if (existingRole) {
+      throw new BadRequestException(`El rol ${normalizedName} ya existe`);
+    }
+
     const role = await this.prisma.rol.create({
-      data,
+      data: {
+        ...data,
+        nombre: normalizedName,
+        nivel_acceso: getAccessLevelForRole(normalizedName),
+      },
     });
 
     // Emitir evento de creación de rol
@@ -82,8 +113,35 @@ export class AdminService {
       throw new NotFoundException('Rol no encontrado');
     }
 
-    // Proteger rol de administrador del sistema (nivel 10 o nombre ADMIN)
-    const isSystemAdmin = role.nivel_acceso === 10 || role.nombre.toUpperCase() === 'ADMIN';
+    const isCanonicalRole = this.isCanonicalRole(role);
+
+    if (data.nombre) {
+      if (!isValidRoleName(data.nombre as string)) {
+        throw new BadRequestException('Solo se permiten los roles Administrador, Personal_Laboratorio y Paciente');
+      }
+      const normalizedName = normalizeRoleName(data.nombre as string);
+      if (isCanonicalRole && normalizedName !== normalizeRoleName(role.nombre)) {
+        throw new BadRequestException('No se puede cambiar el nombre de un rol del sistema');
+      }
+      data.nombre = normalizedName;
+      data.nivel_acceso = getAccessLevelForRole(normalizedName);
+    }
+
+    if (isCanonicalRole) {
+      if (data.activo === false) {
+        throw new BadRequestException('No se puede desactivar un rol del sistema');
+      }
+
+      if (
+        data.nivel_acceso !== undefined &&
+        Number(data.nivel_acceso) !== getAccessLevelForRole(role.nombre)
+      ) {
+        throw new BadRequestException('No se puede cambiar el nivel operativo de un rol del sistema');
+      }
+    }
+
+    // Proteger rol de administrador del sistema.
+    const isSystemAdmin = this.isSystemAdminRole(role);
 
     if (isSystemAdmin) {
       // No permitir desactivar el rol de administrador
@@ -95,18 +153,18 @@ export class AdminService {
       }
 
       // No permitir cambiar el nombre del rol de administrador (ni siquiera mayusculas/minusculas)
-      if (data.nombre && (data.nombre as string) !== role.nombre) {
+      if (data.nombre && !isAdminRoleName(data.nombre as string)) {
         throw new BadRequestException(
           'No se puede cambiar el nombre del rol de administrador del sistema. ' +
-          'El nombre debe permanecer exactamente como "ADMIN".'
+          'El rol debe permanecer como "Administrador".'
         );
       }
 
-      // No permitir bajar el nivel de acceso del administrador
-      if (data.nivel_acceso && (data.nivel_acceso as number) < 10) {
+      // No permitir bajar el nivel operativo del administrador
+      if (data.nivel_acceso && (data.nivel_acceso as number) < getAccessLevelForRole(APP_ROLES.ADMINISTRADOR)) {
         throw new BadRequestException(
           'No se puede reducir el nivel de acceso del rol de administrador del sistema. ' +
-          'El nivel 10 es requerido para el funcionamiento del sistema.'
+          'El rol Administrador es requerido para el funcionamiento del sistema.'
         );
       }
     }
@@ -148,12 +206,10 @@ export class AdminService {
       throw new NotFoundException('Rol no encontrado');
     }
 
-    // Proteger rol de administrador del sistema
-    const isSystemAdmin = role.nivel_acceso === 10 || role.nombre.toUpperCase() === 'ADMIN';
-    if (isSystemAdmin) {
+    if (this.isCanonicalRole(role)) {
       throw new BadRequestException(
-        'No se puede eliminar el rol de administrador del sistema. ' +
-        'Este rol es necesario para el funcionamiento del sistema.'
+        'No se puede eliminar un rol del sistema. ' +
+        'Los roles Administrador, Personal_Laboratorio y Paciente son requeridos.'
       );
     }
 
@@ -169,6 +225,109 @@ export class AdminService {
     this.eventsService.emitRoleDeleted(codigo_rol, adminId);
 
     return deletedRole;
+  }
+
+  private isSystemAdminRole(role: { nombre?: string | null; nivel_acceso?: number | null }) {
+    return isAdminRoleName(role.nombre) || role.nivel_acceso === 10;
+  }
+
+  private isCanonicalRole(role: { nombre?: string | null }) {
+    return CANONICAL_ROLE_NAMES.includes(normalizeRoleName(role.nombre) as any);
+  }
+
+  private normalizeExamPayload(data: any) {
+    const payload = { ...data };
+
+    if (payload.codigo_interno !== undefined) {
+      payload.codigo_interno = String(payload.codigo_interno).trim();
+    }
+    if (payload.nombre !== undefined) {
+      payload.nombre = String(payload.nombre).trim();
+    }
+
+    for (const key of [
+      'descripcion',
+      'instrucciones_preparacion',
+      'tipo_muestra',
+      'unidad_medida',
+      'valores_referencia_texto',
+    ]) {
+      if (payload[key] !== undefined) {
+        const value = typeof payload[key] === 'string' ? payload[key].trim() : payload[key];
+        payload[key] = value || null;
+      }
+    }
+
+    if (payload.codigo_categoria === '' || payload.codigo_categoria === undefined) {
+      delete payload.codigo_categoria;
+    } else if (payload.codigo_categoria !== null) {
+      payload.codigo_categoria = Number(payload.codigo_categoria);
+    }
+
+    if (payload.tiempo_entrega_horas !== undefined) {
+      payload.tiempo_entrega_horas = Number(payload.tiempo_entrega_horas);
+      if (!Number.isInteger(payload.tiempo_entrega_horas) || payload.tiempo_entrega_horas < 1) {
+        throw new BadRequestException('El tiempo de entrega debe ser un entero mayor a 0 horas.');
+      }
+    }
+
+    if (payload.requiere_ayuno === false) {
+      payload.horas_ayuno = null;
+    } else if (payload.horas_ayuno !== undefined && payload.horas_ayuno !== null && payload.horas_ayuno !== '') {
+      payload.horas_ayuno = Number(payload.horas_ayuno);
+      if (!Number.isInteger(payload.horas_ayuno) || payload.horas_ayuno < 1 || payload.horas_ayuno > 24) {
+        throw new BadRequestException('Las horas de ayuno deben estar entre 1 y 24.');
+      }
+    } else if (payload.horas_ayuno === '') {
+      payload.horas_ayuno = null;
+    }
+
+    if (payload.valor_referencia_min !== undefined && payload.valor_referencia_min !== null && payload.valor_referencia_min !== '') {
+      payload.valor_referencia_min = Number(payload.valor_referencia_min);
+    } else if (payload.valor_referencia_min === '') {
+      payload.valor_referencia_min = null;
+    }
+
+    if (payload.valor_referencia_max !== undefined && payload.valor_referencia_max !== null && payload.valor_referencia_max !== '') {
+      payload.valor_referencia_max = Number(payload.valor_referencia_max);
+    } else if (payload.valor_referencia_max === '') {
+      payload.valor_referencia_max = null;
+    }
+
+    const min = payload.valor_referencia_min;
+    const max = payload.valor_referencia_max;
+    if (min !== undefined && min !== null && !Number.isFinite(min)) {
+      throw new BadRequestException('El valor minimo de referencia no es valido.');
+    }
+    if (max !== undefined && max !== null && !Number.isFinite(max)) {
+      throw new BadRequestException('El valor maximo de referencia no es valido.');
+    }
+    if (min !== undefined && min !== null && max !== undefined && max !== null && min >= max) {
+      throw new BadRequestException('El rango de referencia debe tener un valor minimo menor al maximo.');
+    }
+    if ((min !== undefined && min !== null || max !== undefined && max !== null) && !payload.unidad_medida) {
+      throw new BadRequestException('La unidad de medida es obligatoria cuando se define un rango de referencia.');
+    }
+
+    return payload;
+  }
+
+  private async ensureActiveExamCategory(codigo_categoria?: number | null) {
+    if (codigo_categoria === undefined || codigo_categoria === null) {
+      return;
+    }
+
+    if (!Number.isInteger(codigo_categoria)) {
+      throw new BadRequestException('La categoria del examen no es valida.');
+    }
+
+    const category = await this.prisma.categoriaExamen.findUnique({
+      where: { codigo_categoria },
+    });
+
+    if (!category || !category.activo) {
+      throw new BadRequestException('Debe seleccionar una categoria activa para el examen.');
+    }
   }
 
   // ==================== EXAMENES ====================
@@ -233,21 +392,23 @@ export class AdminService {
   }
 
   async createExam(data: any, adminId: number) {
+    const payload = this.normalizeExamPayload(data);
+
     // Verificar que el codigo_interno no exista
     const existingByCode = await this.prisma.examen.findUnique({
-      where: { codigo_interno: data.codigo_interno },
+      where: { codigo_interno: payload.codigo_interno },
     });
 
     if (existingByCode) {
       throw new BadRequestException(
-        `Ya existe un examen con el codigo interno "${data.codigo_interno}".`
+        `Ya existe un examen con el codigo interno "${payload.codigo_interno}".`
       );
     }
 
     // Validar nombre único (case insensitive)
     const existingByName = await this.prisma.examen.findFirst({
       where: {
-        nombre: { equals: data.nombre, mode: 'insensitive' },
+        nombre: { equals: payload.nombre, mode: 'insensitive' },
       },
     });
 
@@ -258,8 +419,10 @@ export class AdminService {
       );
     }
 
+    await this.ensureActiveExamCategory(payload.codigo_categoria);
+
     const exam = await this.prisma.examen.create({
-      data,
+      data: payload,
       include: {
         categoria: true,
       },
@@ -276,6 +439,8 @@ export class AdminService {
   }
 
   async updateExam(codigo_examen: number, data: any, adminId: number) {
+    const payload = this.normalizeExamPayload(data);
+
     const exam = await this.prisma.examen.findUnique({
       where: { codigo_examen },
     });
@@ -285,23 +450,23 @@ export class AdminService {
     }
 
     // Si se está actualizando el codigo_interno, validar que no exista
-    if (data.codigo_interno && data.codigo_interno !== exam.codigo_interno) {
+    if (payload.codigo_interno && payload.codigo_interno !== exam.codigo_interno) {
       const existingByCode = await this.prisma.examen.findUnique({
-        where: { codigo_interno: data.codigo_interno },
+        where: { codigo_interno: payload.codigo_interno },
       });
 
       if (existingByCode) {
         throw new BadRequestException(
-          `Ya existe un examen con el codigo interno "${data.codigo_interno}".`
+          `Ya existe un examen con el codigo interno "${payload.codigo_interno}".`
         );
       }
     }
 
     // Validar nombre único si se está actualizando (case insensitive)
-    if (data.nombre && data.nombre !== exam.nombre) {
+    if (payload.nombre && payload.nombre !== exam.nombre) {
       const existingByName = await this.prisma.examen.findFirst({
         where: {
-          nombre: { equals: data.nombre, mode: 'insensitive' },
+          nombre: { equals: payload.nombre, mode: 'insensitive' },
           codigo_examen: { not: codigo_examen },
         },
       });
@@ -314,9 +479,11 @@ export class AdminService {
       }
     }
 
+    await this.ensureActiveExamCategory(payload.codigo_categoria);
+
     const updatedExam = await this.prisma.examen.update({
       where: { codigo_examen },
-      data,
+      data: payload,
       include: {
         categoria: true,
       },
@@ -326,7 +493,7 @@ export class AdminService {
     this.eventsService.emitExamUpdated(
       codigo_examen,
       adminId,
-      { changedFields: Object.keys(data) },
+      { changedFields: Object.keys(payload) },
     );
 
     return updatedExam;
@@ -498,7 +665,7 @@ export class AdminService {
     ]);
 
     return {
-      data: logs,
+      data: logs.map((log) => formatAuditActivityLog(log as any)),
       pagination: {
         total,
         page,
@@ -544,7 +711,7 @@ export class AdminService {
     ]);
 
     return {
-      data: logs,
+      data: logs.map((log) => formatAuditErrorLog(log as any)),
       pagination: {
         total,
         page,
@@ -594,7 +761,7 @@ export class AdminService {
 
       // Obtener logs con límite
       const limit = filters?.limit ? parseInt(filters.limit) : 50;
-      const logs = await this.prisma.logActividad.findMany({
+      const logs = (await this.prisma.logActividad.findMany({
         where,
         include: {
           usuario: {
@@ -607,7 +774,7 @@ export class AdminService {
         },
         orderBy: { fecha_accion: 'desc' },
         take: limit,
-      });
+      })).map((log) => formatAuditActivityLog(log as any));
 
       // Crear PDF en memoria
       return new Promise((resolve, reject) => {
@@ -697,9 +864,10 @@ export class AdminService {
           const colWidths = {
             fecha: 90,
             usuario: 120,
-            accion: 120,
+            accion: 105,
+            resumen: 150,
             entidad: 80,
-            ip: 80,
+            ip: 47,
           };
 
           // Headers de tabla
@@ -860,7 +1028,7 @@ export class AdminService {
           SELECT COUNT(*)::int as count
           FROM inventario.item
           WHERE activo = true AND stock_actual <= stock_minimo
-        `.then(result => Number(result[0]?.count || 0)).catch(() => 0),
+        `,
 
         // Últimos exámenes
         this.prisma.examen.findMany({
@@ -888,7 +1056,7 @@ export class AdminService {
           pending: pendingResults,
         },
         inventory: {
-          lowStock: lowStockItems,
+          lowStock: Number(lowStockItems[0]?.count || 0),
         },
         recentExams: recentExams.map(exam => ({
           code: exam.codigo_interno,
@@ -899,13 +1067,7 @@ export class AdminService {
     } catch (error) {
       this.logger.error('Error getting dashboard stats:', error);
       // Retornar estructura vacía en caso de error
-      return {
-        users: { total: 0, active: 0 },
-        exams: { total: 0 },
-        results: { pending: 0 },
-        inventory: { lowStock: 0 },
-        recentExams: [],
-      };
+      throw error;
     }
   }
 
@@ -928,23 +1090,17 @@ export class AdminService {
       orderBy: [{ grupo: 'asc' }, { clave: 'asc' }],
     });
 
-    // Agrupar por grupo
-    const grouped = configs.reduce((acc, config) => {
-      if (!acc[config.grupo]) {
-        acc[config.grupo] = [];
-      }
-      acc[config.grupo].push({
-        codigo: config.codigo_config,
-        clave: config.clave,
-        valor: config.valor,
-        descripcion: config.descripcion,
-        tipo_dato: config.tipo_dato,
-        es_publico: config.es_publico,
-      });
-      return acc;
-    }, {} as Record<string, any[]>);
-
-    return grouped;
+    return configs.map((config) => ({
+      codigo_config: config.codigo_config,
+      clave: config.clave,
+      valor: config.valor,
+      descripcion: config.descripcion,
+      grupo: config.grupo,
+      tipo_dato: config.tipo_dato,
+      es_publico: config.es_publico,
+      fecha_creacion: config.fecha_creacion,
+      fecha_actualizacion: config.fecha_actualizacion,
+    }));
   }
 
   /**
@@ -992,12 +1148,28 @@ export class AdminService {
       throw new NotFoundException(`Configuración '${clave}' no encontrada`);
     }
 
-    // Validar valor según tipo de dato
-    if (config.tipo_dato === 'INTEGER') {
-      const numValue = parseInt(valor);
+    const tipoDato = config.tipo_dato.toUpperCase();
+    if (tipoDato === 'INTEGER' || tipoDato === 'NUMBER') {
+      const numValue = parseInt(valor, 10);
       if (isNaN(numValue) || numValue < 1) {
-        throw new BadRequestException('El valor debe ser un número entero positivo');
+        throw new BadRequestException('El valor debe ser un numero entero positivo');
       }
+
+      const maxByKey: Record<string, number> = {
+        LOGIN_MAX_INTENTOS: 20,
+        LOGIN_MINUTOS_BLOQUEO: 720,
+        ALERTAS_DIAS_VENCIMIENTO: 365,
+        ALERTAS_DIAS_SIN_MOVIMIENTO: 365,
+        ALERTAS_STOCK_CRITICO_PORCENTAJE: 100,
+      };
+      const maxValue = maxByKey[clave];
+      if (maxValue && numValue > maxValue) {
+        throw new BadRequestException(`El valor maximo permitido para ${clave} es ${maxValue}`);
+      }
+    }
+
+    if (tipoDato === 'BOOLEAN' && !['true', 'false'].includes(valor.toLowerCase())) {
+      throw new BadRequestException('El valor debe ser true o false');
     }
 
     const updated = await this.prisma.configuracionSistema.update({
@@ -1005,13 +1177,25 @@ export class AdminService {
       data: { valor },
     });
 
+    this.eventsService.emitEvent(AdminEventType.CONFIG_UPDATED, {
+      entityType: 'system_config',
+      entityId: updated.codigo_config,
+      action: 'updated',
+      userId: adminId,
+      data: { clave, valor_anterior: config.valor, valor_nuevo: valor },
+      timestamp: new Date(),
+    });
+
     this.logger.log(`Config '${clave}' actualizada a '${valor}' por admin ${adminId}`);
 
     return {
-      codigo: updated.codigo_config,
+      codigo_config: updated.codigo_config,
       clave: updated.clave,
       valor: updated.valor,
       descripcion: updated.descripcion,
+      grupo: updated.grupo,
+      tipo_dato: updated.tipo_dato,
+      es_publico: updated.es_publico,
     };
   }
 

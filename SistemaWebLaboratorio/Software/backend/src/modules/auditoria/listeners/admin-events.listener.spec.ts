@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { AdminEventsListener } from './admin-events.listener';
 import { PrismaService } from '@prisma/prisma.service';
 import { AdminEventPayload } from '../../admin/admin-events.service';
@@ -38,7 +39,7 @@ describe('AdminEventsListener', () => {
   });
 
   describe('handleAdminEvent', () => {
-    it('should log admin event to LogActividad', async () => {
+    it('logs admin event with interpreted description', async () => {
       const payload: AdminEventPayload & { eventType: string } = {
         eventType: 'admin.user.created',
         entityType: 'user',
@@ -56,16 +57,23 @@ describe('AdminEventsListener', () => {
       expect(prisma.logActividad.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           codigo_usuario: payload.userId,
-          accion: expect.any(String),
+          accion: 'Creacion de usuario',
           entidad: payload.entityType,
-          id_entidad: payload.entityId.toString(),
-          detalles: expect.any(String),
+          codigo_entidad: payload.entityId,
+          descripcion: expect.any(String),
           fecha_accion: payload.timestamp,
         }),
       });
+
+      const descripcion = JSON.parse((prisma.logActividad.create as jest.Mock).mock.calls[0][0].data.descripcion);
+      expect(descripcion).toEqual(expect.objectContaining({
+        resumen: expect.stringContaining('Creacion de usuario #1'),
+        evento: 'admin.user.created',
+        detalle: expect.objectContaining({ rol: 'Paciente', email: 'test@test.com' }),
+      }));
     });
 
-    it('should log error to LogError if logging fails', async () => {
+    it('logs error to LogError if activity logging fails', async () => {
       const payload: AdminEventPayload & { eventType: string } = {
         eventType: 'admin.user.created',
         entityType: 'user',
@@ -79,6 +87,7 @@ describe('AdminEventsListener', () => {
       const error = new Error('Database error');
       jest.spyOn(prisma.logActividad, 'create').mockRejectedValue(error);
       jest.spyOn(prisma.logError, 'create').mockResolvedValue({} as any);
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
       await listener.handleAdminEvent(payload);
 
@@ -86,18 +95,24 @@ describe('AdminEventsListener', () => {
         data: expect.objectContaining({
           mensaje: expect.stringContaining('Failed to log admin event'),
           endpoint: `admin.${payload.entityType}.${payload.action}`,
-          metodo_http: 'EVENT',
+          metodo: 'EVENT',
           codigo_usuario: payload.userId,
         }),
       });
     });
 
-    it('should generate correct action description for created', async () => {
+    it.each([
+      ['admin.user.created', 'user', 'created', 'Creacion de usuario'],
+      ['admin.exam.updated', 'exam', 'updated', 'Actualizacion de examen'],
+      ['admin.role.deleted', 'role', 'deleted', 'Eliminacion de rol'],
+      ['admin.resultado.validated', 'resultado', 'updated', 'Validacion de resultado'],
+      ['admin.purchase_order.received', 'purchase_order', 'updated', 'Recepcion de orden de compra'],
+    ] as const)('generates action label for %s', async (eventType, entityType, action, expected) => {
       const payload: AdminEventPayload & { eventType: string } = {
-        eventType: 'admin.user.created',
-        entityType: 'user',
+        eventType,
+        entityType,
         entityId: 1,
-        action: 'created',
+        action,
         userId: 2,
         data: {},
         timestamp: new Date(),
@@ -109,108 +124,42 @@ describe('AdminEventsListener', () => {
 
       expect(prisma.logActividad.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          accion: 'Creó User',
-        }),
-      });
-    });
-
-    it('should generate correct action description for updated', async () => {
-      const payload: AdminEventPayload & { eventType: string } = {
-        eventType: 'admin.exam.updated',
-        entityType: 'exam',
-        entityId: 1,
-        action: 'updated',
-        userId: 2,
-        data: {},
-        timestamp: new Date(),
-      };
-
-      jest.spyOn(prisma.logActividad, 'create').mockResolvedValue({} as any);
-
-      await listener.handleAdminEvent(payload);
-
-      expect(prisma.logActividad.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          accion: 'Actualizó Exam',
-        }),
-      });
-    });
-
-    it('should generate correct action description for deleted', async () => {
-      const payload: AdminEventPayload & { eventType: string } = {
-        eventType: 'admin.role.deleted',
-        entityType: 'role',
-        entityId: 1,
-        action: 'deleted',
-        userId: 2,
-        data: {},
-        timestamp: new Date(),
-      };
-
-      jest.spyOn(prisma.logActividad, 'create').mockResolvedValue({} as any);
-
-      await listener.handleAdminEvent(payload);
-
-      expect(prisma.logActividad.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          accion: 'Eliminó Role',
+          accion: expected,
         }),
       });
     });
   });
 
-  describe('Critical Events Handlers', () => {
-    it('should handle user deleted event', async () => {
-      const payload: AdminEventPayload = {
-        entityType: 'user',
-        entityId: 1,
-        action: 'deleted',
-        userId: 2,
-        data: {},
-        timestamp: new Date(),
-      };
-
-      // Should not throw
+  describe('critical event handlers', () => {
+    it('handles user deleted event', async () => {
+      const payload = buildPayload('user', 'deleted');
       await expect(listener.handleUserDeleted(payload)).resolves.not.toThrow();
     });
 
-    it('should handle role deleted event', async () => {
-      const payload: AdminEventPayload = {
-        entityType: 'role',
-        entityId: 1,
-        action: 'deleted',
-        userId: 2,
-        data: {},
-        timestamp: new Date(),
-      };
-
+    it('handles role deleted event', async () => {
+      const payload = buildPayload('role', 'deleted');
       await expect(listener.handleRoleDeleted(payload)).resolves.not.toThrow();
     });
 
-    it('should handle exam created event', async () => {
-      const payload: AdminEventPayload = {
-        entityType: 'exam',
-        entityId: 1,
-        action: 'created',
-        userId: 2,
-        data: {},
-        timestamp: new Date(),
-      };
-
+    it('handles exam created event', async () => {
+      const payload = buildPayload('exam', 'created');
       await expect(listener.handleExamCreated(payload)).resolves.not.toThrow();
     });
 
-    it('should handle inventory deleted event', async () => {
-      const payload: AdminEventPayload = {
-        entityType: 'inventory',
-        entityId: 1,
-        action: 'deleted',
-        userId: 2,
-        data: {},
-        timestamp: new Date(),
-      };
-
+    it('handles inventory deleted event', async () => {
+      const payload = buildPayload('inventory', 'deleted');
       await expect(listener.handleInventoryDeleted(payload)).resolves.not.toThrow();
     });
   });
 });
+
+function buildPayload(entityType: string, action: 'created' | 'updated' | 'deleted'): AdminEventPayload {
+  return {
+    entityType,
+    entityId: 1,
+    action,
+    userId: 2,
+    data: {},
+    timestamp: new Date(),
+  };
+}

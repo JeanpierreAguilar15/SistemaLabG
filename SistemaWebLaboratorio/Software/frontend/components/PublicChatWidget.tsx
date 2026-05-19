@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MessageCircle, X, Bot, Phone, FileText, Loader2, RefreshCw } from 'lucide-react';
+import { useAuthStore } from '@/lib/store';
 
 interface Message {
     id: string;
@@ -10,17 +11,18 @@ interface Message {
     timestamp: Date;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 /**
- * PublicChatWidget - Widget para interpretar resultados de laboratorio con IA
- * y mostrar informacion de contacto del laboratorio.
+ * Widget autenticado para interpretar resultados de laboratorio con IA
+ * y recuperar el historial de conversacion del usuario.
  */
 export default function PublicChatWidget() {
+    const { isAuthenticated, accessToken, user } = useAuthStore();
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [isUploadingFile, setIsUploadingFile] = useState(false);
-    const [sessionId] = useState(() => `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+    const [sessionId, setSessionId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Informacion del laboratorio
@@ -31,7 +33,63 @@ export default function PublicChatWidget() {
         setMessages((prev) => [...prev, msg]);
     };
 
+    useEffect(() => {
+        if (!isAuthenticated || !user || typeof window === 'undefined') {
+            setIsOpen(false);
+            setMessages([]);
+            setSessionId(null);
+            return;
+        }
+
+        const storageKey = `chatbot-session-${user.codigo_usuario}`;
+        const savedSessionId = localStorage.getItem(storageKey);
+        const nextSessionId = savedSessionId || `chat-${user.codigo_usuario}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        if (!savedSessionId) {
+            localStorage.setItem(storageKey, nextSessionId);
+        }
+        setSessionId(nextSessionId);
+    }, [isAuthenticated, user]);
+
+    useEffect(() => {
+        if (!isAuthenticated || !accessToken || !sessionId) return;
+
+        let cancelled = false;
+        const activeSessionId = sessionId;
+
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${API_URL}/chatbot/history?sessionId=${encodeURIComponent(activeSessionId)}`, {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                });
+
+                if (!response.ok) return;
+
+                const data = await response.json();
+                if (cancelled || !Array.isArray(data.messages)) return;
+
+                setMessages(data.messages.map((message: any) => ({
+                    id: message.id,
+                    content: message.content,
+                    sender: message.sender,
+                    timestamp: new Date(message.timestamp),
+                })));
+            } catch (error) {
+                console.error('Error loading chatbot history:', error);
+            }
+        }
+
+        loadHistory();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [accessToken, isAuthenticated, sessionId]);
+
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!accessToken || !sessionId) return;
+
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -87,6 +145,7 @@ export default function PublicChatWidget() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    Authorization: `Bearer ${accessToken}`,
                 },
                 body: JSON.stringify({
                     file: base64,
@@ -139,8 +198,17 @@ export default function PublicChatWidget() {
     };
 
     const resetConversation = () => {
+        if (user && typeof window !== 'undefined') {
+            const nextSessionId = `chat-${user.codigo_usuario}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+            localStorage.setItem(`chatbot-session-${user.codigo_usuario}`, nextSessionId);
+            setSessionId(nextSessionId);
+        }
         setMessages([]);
     };
+
+    if (!isAuthenticated || !accessToken || !user || !sessionId) {
+        return null;
+    }
 
     return (
         <div className="fixed bottom-6 right-6 z-50">
@@ -155,7 +223,7 @@ export default function PublicChatWidget() {
                                 <Bot size={24} />
                             </div>
                             <div>
-                                <h3 className="font-bold">Lab Franz</h3>
+                                <h3 className="font-bold">Laboratorio Franz</h3>
                                 <p className="text-xs opacity-80">Interpretacion de Resultados con IA</p>
                             </div>
                         </div>
@@ -164,12 +232,14 @@ export default function PublicChatWidget() {
                                 onClick={resetConversation}
                                 className="hover:bg-white/20 p-1.5 rounded-full transition-colors"
                                 title="Nueva conversacion"
+                                aria-label="Nueva conversación"
                             >
                                 <RefreshCw size={18} />
                             </button>
                             <button
                                 onClick={() => setIsOpen(false)}
                                 className="hover:bg-white/20 p-1.5 rounded-full transition-colors"
+                                aria-label="Cerrar asistente"
                             >
                                 <X size={20} />
                             </button>
@@ -283,6 +353,7 @@ export default function PublicChatWidget() {
             {/* Chat Toggle Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
+                aria-label={isOpen ? 'Cerrar asistente' : 'Abrir asistente'}
                 className={`${
                     isOpen ? 'bg-gray-600' : 'bg-blue-600'
                 } text-white p-4 rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center`}

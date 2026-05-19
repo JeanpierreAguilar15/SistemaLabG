@@ -1,12 +1,15 @@
-import { Controller, Post, Body, Get } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { LabResultsInterpreterService } from '../services/lab-results-interpreter.service';
 import { ChatHistoryService } from '../services/chat-history.service';
 import { InterpretResultsDto, InterpretResultsResponseDto } from '../dto/interpret-results.dto';
-import { Public } from '../../auth/decorators/public.decorator';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 
 @ApiTags('Chatbot')
+@ApiBearerAuth()
 @Controller('chatbot')
+@UseGuards(JwtAuthGuard)
 export class ChatbotController {
     constructor(
         private readonly labResultsInterpreter: LabResultsInterpreterService,
@@ -17,7 +20,6 @@ export class ChatbotController {
     // INTERPRETACION DE RESULTADOS CON GEMINI
     // =====================================================
 
-    @Public()
     @Post('interpret-results')
     @ApiOperation({
         summary: 'Interpretar resultados de laboratorio desde PDF',
@@ -28,11 +30,14 @@ export class ChatbotController {
         description: 'Interpretacion de los resultados',
         type: InterpretResultsResponseDto,
     })
-    async interpretResults(@Body() dto: InterpretResultsDto): Promise<InterpretResultsResponseDto> {
+    async interpretResults(
+        @Body() dto: InterpretResultsDto,
+        @CurrentUser('codigo_usuario') codigoUsuario: number,
+    ): Promise<InterpretResultsResponseDto> {
         const mimeType = dto.mimeType || 'application/pdf';
-        const sessionId = dto.sessionId || `anon-${Date.now()}`;
+        const sessionId = dto.sessionId || `user-${codigoUsuario}`;
 
-        const conversacion = await this.chatHistory.getOrCreateConversacion(sessionId);
+        const conversacion = await this.chatHistory.getOrCreateConversacion(sessionId, codigoUsuario);
 
         await this.chatHistory.logMessage(conversacion.codigo_conversacion, 'USER', '[PDF subido para interpretación]');
 
@@ -74,6 +79,28 @@ export class ChatbotController {
             message: this.labResultsInterpreter.isConfigured()
                 ? 'Servicio de interpretacion disponible'
                 : 'GEMINI_API_KEY no configurada',
+            };
+    }
+
+    @Get('history')
+    @ApiOperation({ summary: 'Obtener historial de chatbot del usuario autenticado' })
+    async getHistory(
+        @CurrentUser('codigo_usuario') codigoUsuario: number,
+        @Query('sessionId') sessionId?: string,
+    ) {
+        const resolvedSessionId = sessionId || `user-${codigoUsuario}`;
+        const messages = await this.chatHistory.getHistory(resolvedSessionId, codigoUsuario);
+
+        return {
+            sessionId: resolvedSessionId,
+            messages: messages.map((message) => ({
+                id: message.codigo_mensaje.toString(),
+                sender: message.remitente === 'USER' ? 'user' : 'bot',
+                content: message.contenido,
+                intent: message.intent,
+                confidence: message.confianza ? Number(message.confianza) : null,
+                timestamp: message.timestamp,
+            })),
         };
     }
 }
